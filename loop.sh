@@ -3,7 +3,7 @@
 
 while true
 do
-    python3 chatbot.py
+    python3 chat.py
     echo "Chatbot crashed, pulling from git and restarting"
     git pull
 done
