@@ -152,7 +152,7 @@ async def on_message(message):
         tokens = tokenizer.tokenizer.encode(context)
         state = insert_data(model, [], tokens, clear=True)
         temp = types.SimpleNamespace()
-        temp.out = channelState
+        temp.out = state
         model.save(temp)
         channels[message.channel.id] = temp
         await message.reply("RWKV has been reset")
