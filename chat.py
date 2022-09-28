@@ -1,6 +1,7 @@
 ########################################################################################################
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
+import types
 from src.utils import TOKENIZER
 import torch
 import numpy as np
@@ -83,11 +84,11 @@ def insert_data(model, tokens, ctx, clear=False, preprocess=True):  # T<abc> => 
     if (clear):
         model.clear()
 
-    for i in range(len(ctx)):
+    for i in range(len(ctx)-1):
         x = tokens + ctx[: i + 1]
         model.forward(x, preprocess_only=preprocess)
 
-    return tokens + ctx
+    return model.forward(x)
 
 
 def predict_next(ctx):  # T<abc> => T<abcd>
@@ -106,17 +107,21 @@ def predict_next(ctx):  # T<abc> => T<abcd>
         top_p_usual=top_p,
         top_p_newline=0.9,
     )
-    return ctx + [char]
+    return {"toks": ctx + [char], "state": out}
 
 
 ########################################################################################################
 
 # Run inference
-
+init_state = types.SimpleNamespace()
 
 tokens = tokenizer.tokenizer.encode(context)
 
-insert_data(model, [], tokens, clear=True)
+channels = {}
+
+init_state.out = insert_data(model, [], tokens, clear=True)
+
+model.save(init_state)
 
 print("submitted", tokenizer.tokenizer.decode(tokens))
 
@@ -135,6 +140,8 @@ async def on_ready():
 @client.event
 async def on_message(message):
     global tokens
+    global channels
+    global model
     # print(
     #     f"message received({message.guild.name}:{message.channel.name}):", message.content)
 
@@ -147,22 +154,38 @@ async def on_message(message):
         await message.reply("RWKV has been reset")
 
     if message.content[:5] == '+rwkv':
+
+        if message.channelID not in channels:
+            channels[message.channelID] = {
+                "state": init_state, tokens: tokens}
+
+        model.load(channels[message.channelID]["state"])
+
         nnn = f"{endmessage}{name}{interface} {message.content[6:]}{endmessage}{bot}{interface}"
         newtokens = tokenizer.tokenizer.encode(nnn)
         print(f'add [{nnn}]')
-        insert_data(model, tokens, newtokens)
-        atokens = tokens + newtokens
+        channelState = insert_data(
+            model, channels[message.channelID]["tokens"], newtokens)
+        atokens = channels[message.channelID]["tokens"] + newtokens
         lenn = len(atokens)
-        atokens = predict_next(atokens)
+        output = predict_next(atokens)
+        atokens = output["toks"]
+        channelState = output["state"]
         while not (tokenizer.tokenizer.decode(atokens[-10:])[-len(endmessage):] == f"{endmessage}" or len(atokens) - lenn > 300):
             print(tokenizer.tokenizer.decode(atokens[-1]), end="")
-            atokens = predict_next(atokens)
+            out = predict_next(atokens)
+            atokens = out["toks"]
+            channelState = out["state"]
         send_msg = tokenizer.tokenizer.decode(
             atokens[lenn:])[:-len(endmessage)]
         print(f'send [{send_msg}]')
         await message.reply(send_msg)
 
-        tokens = atokens
+        channels[message.channelID]["tokens"] = atokens
+        temp = types.SimpleNamespace()
+        temp.out = channelState
+        model.save(temp)
+        channels[message.channelID]["state"] = temp
     if message.content[:7] == '+update':
         exit()
     if message.content[:8] == '+version':
