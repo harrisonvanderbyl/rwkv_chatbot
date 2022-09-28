@@ -150,7 +150,11 @@ async def on_message(message):
 
     if message.content == '+reset_rwkv':
         tokens = tokenizer.tokenizer.encode(context)
-        insert_data(model, [], tokens, clear=True)
+        state = insert_data(model, [], tokens, clear=True)
+        temp = types.SimpleNamespace()
+        temp.out = channelState
+        model.save(temp)
+        channels[message.channel.id] = temp
         await message.reply("RWKV has been reset")
 
     if message.content[:5] == '+rwkv':
