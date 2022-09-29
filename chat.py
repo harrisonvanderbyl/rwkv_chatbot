@@ -1,71 +1,62 @@
 ########################################################################################################
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
-import types
-from src.utils import TOKENIZER
-import torch
-import numpy as np
-from src.model_run import RWKV_RNN
-import os
-import discord
-import subprocess
-print("start")
-# The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
-########################################################################################################
 
+import discord
+from src.model_run import RWKV_RNN
+import numpy as np
+import os
+import copy
+import types
+import torch
+from src.utils import TOKENIZER
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 np.set_printoptions(precision=4, suppress=True, linewidth=200)
-
-# Settings
-
-# Load Tokenizer
 
 WORD_NAME = [
     "20B_tokenizer.json",
     "20B_tokenizer.json",
 ]  # [vocab, vocab] for Pile model
 
-
 UNKNOWN_CHAR = None
 tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
 
-MODEL_NAME = '/fsx/BlinkDL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20220925-4537'  # filename for 1b5
-n_layer = 32  # 24:1b5 32:3b
-n_embd = 2560  # 2048 1b5 2560 3B
+MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-3b/RWKV-4-Pile-3B-20220928-5147'
+n_layer = 32
+n_embd = 2560
 
 ctx_len = 1024
 os.environ["RWKV_FLOAT_MODE"] = "fp32"  # currently only supprts fp32
 os.environ["RWKV_RUN_DEVICE"] = "cuda"  # 'cpu' (already very fast) or 'cuda'
 model_type = "RWKV"  # 'RWKV' or 'RWKV-ffnPre'
-name = "User"
-endmessage = "\n\n"
-bot = "RWKV"
+user = "User"
+bot = "Bot"
 interface = ":"
 
-# The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. RWKV will do its best to answer User’s questions. RWKV knows a lot, and always tells the truth. The conversation begins.
+init_prompt = f'''
+The following is a conversation between a highly knowledgeable and intelligent AI assistant called {bot}, and a human user called {user}. In the following interactions, {user} and {bot} will converse in natural language, and {bot} will do its best to answer {user}'s questions. {bot} is respectful, polite and inclusive. {bot} knows a lot, and always tells the truth. The conversation begins.
 
-context = f'''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
-
-{name}{interface} OK RWKV, I’m going to start by quizzing you with a few warm-up questions. Who is currently the president of the USA?
+{user}{interface} who is president of us?
 
 {bot}{interface} It’s Joe Biden; he was sworn in earlier this year.
 
-{name}{interface} What year was the French Revolution?
+{user}{interface} what year is french revolution
 
 {bot}{interface} It started in 1789, but it lasted 10 years until 1799.
 
-{name}{interface} Can you guess who I might want to marry?
+{user}{interface} guess who i will marry ?
 
 {bot}{interface} Only if you tell me more about yourself - what are your interests?
 
-{name}{interface} Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
+{user}{interface} what is lhc
 
-{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.'''
+{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
 
-TEMPERATURE = 1.0
+'''
+
+TEMPERATURE = 1.5
 top_p = 0.8
 
 # Load Model
@@ -74,59 +65,57 @@ print('loading...')
 model = RWKV_RNN(
     MODEL_NAME, os.environ["RWKV_RUN_DEVICE"], model_type, n_layer, n_embd, ctx_len
 )
-
+model_tokens = []
 
 ########################################################################################################
 
 
-def insert_data(model, tokens, ctx, clear=False, preprocess=True):  # T<abc> => model
+def run_rnn(tokens, newline_adj=0):
+    global model_tokens
+    for i in range(len(tokens)):
+        model_tokens += [tokens[i]]
+        if i == len(tokens) - 1:
+            out = model.forward(model_tokens)
+        else:
+            model.forward(model_tokens, preprocess_only=True)
 
-    if (clear):
-        model.clear()
-
-    for i in range(len(ctx)-1):
-        x = tokens + ctx[: i + 1]
-        model.forward(x, preprocess_only=preprocess)
-
-    return model.forward(x)
-
-
-def predict_next(ctx):  # T<abc> => T<abcd>
-    x = ctx
-    x = x[-ctx_len:]
-    out = model.forward(x)
+    # print(f'### model ###\n[{tokenizer.tokenizer.decode(model_tokens)}]')
 
     out[0] = -999999999  # disable <|endoftext|>
-    out[187] -= 1
+    out[187] += newline_adj
+    return out
 
-    char = tokenizer.sample_logits(
-        out,
-        x,
-        ctx_len,
-        temperature=TEMPERATURE,
-        top_p_usual=top_p,
-        top_p_newline=0.9,
-    )
-    return {"toks": ctx + [char], "state": out}
 
+all_state = {}
+
+
+def save_all_stat(name, last_out):
+    all_state[name] = {}
+    all_state[name]['out'] = last_out
+    all_state[name]['rnn'] = types.SimpleNamespace()
+    model.save(all_state[name]['rnn'])
+    all_state[name]['token'] = copy.deepcopy(model_tokens)
+
+
+def load_all_stat(name):
+    global model_tokens
+    model.load(all_state[name]['rnn'])
+    model_tokens = copy.deepcopy(all_state[name]['token'])
+    return all_state[name]['out']
 
 ########################################################################################################
 
 # Run inference
-init_state = types.SimpleNamespace()
 
-tokens = tokenizer.tokenizer.encode(context)
 
-channels = {}
+model.clear()
+out = run_rnn(tokenizer.tokenizer.encode(init_prompt))
+save_all_stat('chat_init', out)
+save_all_stat('chat', out)
 
-init_state.out = insert_data(model, [], tokens, clear=True)
-
-model.save(init_state)
-
-print("submitted", tokenizer.tokenizer.decode(tokens))
+print(f'### prompt ###\n[{tokenizer.tokenizer.decode(model_tokens)}]\n')
 
 # bot.py
-
 
 client = discord.Client(
     intents=discord.Intents.all())
@@ -139,60 +128,96 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    global tokens
-    global channels
-    global model
+    global model_tokens
     # print(
     #     f"message received({message.guild.name}:{message.channel.name}):", message.content)
 
     if message.author.bot:
         return
 
-    if message.content == '+reset_rwkv':
-        tokens = tokenizer.tokenizer.encode(context)
-        state = insert_data(model, [], tokens, clear=True)
-        temp = types.SimpleNamespace()
-        temp.out = state
-        model.save(temp)
-        channels[message.channel.id] = temp
-        await message.reply("RWKV has been reset")
+    msg = message.content.strip()
 
-    if message.content[:5] == '+rwkv':
+    if msg == '+reset_rwkv' or msg == '+drkv_reset':
+        out = load_all_stat('chat_init')
+        save_all_stat('chat', out)
+        await message.reply("Chat reset. This is powered by RWKV-4 3B Language Model.")
+        return
 
-        if message.channelID not in channels:
-            channels[message.channelID] = {
-                "state": init_state, tokens: tokens}
-
-        model.load(channels[message.channelID]["state"])
-
-        nnn = f"{endmessage}{name}{interface} {message.content[6:]}{endmessage}{bot}{interface}"
-        newtokens = tokenizer.tokenizer.encode(nnn)
-        print(f'add [{nnn}]')
-        channelState = insert_data(
-            model, channels[message.channelID]["tokens"], newtokens)
-        atokens = channels[message.channelID]["tokens"] + newtokens
-        lenn = len(atokens)
-        output = predict_next(atokens)
-        atokens = output["toks"]
-        channelState = output["state"]
-        while not (tokenizer.tokenizer.decode(atokens[-10:])[-len(endmessage):] == f"{endmessage}" or len(atokens) - lenn > 300):
-            print(tokenizer.tokenizer.decode(atokens[-1]), end="")
-            out = predict_next(atokens)
-            atokens = out["toks"]
-            channelState = out["state"]
-        send_msg = tokenizer.tokenizer.decode(
-            atokens[lenn:])[:-len(endmessage)]
-        print(f'send [{send_msg}]')
+    elif msg[:10] == '+drkv_gen ' or msg[:9] == '+drkv_qa ' or msg == '+drkv_more' or msg == '+drkv_retry' or msg == '+drkv_again':
+        if msg[:10] == '+drkv_gen ':
+            new = '\n' + msg[10:].strip()
+            print(f'### prompt ###\n[{new}]')
+            model.clear()
+            out = run_rnn(tokenizer.tokenizer.encode(new))
+            save_all_stat('gen_0', out)
+        elif msg[:9] == '+drkv_qa ':
+            new = f'\nQ: {msg[9:].strip()}\nA:'
+            print(f'### prompt ###\n[{new}]')
+            model.clear()
+            out = run_rnn(tokenizer.tokenizer.encode(new))
+            save_all_stat('gen_0', out)
+        elif msg == '+drkv_more':
+            try:
+                out = load_all_stat('gen_1')
+                save_all_stat('gen_0', out)
+            except:
+                return
+        elif msg == '+drkv_retry' or msg == '+drkv_again':
+            try:
+                out = load_all_stat('gen_0')
+            except:
+                return
+        begin = len(model_tokens)
+        for i in range(100):
+            token = tokenizer.sample_logits(
+                out,
+                model_tokens,
+                ctx_len,
+                temperature=TEMPERATURE,
+                top_p_usual=top_p,
+                top_p_newline=top_p,
+            )
+            out = run_rnn([token])
+        send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
+        print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
+        save_all_stat('gen_1', out)
 
-        channels[message.channelID]["tokens"] = atokens
-        temp = types.SimpleNamespace()
-        temp.out = channelState
-        model.save(temp)
-        channels[message.channelID]["state"] = temp
-    if message.content[:7] == '+update':
-        exit()
-    if message.content[:8] == '+version':
-        await message.channel.send("v0.3")
-# get token from env
+    elif msg[:6] == '+drkv ':
+        out = load_all_stat('chat')
+
+        real_msg = msg[6:].strip()
+        new = f"{user}{interface} {real_msg}\n\n{bot}{interface}"
+        print(f'### add ###\n[{new}]')
+
+        out = run_rnn(tokenizer.tokenizer.encode(new), -999999999)
+        begin = len(model_tokens)
+        for i in range(100):
+            if i <= 0:
+                newline_adj = -999999999
+            elif i <= 30:
+                newline_adj = -2
+            elif i <= 70:
+                newline_adj = 0
+            elif i <= 97:
+                newline_adj = i - 70
+            else:
+                newline_adj = 999999999
+            token = tokenizer.sample_logits(
+                out,
+                model_tokens,
+                ctx_len,
+                temperature=TEMPERATURE,
+                top_p_usual=top_p,
+                top_p_newline=top_p,
+            )
+            out = run_rnn([token], newline_adj)
+            if tokenizer.tokenizer.decode(model_tokens[-10:]).endswith(f'\n\n'):
+                break
+
+        send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
+        print(f'### send ###\n[{send_msg}]')
+        await message.reply(send_msg)
+        save_all_stat('chat', out)
+
 client.run(os.environ['TOKEN'])
