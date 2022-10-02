@@ -167,10 +167,10 @@ class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
             for i in lev:
                 x = x + \
                     self.SA(
-                        self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+                        self.LN(x, w.blocks[i].ln1.to("cuda")), w.blocks[i].att.to("cuda"), f'att.{i}')
                 x = x + \
-                    self.FF(self.LN(x, w.blocks[i].ln2),
-                            w.blocks[i].ffn, f'ffn.{i}')
+                    self.FF(self.LN(x, w.blocks[i].ln2.to("cuda")),
+                            w.blocks[i].ffn.to("cuda"), f'ffn.{i}')
 
             x = self.LN(x, w.ln_out)
             x = x.to("cpu")
