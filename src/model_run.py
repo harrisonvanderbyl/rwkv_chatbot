@@ -116,11 +116,14 @@ class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
     @MyFunction
     def SA(self, xx, w, name):
         if name not in self.xx:
-            self.xx[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
-            self.aa[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
-            self.bb[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
+            self.xx[name] = torch.zeros(
+                self.n_embd, device=self.RUN_DEVICE).to("cuda")
+            self.aa[name] = torch.zeros(
+                self.n_embd, device=self.RUN_DEVICE).to("cuda")
+            self.bb[name] = torch.zeros(
+                self.n_embd, device=self.RUN_DEVICE).to("cuda")
             self.pp[name] = torch.zeros(
-                self.n_embd, device=self.RUN_DEVICE) - 1e30
+                self.n_embd, device=self.RUN_DEVICE).to("cuda") - 1e30
 
         xk = xx * w.time_mix_k + self.xx[name] * (1 - w.time_mix_k)
         xv = xx * w.time_mix_v + self.xx[name] * (1 - w.time_mix_v)
@@ -159,17 +162,18 @@ class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
             x = w.emb.weight[ctx[-1]]
             lev = (range(self.n_layer))
 
-            x = self.LN(x, w.blocks[0].ln0)
+            x = self.LN(x, w.blocks[0].ln0).to("cuda")
 
             for i in lev:
                 x = x + \
                     self.SA(
-                        self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}') + \
+                        self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+                x = x + \
                     self.FF(self.LN(x, w.blocks[i].ln2),
                             w.blocks[i].ffn, f'ffn.{i}')
 
             x = self.LN(x, w.ln_out)
-
+            x = x.to("cpu")
             if RWKV_HEAD_QK_DIM > 0:
                 if self.hk == None:
                     self.hk = (w.head_k.weight @ x).unsqueeze(0)
