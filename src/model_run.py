@@ -2,6 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+from multiprocessing.dummy import Array
 import types
 import copy
 import torch
@@ -42,6 +43,7 @@ class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
 
         w = torch.load(MODEL_NAME + '.pth',
                        map_location=torch.device(RUN_DEVICE))
+
         for x in w.keys():
             w[x] = w[x].float()
             if '.time_' in x:
@@ -155,19 +157,14 @@ class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
         with torch.no_grad():
             w = self.w
             x = w.emb.weight[ctx[-1]]
+            lev = (range(self.n_layer))
 
-            for i in range(self.n_layer):
-                if i == 0:
-                    x = self.LN(x, w.blocks[i].ln0)
-                if i == 0 and self.model_type == 'RWKV-ffnPre':
-                    x = x + \
-                        self.FF(
-                            self.LN(x, w.blocks[i].ln1), w.blocks[i].ffnPre, f'ffnPre.{i}')
-                else:
-                    x = x + \
-                        self.SA(
-                            self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+            x = self.LN(x, w.blocks[0].ln0)
+
+            for i in lev:
                 x = x + \
+                    self.SA(
+                        self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}') + \
                     self.FF(self.LN(x, w.blocks[i].ln2),
                             w.blocks[i].ffn, f'ffn.{i}')
 
