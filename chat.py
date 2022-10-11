@@ -323,7 +323,7 @@ async def on_message(message):
         model_tokens = tokenizer.tokenizer.encode(context)
         currstate = init_state
 
-        await message.reply("Chat reset. This is powered by RWKV-4 3B Language Model.")
+        await message.reply(f"Chat reset. This is powered by RWKV-4-{size} Language Model.")
         return
 
     if msg[:6] == '+drkv ':
@@ -331,10 +331,11 @@ async def on_message(message):
         real_msg = msg[6:].strip()
         new = f"User: {real_msg}\n\nRWKV:"
         print(f'### add ###\n[{new}]')
-        model_tokens += tokenizer.tokenizer.encode(new)
+        model_tokens = model_tokens + tokenizer.tokenizer.encode(new)
         begin = len(model_tokens)
         for o in range(len(new)):
-            r, currstate = model.forward(model_tokens[:begin + o], currstate)
+            r, currstate = model.forward(
+                model_tokens[:begin + o], currstate, preprocess_only=True)
         for i in range(100):
             if i <= 0:
                 newline_adj = -999999999
@@ -347,7 +348,8 @@ async def on_message(message):
             else:
                 newline_adj = 999999999
 
-            model_tokens, currstate = sample(model_tokens, currstate, nla)
+            model_tokens, currstate = sample(
+                model_tokens, currstate, newline_adj)
             if i > 5 and "\n\n" in tokenizer.tokenizer.decode(model_tokens[-4:]):
                 break
 
