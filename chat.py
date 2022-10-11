@@ -238,7 +238,7 @@ torch.cuda.empty_cache()
 
 def ray_sampler(ctxx, chars, score, statein, depth=0, nla=0):
 
-    out1, state1 = model.forward(ctxx+chars, statein.clone())
+    out1, state1 = model.forward(ctxx+chars, statein[-1].clone())
     if TOKEN_MODE == "pile":
         out1[1] = -99  # disable <|endoftext|>
     out1[187] += nla
@@ -254,27 +254,29 @@ def ray_sampler(ctxx, chars, score, statein, depth=0, nla=0):
     if (depth < int(os.environ["rwkv_ray_depth"])):
         for nt in ttt1:
             ret += ray_sampler(ctxx+chars, chars +
-                               [nt], score+out1[nt], state1, depth+1, nla)
+                               [nt], score+out1[nt], statein + [state1], depth+1, nla)
     else:
         for nt in ttt1:
             ret.append(
-                {"state": state1, "score": score+out1[nt], "chars": chars+[nt]})
+                {"state": statein + [state1], "score": score+out1[nt], "chars": chars+[nt]})
     return ret
 
 
-def sample(ctx, state, nla):
+def sample(ctxx, state, nla):
+    ctx = ctxx
     if os.environ["rwkv_sampler"] == "ray":
 
-        rays = ray_sampler(ctx, [], 0, state, 0, nla)
+        rays = ray_sampler(ctxx, [], 0, [state], 0, nla)
         mx1 = max(rays, key=lambda x: x["score"])
 
         ctx += mx1["chars"]
-        state = mx1["state"]
+        state = mx1["state"][-1]
 
         l = len(mx1["chars"])
+        statein = mx1["state"]
     else:
 
-        out, state = model.forward(ctx, state)
+        out, state = model.forward(ctxx, state)
         if TOKEN_MODE == "pile":
             out[0] = -99  # disable <|endoftext|>
         out[187] += nla
@@ -287,8 +289,9 @@ def sample(ctx, state, nla):
             top_p_newline=top_p_newline,
         )
         ctx += [ttt]
+        statein = [state]
 
-    return ctx, state
+    return ctx, state, statein
 
 
 print(("-" * 50) + '\n')
@@ -330,12 +333,14 @@ async def on_message(message):
 
         real_msg = msg[6:].strip()
         new = f"User: {real_msg}\n\nRWKV:"
+        tknew = tokenizer.tokenizer.encode(new)
         print(f'### add ###\n[{new}]')
-        model_tokens = model_tokens + tokenizer.tokenizer.encode(new)
+        before = len(model_tokens)
+        model_tokens = model_tokens + tknew
         begin = len(model_tokens)
-        for o in tqdm(range(len(new))):
+        for o in tqdm(range(len(tknew))):
             r, currstate = model.forward(
-                model_tokens[:begin + o], currstate, preprocess_only=True)
+                model_tokens[:before + o], currstate, preprocess_only=True)
         for i in tqdm(range(100)):
             if i <= 0:
                 newline_adj = -999999999
@@ -348,9 +353,15 @@ async def on_message(message):
             else:
                 newline_adj = 999999999
 
-            model_tokens, currstate = sample(
+            model_tokens, currstate, statelist = sample(
                 model_tokens, currstate, newline_adj)
             if i > 5 and "\n\n" in tokenizer.tokenizer.decode(model_tokens[-4:]):
+                for ss in model_tokens[:-4:-1]:
+                    if (tokenizer.tokenizer.decode([ss]) == "\n"):
+                        currstate = statelist[-1]
+                        break
+                model_tokens = model_tokens[:-1]
+                statelist = statelist[:-1]
                 break
 
         send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
