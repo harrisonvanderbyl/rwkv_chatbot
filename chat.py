@@ -43,7 +43,7 @@ UNKNOWN_CHAR = None
 vocab_size = 50277
 
 # note; you can set MODEL_NAME to your fine-tuned model
-size = "large"  # tini/mini/medium/medium-ext/large/xl/xxl
+size = "tiny"  # tini/mini/medium/medium-ext/large/xl/xxl
 
 if (size == "tiny"):
     MODEL_NAME = "100"
@@ -81,14 +81,14 @@ elif (size == "xl"):
 # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
 args["RUN_DEVICE"] = "proc"
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
-argsnums["cudalayers"] = 2
+argsnums["cudalayers"] = 12
 # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-args["FLOAT_MODE"] = "bf16"
+args["FLOAT_MODE"] = "fp32"
 
 # none // ray(slower but may have better answers)
 os.environ["rwkv_sampler"] = "ray"
 os.environ["rwkv_smpler_splits"] = "3"  # This is how many branches it checks
-os.environ["rwkv_ray_depth"] = "2"  # This is how deep it goes in each branch
+os.environ["rwkv_ray_depth"] = "3"  # This is how deep it goes in each branch
 
 # set max threads to 12
 
@@ -236,9 +236,12 @@ gc.collect()
 torch.cuda.empty_cache()
 
 
-def ray_sampler(ctxx, chars, score, statein, depth=0):
+def ray_sampler(ctxx, chars, score, statein, depth=0, nla=0):
 
     out1, state1 = model.forward(ctxx+chars, statein.clone())
+    if TOKEN_MODE == "pile":
+        out1[1] = -99  # disable <|endoftext|>
+    out1[187] += nla
     ttt1 = tokenizer.sample_logits(
         out1,
         ctxx+chars,
@@ -251,7 +254,7 @@ def ray_sampler(ctxx, chars, score, statein, depth=0):
     if (depth < int(os.environ["rwkv_ray_depth"])):
         for nt in ttt1:
             ret += ray_sampler(ctxx+chars, chars +
-                               [nt], score+out1[nt], state1, depth+1)
+                               [nt], score+out1[nt], state1, depth+1, nla)
     else:
         for nt in ttt1:
             ret.append(
@@ -259,10 +262,10 @@ def ray_sampler(ctxx, chars, score, statein, depth=0):
     return ret
 
 
-def sample(ctx, state):
+def sample(ctx, state, nla):
     if os.environ["rwkv_sampler"] == "ray":
 
-        rays = ray_sampler(ctx, [], 0, state)
+        rays = ray_sampler(ctx, [], 0, state, nla)
         mx1 = max(rays, key=lambda x: x["score"])
 
         ctx += mx1["chars"]
@@ -274,6 +277,7 @@ def sample(ctx, state):
         out, state = model.forward(ctx, state)
         if TOKEN_MODE == "pile":
             out[0] = -99  # disable <|endoftext|>
+        out[187] += nla
         ttt = tokenizer.sample_logits(
             out,
             ctx,
@@ -325,7 +329,7 @@ async def on_message(message):
     if msg[:6] == '+drkv ':
 
         real_msg = msg[6:].strip()
-        new = f"User: {real_msg}\n\nRWKV: "
+        new = f"User: {real_msg}\n\nRWKV:"
         print(f'### add ###\n[{new}]')
         model_tokens += tokenizer.tokenizer.encode(new)
         begin = len(model_tokens)
@@ -343,7 +347,7 @@ async def on_message(message):
             else:
                 newline_adj = 999999999
 
-            model_tokens, currstate = sample(model_tokens, currstate)
+            model_tokens, currstate = sample(model_tokens, currstate, nla)
             if i > 5 and "\n\n" in tokenizer.tokenizer.decode(model_tokens[-4:]):
                 break
 
