@@ -52,10 +52,15 @@ class TOKENIZER():
             context = '\n'
         return context
 
-    def sample_logits(self, out, x, ctx_len, temperature=1.0, top_p_usual=None, top_p_newline=None):
+    def sample_logits(self, ozut: torch.Tensor, x, ctx_len, temperature=1.0, top_p_usual=None, top_p_newline=None):
         # out[self.UNKNOWN_CHAR] = -float('Inf')
+       # out[self.UNKNOWN_CHAR] = -float('Inf')
         lastChar = int(x[-1])
 
+        # turn to float if is half and cpu
+        out = ozut
+        if out.dtype == torch.half and out.device == torch.device('cpu'):
+            out = out.float()
         probs = F.softmax(out, dim=-1)
 
         if self.charMode:
@@ -66,25 +71,32 @@ class TOKENIZER():
         else:
             top_p = top_p_usual
 
-        if os.environ["RWKV_RUN_DEVICE"] == "cpu":
+        if probs.dtype == "cpu":
             probs = probs.numpy()
             sorted_probs = np.sort(probs)[::-1]
             cumulative_probs = np.cumsum(sorted_probs)
-            cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            cutoff = float(sorted_probs[np.argmax(
+                cumulative_probs > top_p_usual)])
             probs[probs < cutoff] = 0
             if temperature != 1.0:
-                probs = np.power(probs, 1.0 / temperature)
+                probs = probs.pow(1.0 / temperature)
             probs = probs / np.sum(probs)
             out = np.random.choice(a=len(probs), p=probs)
             return out
         else:
             sorted_probs = torch.sort(probs, descending=True)[0]
-            cumulative_probs = torch.cumsum(sorted_probs, dim=-1).cpu().numpy()
-            cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+            cumulative_probs = torch.cumsum(
+                sorted_probs.float(), dim=-1).cpu().numpy()
+            cutoff = float(sorted_probs[np.argmax(
+                cumulative_probs > top_p_usual)])
             probs[probs < cutoff] = 0
             if temperature != 1.0:
                 probs = probs.pow(1.0 / temperature)
-            out = torch.multinomial(probs, num_samples=1)[0]
+            if os.environ["rwkv_sampler"] == "ray":
+                out = torch.multinomial(
+                    probs.float(), int(os.environ["rwkv_smpler_splits"]), True)
+            else:
+                out = torch.multinomial(probs.float(), 1, True)[0]
             return out
 
 

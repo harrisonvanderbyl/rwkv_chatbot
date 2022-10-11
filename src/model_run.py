@@ -2,24 +2,20 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-from multiprocessing.dummy import Array
+from ast import Delete
 import types
-import copy
 import torch
 import math
 import os
+import gc
 from torch.nn import functional as F
 import torch.nn as nn
+from typing import List, Dict
 
-
-def __nop(ob):
-    return ob
-
-
-MyModule = nn.Module
-MyFunction = __nop
-# MyModule = torch.jit.ScriptModule
-# MyFunction = torch.jit.script_method
+# Make sure to use nightly build of torchdynamo
+# import torchdynamo
+# MyFunction = torchdynamo.optimize(
+#     "nvfuser")  # !!!BUGGY!!! wrong output
 
 RWKV_HEAD_QK_DIM = 0
 print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM}\n')
@@ -29,175 +25,233 @@ DEBUG_TIME = False   # True False - show trained time-coeffs
 ############################################################################################################
 
 
-class RWKV_RNN(MyModule):  # this is running in FP32 at this moment
-    def __init__(self, MODEL_NAME, RUN_DEVICE, model_type, n_layer, n_embd, ctx_len):
+class RWKV_RNN(nn.Module):
+    def __init__(self, args, argsnumns):
         super().__init__()
 
-        self.RUN_DEVICE = RUN_DEVICE
-        self.model_type = model_type
-        self.n_layer = n_layer
-        self.n_embd = n_embd
-        self.ctx_len = ctx_len
+        self.args = args
+        self.argsnumns = argsnumns
+        self.FLOAT_MODE = args["FLOAT_MODE"]
+        self.RUN_DEVICE = args["RUN_DEVICE"]
+        with torch.no_grad():
+            w: Dict[str, torch.Tensor] = torch.load(
+                args["MODEL_NAME"] + '.pth', map_location='cpu')
 
-        self.w = types.SimpleNamespace()
+            # refine weights and send to correct device
+            keys = list(w.keys())
+            if 'pos_emb_x' in keys:
+                w['pos_emb'] = (w['pos_emb_x'] + w['pos_emb_y']
+                                ).reshape(argsnumns["ctx_len"]+1, -1)[:-1, :]
+            keys = list(w.keys())
+            print_need_newline = False
+            for x in keys:
+                if '.time_' in x:
+                    w[x] = w[x].squeeze()
+                    if DEBUG_TIME:
+                        print(x, w[x].numpy())
+                if '.time_decay' in x:
+                    w[x] = w[x].float()
+                    w[x] = -torch.exp(w[x])
 
-        w = torch.load(MODEL_NAME + '.pth',
-                       map_location=torch.device(RUN_DEVICE))
+                if self.FLOAT_MODE == "fp32":
+                    w[x] = w[x].float()
 
-        for x in w.keys():
-            w[x] = w[x].float()
-            if '.time_' in x:
-                w[x] = w[x].squeeze()
-            if '.time_decay' in x:
-                w[x] = -torch.exp(w[x])
-            if DEBUG_TIME and '.time_' in x:
-                print(x, w[x].squeeze().cpu().numpy())
+                elif self.FLOAT_MODE == "bf16":
+                    w[x] = w[x].bfloat16()
 
-            xx = x.split('.')
-            here = self.w
-            for i in range(len(xx)):
-                if xx[i].isdigit():
-                    ii = int(xx[i])
-                    if ii not in here:
-                        here[ii] = types.SimpleNamespace()
-                    here = here[ii]
+                elif self.FLOAT_MODE == "fp16":
+                    if ('weight' in x or 'bias' in x) and 'ln' in x:
+                        w[x] = w[x].half()
+                    else:
+                        w[x] = w[x].half()
+
+                w[x].requires_grad = False
+                if args["RUN_DEVICE"] in ["cuda", "proc"] and x != 'emb.weight':
+
+                    if ((x.split('.')[1] == "weight" or x.split('.')[1] == "bias") or int(x.split('.')[1]) < argsnumns["cudalayers"]):
+
+                        w[x] = w[x].cuda(non_blocking=True)
+                if (args["RUN_DEVICE"] == 'proc'):
+                    if (w[x].device.type == "cpu"):
+                        w[x] = w[x].pin_memory()
+                    if (('blocks.' not in x)) and x != 'emb.weight':
+                        w[x] = w[x].cuda(non_blocking=True)
+                if ('blocks.' not in x) or ('blocks.0.' in x):
+                    if print_need_newline:
+                        print('\n', end='')
+                        print_need_newline = False
+                    print(x.ljust(40), str(w[x].dtype).replace(
+                        'torch.', '').ljust(10), w[x].device)
+
                 else:
-                    if i == len(xx) - 1:
-                        setattr(here, xx[i], w[x])
-                    elif not hasattr(here, xx[i]):
-                        if xx[i+1].isdigit():
-                            setattr(here, xx[i], {})
-                        else:
-                            setattr(here, xx[i], types.SimpleNamespace())
-                    here = getattr(here, xx[i])
+                    print_need_newline = True
+                    print(
+                        '.' if "cpu" in f'{w[x].device}' else "x", end='', flush=True)
 
-        self.clear()
+        # store weights in self.w
+        keys = list(w.keys())
+        self.w = w
+
         self.eval()
+        gc.collect()
+        torch.cuda.empty_cache()
 
-    def clear(self):
-        self.xx = {}
-        self.aa = {}
-        self.bb = {}
-        self.pp = {}
-        self.hk = None
+    # @MyFunction
+    def LN(self, x: torch.Tensor, w, b):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.layer_norm(x.float(), (self.argsnumns["n_embd"],), weight=w.float(), bias=b.float()).half()
+        return torch.layer_norm(x, (self.argsnumns["n_embd"],), weight=w, bias=b)
 
-    def save(self, target):
-        target.xx = copy.deepcopy(self.xx)
-        target.aa = copy.deepcopy(self.aa)
-        target.bb = copy.deepcopy(self.bb)
-        target.pp = copy.deepcopy(self.pp)
-        target.hk = copy.deepcopy(self.hk)
+    def MM(self, x: torch.Tensor, y: torch.Tensor):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.matmul(x.float(), y.float()).half()
+        return torch.matmul(x, y)
 
-    def load(self, target):
-        self.xx = copy.deepcopy(target.xx)
-        self.aa = copy.deepcopy(target.aa)
-        self.bb = copy.deepcopy(target.bb)
-        self.pp = copy.deepcopy(target.pp)
-        self.hk = copy.deepcopy(target.hk)
+    def SM(self, x: torch.Tensor):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.softmax(x.float(), dim=-1).half()
+        return torch.softmax(x, dim=-1)
 
-    @MyFunction
-    def LN(self, xx, w):
-        return F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
+    def SG(self, x: torch.Tensor):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.sigmoid(x.float()).half()
+        return torch.sigmoid(x)
 
-    @MyFunction
-    def FF(self, xx, w, name):
-        if name not in self.xx:
-            self.xx[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
-        xk = xx * w.time_mix_k + self.xx[name] * (1 - w.time_mix_k)
-        xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
-        self.xx[name] = xx
+    def EX(self, x: torch.Tensor):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.exp(x.float()).half()
+        return torch.exp(x)
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
-        k = torch.square(torch.relu(w.key.weight @ xk))
-        kv = w.value.weight @ k
+    def RL(self, x: torch.Tensor):
+        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
+            return torch.relu(x.float()).half()
+        return torch.relu(x)
+    # @MyFunction
 
-        return r * kv
+    def FF(self, x, state, i: int, time_mix_k, time_mix_r, kw, vw, rw):
 
-    @MyFunction
-    def SA(self, xx, w, name):
-        if name not in self.xx:
-            self.xx[name] = torch.zeros(
-                self.n_embd, device=self.RUN_DEVICE)
-            self.aa[name] = torch.zeros(
-                self.n_embd, device=self.RUN_DEVICE)
-            self.bb[name] = torch.zeros(
-                self.n_embd, device=self.RUN_DEVICE)
-            self.pp[name] = torch.zeros(
-                self.n_embd, device=self.RUN_DEVICE) - 1e30
+        xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
+        xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
+        state[5*i+0] = x
 
-        xk = xx * w.time_mix_k + self.xx[name] * (1 - w.time_mix_k)
-        xv = xx * w.time_mix_v + self.xx[name] * (1 - w.time_mix_v)
-        xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
-        self.xx[name] = xx
+        r = self.SG(self.MM(rw, xr))
+        dx = self.MM(kw, xk)
+        clamped = self.RL(dx)
+        k = torch.square(clamped)
+        kv = self.MM(vw, k)
+        return (r * kv)
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
+    # @MyFunction
 
-        k = w.key.weight @ xk
-        v = w.value.weight @ xv
+    def SA(self, x, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
 
-        pp = self.pp[name]
-        aa = self.aa[name]
-        bb = self.bb[name]
-        ww = w.time_first + k
+        xk = x * time_mix_k + state[5*i+1] * (1 - time_mix_k)
+        xv = x * time_mix_v + state[5*i+1] * (1 - time_mix_v)
+        xr = x * time_mix_r + state[5*i+1] * (1 - time_mix_r)
+        state[5*i+1] = x
+
+        r = self.SG(self.MM(rw, xr))
+        k = self.MM(kw, xk)
+        v = self.MM(vw, xv)
+
+        aa = state[5*i+2]
+        bb = state[5*i+3]
+        pp = state[5*i+4]
+        ww = time_first + k
         p = torch.maximum(pp, ww)
-        e1 = torch.exp(pp - p)
-        e2 = torch.exp(ww - p)
+        e1 = self.EX(pp - p)
+        e2 = self.EX(ww - p)
+
         a = e1 * aa + e2 * v
         b = e1 * bb + e2
-        ww = pp + w.time_decay
+
+        ww = pp + time_decay
         p = torch.maximum(ww, k)
-        e1 = torch.exp(ww - p)
-        e2 = torch.exp(k - p)
-        self.aa[name] = e1 * aa + e2 * v
-        self.bb[name] = e1 * bb + e2
-        self.pp[name] = p
+        e1 = self.EX(ww - p)
+        e2 = self.EX(k - p)
+        state[5*i+2] = e1 * aa + e2 * v
+        state[5*i+3] = e1 * bb + e2
+        state[5*i+4] = p
 
-        rwkv = r * a / b
+        rwkv = (r * a) / b
+        return self.MM(ow, rwkv)
 
-        return w.output.weight @ rwkv
-
-    def forward(self, ctx, preprocess_only=False):
+    def forward(self, ctx: List[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
             w = self.w
-            x = w.emb.weight[ctx[-1]]
-            lev = (range(self.n_layer))
+            args = self.args
 
-            x = self.LN(x, w.blocks[0].ln0)
+            x: torch.Tensor = w["emb.weight"][ctx[-1]]
 
-            for i in lev:
-                x = x + \
-                    self.SA(
-                        self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
-                x = x + \
-                    self.FF(self.LN(x, w.blocks[i].ln2),
-                            w.blocks[i].ffn, f'ffn.{i}')
+            if self.RUN_DEVICE == 'cuda' or self.RUN_DEVICE == "proc":
+                x = x.to(device="cuda", non_blocking=True)
 
-            x = self.LN(x, w.ln_out)
-            if RWKV_HEAD_QK_DIM > 0:
-                if self.hk == None:
-                    self.hk = (w.head_k.weight @ x).unsqueeze(0)
-                else:
-                    self.hk = torch.cat(
-                        [self.hk, (w.head_k.weight @ x).unsqueeze(0)], dim=0)
-                if self.hk.shape[0] > self.ctx_len:
-                    self.hk = self.hk[-self.ctx_len:, :]
+            if ("pos_emb" in w.keys()):
+                pos_emb = w["pos_emb"][len(ctx)-1]
+                x = x + pos_emb
 
-                if preprocess_only:
-                    return None
+            for o in range(self.argsnumns["n_layer"]):
+                i = o
 
-                q = w.head_q.weight @ x
+                if (i >= self.argsnumns["cudalayers"] and self.RUN_DEVICE == "cuda"):
 
-                x = w.head.weight @ x
-                x = x
+                    x = x.to("cpu")
+                    state = state.to("cpu")
+                d: dict[str, torch.Tensor] = w
+                if (self.RUN_DEVICE == "proc" and i >= self.argsnumns["cudalayers"]):
+                    d = {}
+                    for rr in w.keys():
+                        if ("blocks."+str(i)+"." in rr):
 
-                c = (self.hk @ q) / RWKV_HEAD_QK_DIM
-                for i in range(len(c)):
-                    x[ctx[i]] += c[i]
-            else:
-                if preprocess_only:
-                    return None
+                            d[rr] = w[rr].to("cuda", non_blocking=True)
 
-                x = w.head.weight @ x
-                x = x
+                if o == 0:
+                    x = self.LN(
+                        x, d["blocks.0.ln0.weight"], d["blocks.0.ln0.bias"])
 
-            return x
+                ln1w = d["blocks."+str(i)+".ln1.weight"]
+                ln1b = d["blocks."+str(i)+".ln1.bias"]
+
+                tmk = d["blocks."+str(i)+".ffn.time_mix_k"]
+                tmr = d["blocks."+str(i)+".ffn.time_mix_r"]
+                tmkw = d["blocks."+str(i)+".ffn.key.weight"]
+                tmvw = d["blocks."+str(i)+".ffn.value.weight"]
+                tmrw = d["blocks."+str(i)+".ffn.receptance.weight"]
+                ln2w = d["blocks."+str(i)+".ln2.weight"]
+                ln2b = d["blocks."+str(i)+".ln2.bias"]
+                atmk = d["blocks."+str(i)+".att.time_mix_k"]
+                atmv = d["blocks."+str(i)+".att.time_mix_v"]
+                atmr = d["blocks."+str(i)+".att.time_mix_r"]
+                atf = d["blocks."+str(i)+".att.time_first"]
+                atc = d["blocks."+str(i)+".att.time_decay"]
+                atd = d["blocks."+str(i)+".att.key.weight"]
+                avw = d["blocks."+str(i)+".att.value.weight"]
+                arw = d["blocks."+str(i)+".att.receptance.weight"]
+                aow = d["blocks."+str(i)+".att.output.weight"]
+
+                ln = self.LN(x, ln1w, ln1b)
+                x = x + self.SA(ln, state, i,
+                                atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
+                                )
+
+                x = x + self.FF(self.LN(x, ln2w, ln2b), state, i,
+                                tmk, tmr, tmkw, tmvw, tmrw)
+                if (self.RUN_DEVICE == "proc" and i >= self.argsnumns["cudalayers"]):
+
+                    for rr in w.keys():
+                        if ("blocks."+str(i)+"." in rr):
+
+                            del d[rr]
+
+            if args["RUN_DEVICE"] == 'cuda':
+                state = state.to("cuda")
+            if preprocess_only:
+                return x, state
+            if args["RUN_DEVICE"] == 'cuda':
+                x = x.to("cuda")
+
+            x = self.LN(x, w["ln_out.weight"], w["ln_out.bias"])
+
+            x = self.MM(w["head.weight"], x)
+
+            return x, state

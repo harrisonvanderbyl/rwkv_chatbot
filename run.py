@@ -12,7 +12,6 @@ import sys
 import types
 import time
 import gc
-import discord
 import torch
 from src.utils import TOKENIZER
 from tqdm import tqdm
@@ -43,7 +42,7 @@ UNKNOWN_CHAR = None
 vocab_size = 50277
 
 # note; you can set MODEL_NAME to your fine-tuned model
-size = "large"  # tini/mini/medium/medium-ext/large/xl/xxl
+size = "tiny"  # tini/mini/medium/medium-ext/large/xl/xxl
 
 if (size == "tiny"):
     MODEL_NAME = "100"
@@ -81,14 +80,14 @@ elif (size == "xl"):
 # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
 args["RUN_DEVICE"] = "proc"
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
-argsnums["cudalayers"] = 2
+argsnums["cudalayers"] = 12
 # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-args["FLOAT_MODE"] = "bf16"
+args["FLOAT_MODE"] = "fp32"
 
 # none // ray(slower but may have better answers)
 os.environ["rwkv_sampler"] = "ray"
 os.environ["rwkv_smpler_splits"] = "3"  # This is how many branches it checks
-os.environ["rwkv_ray_depth"] = "2"  # This is how deep it goes in each branch
+os.environ["rwkv_ray_depth"] = "3"  # This is how deep it goes in each branch
 
 # set max threads to 12
 
@@ -143,7 +142,7 @@ User: Aha, I’m going to refrain from that for now. Now for a science question.
 
 RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
 
-'''
+User: '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
@@ -224,131 +223,96 @@ print("torch.cuda.memory_reserved: %fGB" %
       (torch.cuda.memory_reserved(0)/1024/1024/1024))
 print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
+    print("--")
+    time_ref = time.time_ns()
+    ctx = src_ctx.copy()
 
-for i in tqdm(range(src_len)):
-    x = ctx[: i + 1]
-    if i == src_len - 1:
-        init_out, init_state = model.forward(x, init_state)
-    else:
-        o, state = model.forward(
-            x, init_state, preprocess_only=True)
-gc.collect()
-torch.cuda.empty_cache()
+    if TRIAL == 0:
 
+        for i in tqdm(range(src_len)):
+            x = ctx[: i + 1]
+            if i == src_len - 1:
+                init_out, init_state = model.forward(x, init_state)
+            else:
+                o, state = model.forward(
+                    x, init_state, preprocess_only=True)
+        gc.collect()
+        torch.cuda.empty_cache()
 
-def ray_sampler(ctxx, chars, score, statein, depth=0):
+    record_time('preprocess')
+    out_last = src_len
+    for i in range(src_len, src_len + (1 if DEBUG_DEBUG else LENGTH_PER_TRIAL)):
+        x = ctx
+        x = x[-ctx_len:]
 
-    out1, state1 = model.forward(ctxx+chars, statein.clone())
-    ttt1 = tokenizer.sample_logits(
-        out1,
-        ctxx+chars,
-        ctx_len,
-        temperature=TEMPERATURE,
-        top_p_usual=top_p,
-        top_p_newline=top_p_newline,
+        if i == src_len:
+            out = init_out.clone()
+            state = init_state.clone()
+
+        # if DEBUG_DEBUG:
+        #     print("model", np.array(x), "==>", np.array(out), np.max(
+        #         out.cpu().numpy()), np.min(out.cpu().numpy()))
+
+        if os.environ["rwkv_sampler"] == "ray":
+
+            def ray_sampler(ctxx, chars, score, statein, depth=0):
+
+                out1, state1 = model.forward(ctxx+chars, statein.clone())
+                ttt1 = tokenizer.sample_logits(
+                    out1,
+                    ctxx+chars,
+                    ctx_len,
+                    temperature=TEMPERATURE,
+                    top_p_usual=top_p,
+                    top_p_newline=top_p_newline,
+                )
+                ret = []
+                if (depth < int(os.environ["rwkv_ray_depth"])):
+                    for nt in ttt1:
+                        ret += ray_sampler(ctxx+chars, chars +
+                                           [nt], score+out1[nt], state1, depth+1)
+                else:
+                    for nt in ttt1:
+                        ret.append(
+                            {"state": state1, "score": score+out1[nt], "chars": chars+[nt]})
+                return ret
+            rays = ray_sampler(ctx, [], 0, state)
+            mx1 = max(rays, key=lambda x: x["score"])
+
+            ctx += mx1["chars"]
+            state = mx1["state"]
+
+            l = len(mx1["chars"])
+        else:
+
+            out, state = model.forward(x, state)
+            if TOKEN_MODE == "pile":
+                out[0] = -99  # disable <|endoftext|>
+            ttt = tokenizer.sample_logits(
+                out,
+                x,
+                ctx_len,
+                temperature=TEMPERATURE,
+                top_p_usual=top_p,
+                top_p_newline=top_p_newline,
+            )
+            ctx += [ttt]
+            l = 1
+
+        if tokenizer.charMode:
+            char = tokenizer.itos[ttt]
+            print(char, end="", flush=True)
+        else:
+            char = tokenizer.tokenizer.decode(ctx[-l:])
+            if '\ufffd' not in char:
+                print(char, end="", flush=True)
+                out_last = i+1
+
+    record_time('total')
+    # print(f'\n\n{time_slot}\n\n')
+    print(
+        f"\n\n--- preprocess {round(time_slot['preprocess'], 2)}s, generation {round(time_slot['total']-time_slot['preprocess'], 2)}s ", end=''
     )
-    ret = []
-    if (depth < int(os.environ["rwkv_ray_depth"])):
-        for nt in ttt1:
-            ret += ray_sampler(ctxx+chars, chars +
-                               [nt], score+out1[nt], state1, depth+1)
-    else:
-        for nt in ttt1:
-            ret.append(
-                {"state": state1, "score": score+out1[nt], "chars": chars+[nt]})
-    return ret
-
-
-def sample(ctx, state):
-    if os.environ["rwkv_sampler"] == "ray":
-
-        rays = ray_sampler(ctx, [], 0, state)
-        mx1 = max(rays, key=lambda x: x["score"])
-
-        ctx += mx1["chars"]
-        state = mx1["state"]
-
-        l = len(mx1["chars"])
-    else:
-
-        out, state = model.forward(ctx, state)
-        if TOKEN_MODE == "pile":
-            out[0] = -99  # disable <|endoftext|>
-        ttt = tokenizer.sample_logits(
-            out,
-            ctx,
-            ctx_len,
-            temperature=TEMPERATURE,
-            top_p_usual=top_p,
-            top_p_newline=top_p_newline,
-        )
-        ctx += [ttt]
-
-    return ctx, state
-
 
 print(("-" * 50) + '\n')
-
-
-# bot.py
-
-client = discord.Client(
-    intents=discord.Intents.all())
-
-
-@client.event
-async def on_ready():
-    print(f'{client.user} has connected to Discord!')
-
-currstate = init_state
-model_tokens = tokenizer.tokenizer.encode(context)
-
-
-@client.event
-async def on_message(message):
-    global model_tokens, currstate
-    # print(
-    #     f"message received({message.guild.name}:{message.channel.name}):", message.content)
-
-    if message.author.bot:
-        return
-
-    msg = message.content.strip()
-
-    if msg == '+reset_drkv' or msg == '+drkv_reset':
-        model_tokens = tokenizer.tokenizer.encode(context)
-        currstate = init_state
-
-        await message.reply("Chat reset. This is powered by RWKV-4 3B Language Model.")
-        return
-
-    if msg[:6] == '+drkv ':
-
-        real_msg = msg[6:].strip()
-        new = f"User: {real_msg}\n\nRWKV: "
-        print(f'### add ###\n[{new}]')
-        model_tokens += tokenizer.tokenizer.encode(new)
-        begin = len(model_tokens)
-        for o in range(len(new)):
-            r, currstate = model.forward(model_tokens[:begin + o], currstate)
-        for i in range(100):
-            if i <= 0:
-                newline_adj = -999999999
-            elif i <= 30:
-                newline_adj = -2
-            elif i <= 70:
-                newline_adj = 0
-            elif i <= 97:
-                newline_adj = i - 70
-            else:
-                newline_adj = 999999999
-
-            model_tokens, currstate = sample(model_tokens, currstate)
-            if i > 5 and "\n\n" in tokenizer.tokenizer.decode(model_tokens[-4:]):
-                break
-
-        send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
-        print(f'### send ###\n[{send_msg}]')
-        await message.reply(send_msg)
-
-client.run(os.environ['TOKEN'])
