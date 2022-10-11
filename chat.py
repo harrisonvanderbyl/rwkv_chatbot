@@ -88,7 +88,7 @@ args["FLOAT_MODE"] = "fp32"
 # none // ray(slower but may have better answers)
 os.environ["rwkv_sampler"] = "ray"
 os.environ["rwkv_smpler_splits"] = "3"  # This is how many branches it checks
-os.environ["rwkv_ray_depth"] = "3"  # This is how deep it goes in each branch
+os.environ["rwkv_ray_depth"] = "2"  # This is how deep it goes in each branch
 
 # set max threads to 12
 
@@ -265,7 +265,7 @@ def ray_sampler(ctxx, chars, score, statein, depth=0, nla=0):
 def sample(ctx, state, nla):
     if os.environ["rwkv_sampler"] == "ray":
 
-        rays = ray_sampler(ctx, [], 0, state, nla)
+        rays = ray_sampler(ctx, [], 0, state, 0, nla)
         mx1 = max(rays, key=lambda x: x["score"])
 
         ctx += mx1["chars"]
@@ -333,10 +333,10 @@ async def on_message(message):
         print(f'### add ###\n[{new}]')
         model_tokens = model_tokens + tokenizer.tokenizer.encode(new)
         begin = len(model_tokens)
-        for o in range(len(new)):
+        for o in tqdm(range(len(new))):
             r, currstate = model.forward(
                 model_tokens[:begin + o], currstate, preprocess_only=True)
-        for i in range(100):
+        for i in tqdm(range(100)):
             if i <= 0:
                 newline_adj = -999999999
             elif i <= 30:
