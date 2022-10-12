@@ -51,7 +51,7 @@ if (size == "tiny"):
     n_embd = 768
     ctx_len = 1024
 
-elif (size == "mini"):
+elif (size == "small"):
     MODEL_NAME = '/fsx/BlinkDL/rwkv-release/RWKV-4-Pile-430M-20220808-8066'
     n_layer = 24
     n_embd = 1024
@@ -67,12 +67,12 @@ elif (size == "medium-ext"):
     n_embd = 2048
     ctx_len = 4096
 elif (size == "large"):
-    MODEL_NAME = 'RWKV-4-Pile-3B-20221005-7348'
+    MODEL_NAME = 'RWKV-4-Pile-3B-20221008-8023'
     n_layer = 32
     n_embd = 2560
     ctx_len = 1024
 elif (size == "xl"):
-    MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221004-3047'
+    MODEL_NAME = '7100'
     n_layer = 32
     n_embd = 4096
     ctx_len = 1024
@@ -81,9 +81,9 @@ elif (size == "xl"):
 # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
 args["RUN_DEVICE"] = "proc"
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
-argsnums["cudalayers"] = 12
+argsnums["cudalayers"] = 32
 # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-args["FLOAT_MODE"] = "fp32"
+args["FLOAT_MODE"] = "bf16"
 
 # none // ray(slower but may have better answers)
 os.environ["rwkv_sampler"] = "ray"
@@ -353,17 +353,18 @@ async def on_message(message):
             else:
                 newline_adj = 999999999
 
-            model_tokens, currstate, statelist = sample(
-                model_tokens, currstate, newline_adj)
-            if i > 5 and "\n\n" in tokenizer.tokenizer.decode(model_tokens[-4:]):
-                for ss in model_tokens[:-4:-1]:
-                    if (tokenizer.tokenizer.decode([ss]) == "\n"):
-                        currstate = statelist[-1]
-                        break
-                model_tokens = model_tokens[:-1]
-                statelist = statelist[:-1]
-                break
+            tt, currstate, statelist = sample(
+                model_tokens, currstate, 0)
 
+            model_tokens = tt
+            currstate = statelist[-1]
+
+            if "\n\n" in tokenizer.tokenizer.decode(tt[begin:]):
+                print(tokenizer.tokenizer.decode(tt[begin:]))
+                if tokenizer.tokenizer.decode(tt[begin:])[-1] != "\n":
+                    model_tokens = model_tokens[:-1]
+                    currstate = statelist[-2]
+                break
         send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
