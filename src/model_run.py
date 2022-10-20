@@ -11,7 +11,8 @@ import gc
 from torch.nn import functional as F
 import torch.nn as nn
 from typing import List, Dict
-
+from torch import autocast
+import numpy as np
 # Make sure to use nightly build of torchdynamo
 # import torchdynamo
 # MyFunction = torchdynamo.optimize(
@@ -22,7 +23,34 @@ print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM}\n')
 
 DEBUG_TIME = False   # True False - show trained time-coeffs
 
-############################################################################################################
+
+@torch.jit.ignore
+def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
+
+    if probs.device.type == "cpu":
+        probs = probs.numpy()
+        sorted_probs = np.sort(probs)[::-1]
+        cumulative_probs = np.cumsum(sorted_probs)
+        cutoff = float(sorted_probs[np.argmax(
+            cumulative_probs > top_p_usual)])
+        probs[probs < cutoff] = 0
+        if temperature != 1.0:
+            probs = np.power(probs, 1.0 / temperature)
+        probs = probs / np.sum(probs)
+        out = np.random.choice(a=len(probs), p=probs)
+        return out
+    else:
+        sorted_probs = torch.sort(probs, descending=True)[0]
+        cumulative_probs = torch.cumsum(
+            sorted_probs.float(), dim=-1).cpu().numpy()
+        cutoff = float(sorted_probs[np.argmax(
+            cumulative_probs > top_p_usual)])
+        probs[probs < cutoff] = 0
+        if temperature != 1.0:
+            probs = probs.pow(1.0 / temperature)
+
+        out: int = torch.multinomial(probs.float(), 1, True)[0]
+        return out
 
 
 class RWKV_RNN(nn.Module):
@@ -33,10 +61,11 @@ class RWKV_RNN(nn.Module):
         self.argsnumns = argsnumns
         self.FLOAT_MODE = args["FLOAT_MODE"]
         self.RUN_DEVICE = args["RUN_DEVICE"]
+        self.n_layer = 0
         with torch.no_grad():
             w: Dict[str, torch.Tensor] = torch.load(
-                args["MODEL_NAME"] + '.pth', map_location='cpu')
-
+                args["MODEL_NAME"], map_location='cpu')
+            self.n_emb = len(w['blocks.0.ln1.weight'])
             # refine weights and send to correct device
             keys = list(w.keys())
             if 'pos_emb_x' in keys:
@@ -66,8 +95,12 @@ class RWKV_RNN(nn.Module):
                         w[x] = w[x].half()
 
                 w[x].requires_grad = False
-                if args["RUN_DEVICE"] in ["cuda", "proc"] and x != 'emb.weight':
-
+                if args["RUN_DEVICE"] == "cuda" and x != 'emb.weight':
+                    try:
+                        if (int(x.split('.')[1]) > self.n_layer):
+                            self.n_layer = int(x.split('.')[1])+1
+                    except:
+                        pass
                     if ((x.split('.')[1] == "weight" or x.split('.')[1] == "bias") or int(x.split('.')[1]) < argsnumns["cudalayers"]):
 
                         w[x] = w[x].cuda(non_blocking=True)
@@ -96,49 +129,17 @@ class RWKV_RNN(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-    # @MyFunction
-    def LN(self, x: torch.Tensor, w, b):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.layer_norm(x.float(), (self.argsnumns["n_embd"],), weight=w.float(), bias=b.float()).half()
-        return torch.layer_norm(x, (self.argsnumns["n_embd"],), weight=w, bias=b)
-
-    def MM(self, x: torch.Tensor, y: torch.Tensor):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.matmul(x.float(), y.float()).half()
-        return torch.matmul(x, y)
-
-    def SM(self, x: torch.Tensor):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.softmax(x.float(), dim=-1).half()
-        return torch.softmax(x, dim=-1)
-
-    def SG(self, x: torch.Tensor):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.sigmoid(x.float()).half()
-        return torch.sigmoid(x)
-
-    def EX(self, x: torch.Tensor):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.exp(x.float()).half()
-        return torch.exp(x)
-
-    def RL(self, x: torch.Tensor):
-        if self.RUN_DEVICE == "cpu" and self.FLOAT_MODE == "fp16":
-            return torch.relu(x.float()).half()
-        return torch.relu(x)
-    # @MyFunction
-
     def FF(self, x, state, i: int, time_mix_k, time_mix_r, kw, vw, rw):
 
         xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
         xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
         state[5*i+0] = x
 
-        r = self.SG(self.MM(rw, xr))
-        dx = self.MM(kw, xk)
-        clamped = self.RL(dx)
+        r = torch.sigmoid((rw @ xr))
+        dx = (kw @ xk)
+        clamped = torch.relu(dx)
         k = torch.square(clamped)
-        kv = self.MM(vw, k)
+        kv = (vw @ k)
         return (r * kv)
 
     # @MyFunction
@@ -148,33 +149,34 @@ class RWKV_RNN(nn.Module):
         xk = x * time_mix_k + state[5*i+1] * (1 - time_mix_k)
         xv = x * time_mix_v + state[5*i+1] * (1 - time_mix_v)
         xr = x * time_mix_r + state[5*i+1] * (1 - time_mix_r)
+
         state[5*i+1] = x
 
-        r = self.SG(self.MM(rw, xr))
-        k = self.MM(kw, xk)
-        v = self.MM(vw, xv)
+        r = torch.sigmoid((rw @ xr))
+        k = (kw @ xk)
+        v = (vw @ xv)
 
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
         ww = time_first + k
         p = torch.maximum(pp, ww)
-        e1 = self.EX(pp - p)
-        e2 = self.EX(ww - p)
+        e1 = torch.exp(pp - p)
+        e2 = torch.exp(ww - p)
 
         a = e1 * aa + e2 * v
         b = e1 * bb + e2
 
         ww = pp + time_decay
         p = torch.maximum(ww, k)
-        e1 = self.EX(ww - p)
-        e2 = self.EX(k - p)
+        e1 = torch.exp(ww - p)
+        e2 = torch.exp(k - p)
         state[5*i+2] = e1 * aa + e2 * v
         state[5*i+3] = e1 * bb + e2
         state[5*i+4] = p
 
         rwkv = (r * a) / b
-        return self.MM(ow, rwkv)
+        return (ow @ rwkv)
 
     def forward(self, ctx: List[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
@@ -183,22 +185,18 @@ class RWKV_RNN(nn.Module):
 
             x: torch.Tensor = w["emb.weight"][ctx[-1]]
 
-            if self.RUN_DEVICE == 'cuda' or self.RUN_DEVICE == "proc":
+            if self.RUN_DEVICE == 'cuda':
                 x = x.to(device="cuda", non_blocking=True)
 
             if ("pos_emb" in w.keys()):
                 pos_emb = w["pos_emb"][len(ctx)-1]
                 x = x + pos_emb
 
-            for o in range(self.argsnumns["n_layer"]):
+            for o in range(self.n_layer):
                 i = o
 
-                if (i >= self.argsnumns["cudalayers"] and self.RUN_DEVICE == "cuda"):
-
-                    x = x.to("cpu")
-                    state = state.to("cpu")
                 d: dict[str, torch.Tensor] = w
-                if (self.RUN_DEVICE == "proc" and i >= self.argsnumns["cudalayers"]):
+                if (i >= self.argsnumns["cudalayers"]):
                     d = {}
                     for rr in w.keys():
                         if ("blocks."+str(i)+"." in rr):
@@ -206,8 +204,8 @@ class RWKV_RNN(nn.Module):
                             d[rr] = w[rr].to("cuda", non_blocking=True)
 
                 if o == 0:
-                    x = self.LN(
-                        x, d["blocks.0.ln0.weight"], d["blocks.0.ln0.bias"])
+                    x = torch.layer_norm(
+                        x, (self.n_emb,), weight=d["blocks.0.ln0.weight"], bias=d["blocks.0.ln0.bias"])
 
                 ln1w = d["blocks."+str(i)+".ln1.weight"]
                 ln1b = d["blocks."+str(i)+".ln1.bias"]
@@ -229,29 +227,82 @@ class RWKV_RNN(nn.Module):
                 arw = d["blocks."+str(i)+".att.receptance.weight"]
                 aow = d["blocks."+str(i)+".att.output.weight"]
 
-                ln = self.LN(x, ln1w, ln1b)
-                x = x + self.SA(ln, state, i,
-                                atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
-                                )
-
-                x = x + self.FF(self.LN(x, ln2w, ln2b), state, i,
-                                tmk, tmr, tmkw, tmvw, tmrw)
-                if (self.RUN_DEVICE == "proc" and i >= self.argsnumns["cudalayers"]):
+                ln = torch.layer_norm(
+                    x, (self.n_emb,), weight=ln1w, bias=ln1b)
+                sx = self.SA(ln, state, i,
+                             atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
+                             )
+                x = x + sx
+                rx = self.FF(torch.layer_norm(x, (self.n_emb,), weight=ln2w, bias=ln2b), state, i,
+                             tmk, tmr, tmkw, tmvw, tmrw)
+                x += rx
+                if (i >= self.argsnumns["cudalayers"]):
 
                     for rr in w.keys():
                         if ("blocks."+str(i)+"." in rr):
 
                             del d[rr]
-
-            if args["RUN_DEVICE"] == 'cuda':
-                state = state.to("cuda")
             if preprocess_only:
-                return x, state
+                return x
             if args["RUN_DEVICE"] == 'cuda':
                 x = x.to("cuda")
 
-            x = self.LN(x, w["ln_out.weight"], w["ln_out.bias"])
+            x = torch.layer_norm(
+                x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])
 
-            x = self.MM(w["head.weight"], x)
+            x = (w["head.weight"] @ x)
 
-            return x, state
+            return x
+
+    @torch.jit.export
+    def empty_state(self):
+        state = torch.zeros(
+            self.n_layer * 5, self.n_emb, device=self.RUN_DEVICE, dtype=torch.float32 if self.FLOAT_MODE == "fp32" else torch.bfloat16 if self.FLOAT_MODE == "bf16" else torch.float16)
+        for i in range(self.n_layer):
+            state[5*i+4] -= 1e30
+        return state
+
+    @torch.jit.export
+    def loadContext(self, ctx: List[int], state):
+        for i in range(len(ctx)):
+            x = ctx[: i + 1]
+            if i == len(ctx) - 1:
+                init_out = self.forward(x, state, preprocess_only=False)
+            else:
+                o = self.forward(
+                    x, state, preprocess_only=True)
+        return
+
+    @torch.jit.export
+    def sample_logits(self, ozut: torch.Tensor, x: List[int], ctx_len: int, temperature: float = 1.0, top_p_usual: float = 0.8):
+        # out[self.UNKNOWN_CHAR] = -float('Inf')
+       # out[self.UNKNOWN_CHAR] = -float('Inf')
+        lastChar = int(x[-1])
+
+        # turn to float if is half and cpu
+        out = ozut
+        if out.dtype == torch.half and out.device == torch.device('cpu'):
+            out = out.float()
+        probs = F.softmax(out, dim=-1)
+
+        return sample(probs, temperature, top_p_usual)
+
+    @torch.jit.export
+    def run(self, ctxx: List[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
+
+        out1 = self.forward(ctxx, state1, preprocess_only=False)
+
+        out1[0] = -99  # disable <|endoftext|>
+
+        out1[187] += nla
+
+        ttt = self.sample_logits(
+            out1,
+            ctxx,
+            ctxlen,
+            temperature=temp,
+            top_p_usual=top_p,
+        )
+        ctxx += [ttt]
+
+        return ctxx

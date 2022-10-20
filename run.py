@@ -19,6 +19,18 @@ try:
     os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
 except:
     pass
+import inquirer
+files = os.listdir()
+# filter by ending in .pth
+files = [f for f in files if f.endswith(".pth")]
+
+questions = [
+    inquirer.List('file',
+                  message="What model do you want to use?",
+                  choices=files,
+                  ),
+]
+file = inquirer.prompt(questions)["file"]
 
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
@@ -41,69 +53,46 @@ WORD_NAME = [
 UNKNOWN_CHAR = None
 vocab_size = 50277
 
-# note; you can set MODEL_NAME to your fine-tuned model
-size = "tiny"  # tini/mini/medium/medium-ext/large/xl/xxl
-
-if (size == "tiny"):
-    MODEL_NAME = "100"
-    n_layer = 12
-    n_embd = 768
-    ctx_len = 1024
-
-elif (size == "mini"):
-    MODEL_NAME = '/fsx/BlinkDL/rwkv-release/RWKV-4-Pile-430M-20220808-8066'
-    n_layer = 24
-    n_embd = 1024
-    ctx_len = 1024
-elif (size == "medium"):
-    MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220903-8040'
-    n_layer = 24
-    n_embd = 2048
-    ctx_len = 1024
-elif (size == "medium-ext"):
-    MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-1b5/RWKV-4-Pile-1B5-20220929-ctx4096'
-    n_layer = 24
-    n_embd = 2048
-    ctx_len = 4096
-elif (size == "large"):
-    MODEL_NAME = 'RWKV-4-Pile-3B-20221005-7348'
-    n_layer = 32
-    n_embd = 2560
-    ctx_len = 1024
-elif (size == "xl"):
-    MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221004-3047'
-    n_layer = 32
-    n_embd = 4096
-    ctx_len = 1024
-
 
 # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
-args["RUN_DEVICE"] = "proc"
+args["RUN_DEVICE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
+                                                    message="What device do you want to use?",
+                                                    choices=[
+                                                        "cpu", "cuda"],
+                                                    )])["RUN_DEVICE"]
+
+
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
-argsnums["cudalayers"] = 12
+if (args["RUN_DEVICE"] == "cuda"):
+    argsnums["cudalayers"] = inquirer.text(
+        message="How many layers to offload to cuda? (default:all)")
+    if argsnums["cudalayers"] == "":
+        argsnums["cudalayers"] = 100
+    else:
+        argsnums["cudalayers"] = int(argsnums["cudalayers"])
 # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-args["FLOAT_MODE"] = "fp32"
-
-# none // ray(slower but may have better answers)
-os.environ["rwkv_sampler"] = "ray"
-os.environ["rwkv_smpler_splits"] = "3"  # This is how many branches it checks
-os.environ["rwkv_ray_depth"] = "3"  # This is how deep it goes in each branch
-
-# set max threads to 12
+args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
+                                                    message="What float mode do you want to use?",
+                                                    choices=[
+                                                        "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
+                                                    )])["FLOAT_MODE"]
+# print config
+print("RUN_DEVICE:", args["RUN_DEVICE"])
+print("FLOAT_MODE:", args["FLOAT_MODE"])
+print("cudalayers:", argsnums["cudalayers"]
+      if "cudalayers" in argsnums else "all")
+print("")
 
 torch.set_num_threads(12)
-
 # opt
-opt = "jit"  # none // jit
+opt = "none"  # none // jit
 
 if (args["RUN_DEVICE"] == "cpu" and args["FLOAT_MODE"] == "fp16"):
-    print(Warning("fp16 is only supported on cuda, workarounds may be slow"))
+    raise (Warning("fp16 is only supported on cuda"))
 
 
-args["MODEL_NAME"] = MODEL_NAME
-argsnums["n_layer"] = n_layer
-argsnums["n_embd"] = n_embd
-argsnums["ctx_len"] = ctx_len
+args["MODEL_NAME"] = file
+argsnums["ctx_len"] = 4068
 argsnums["vocab_size"] = vocab_size
 argsnums["head_qk"] = 0
 argsnums["pre_ffn"] = 0
@@ -141,13 +130,12 @@ RWKV: Only if you tell me more about yourself - what are your interests?
 User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
 
 RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-
-User: '''
+'''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 1.1
+TEMPERATURE = 0.9
 top_p = 0.9
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
@@ -155,26 +143,21 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-print(f'\nUsing {args["RUN_DEVICE"].upper()}. Loading {MODEL_NAME}...')
+print(f'\nUsing {args["RUN_DEVICE"].upper()}. Loading {file}...')
 
 model = RWKV_RNN(args, argsnums)
+state1 = model.empty_state()
 
 if (opt == "jit"):
 
     model = torch.jit.script(model)
-    model = torch.jit.optimize_for_inference(model)
-    model = model.eval()
 
 
-state = torch.zeros(
-    argsnums["n_layer"] * 5, argsnums["n_embd"], device="cpu" if args["RUN_DEVICE"] == "cpu" else "cuda", dtype=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.bfloat16 if args["FLOAT_MODE"] == "bf16" else torch.float16)
-for i in range(argsnums["n_layer"]):
-    state[5*i+4] -= 1e30
-init_state = state
+init_state = state1
 
 
 print(f'\nOptimizing speed...')
-model.forward([187], state)
+model.forward([187], state1)
 gc.collect()
 torch.cuda.empty_cache()
 
@@ -187,15 +170,11 @@ if TOKEN_MODE == "pile":
 
 ########################################################################################################
 
-if tokenizer.charMode:
-    context = tokenizer.refine_context(context)
-    ctx = [tokenizer.stoi.get(s, tokenizer.UNKNOWN_CHAR) for s in context]
-else:
-    ctx = tokenizer.tokenizer.encode(context)
-src_len = len(ctx)
-src_ctx = ctx.copy()
 
-print("\nYour prompt has " + str(src_len) + " tokens.")
+ctx1 = tokenizer.tokenizer.encode(context)
+src_ctx1 = ctx1.copy()
+
+
 print(
     "Note: currently the first run takes a while if your prompt is long, as we are using RNN to preprocess the prompt. Use GPT to build the hidden state for better speed.\n"
 )
@@ -215,7 +194,6 @@ def record_time(name):
 init_out = []
 
 out = []
-print(("-" * 50) + '\n' + context, end="")
 
 print("torch.cuda.memory_allocated: %fGB" %
       (torch.cuda.memory_allocated(0)/1024/1024/1024))
@@ -223,91 +201,32 @@ print("torch.cuda.memory_reserved: %fGB" %
       (torch.cuda.memory_reserved(0)/1024/1024/1024))
 print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+
+
+model.loadContext(ctx1, state1)
+stateRefresh = state1.clone()
+
+
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
     time_ref = time.time_ns()
-    ctx = src_ctx.copy()
+    state1 = stateRefresh.clone()
+    ctx1 = src_ctx1.copy()
 
     if TRIAL == 0:
 
-        for i in tqdm(range(src_len)):
-            x = ctx[: i + 1]
-            if i == src_len - 1:
-                init_out, init_state = model.forward(x, init_state)
-            else:
-                o, state = model.forward(
-                    x, init_state, preprocess_only=True)
         gc.collect()
         torch.cuda.empty_cache()
 
     record_time('preprocess')
-    out_last = src_len
-    for i in range(src_len, src_len + (1 if DEBUG_DEBUG else LENGTH_PER_TRIAL)):
-        x = ctx
-        x = x[-ctx_len:]
+    for i in range(600):
 
-        if i == src_len:
-            out = init_out.clone()
-            state = init_state.clone()
+        (ctx1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
 
-        # if DEBUG_DEBUG:
-        #     print("model", np.array(x), "==>", np.array(out), np.max(
-        #         out.cpu().numpy()), np.min(out.cpu().numpy()))
+        char = tokenizer.tokenizer.decode(ctx1[-1])
 
-        if os.environ["rwkv_sampler"] == "ray":
-
-            def ray_sampler(ctxx, chars, score, statein, depth=0):
-
-                out1, state1 = model.forward(ctxx+chars, statein.clone())
-                ttt1 = tokenizer.sample_logits(
-                    out1,
-                    ctxx+chars,
-                    ctx_len,
-                    temperature=TEMPERATURE,
-                    top_p_usual=top_p,
-                    top_p_newline=top_p_newline,
-                )
-                ret = []
-                if (depth < int(os.environ["rwkv_ray_depth"])):
-                    for nt in ttt1:
-                        ret += ray_sampler(ctxx+chars, chars +
-                                           [nt], score+out1[nt], state1, depth+1)
-                else:
-                    for nt in ttt1:
-                        ret.append(
-                            {"state": state1, "score": score+out1[nt], "chars": chars+[nt]})
-                return ret
-            rays = ray_sampler(ctx, [], 0, state)
-            mx1 = max(rays, key=lambda x: x["score"])
-
-            ctx += mx1["chars"]
-            state = mx1["state"]
-
-            l = len(mx1["chars"])
-        else:
-
-            out, state = model.forward(x, state)
-            if TOKEN_MODE == "pile":
-                out[0] = -99  # disable <|endoftext|>
-            ttt = tokenizer.sample_logits(
-                out,
-                x,
-                ctx_len,
-                temperature=TEMPERATURE,
-                top_p_usual=top_p,
-                top_p_newline=top_p_newline,
-            )
-            ctx += [ttt]
-            l = 1
-
-        if tokenizer.charMode:
-            char = tokenizer.itos[ttt]
+        if '\ufffd' not in char:
             print(char, end="", flush=True)
-        else:
-            char = tokenizer.tokenizer.decode(ctx[-l:])
-            if '\ufffd' not in char:
-                print(char, end="", flush=True)
-                out_last = i+1
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')

@@ -43,7 +43,7 @@ UNKNOWN_CHAR = None
 vocab_size = 50277
 
 # note; you can set MODEL_NAME to your fine-tuned model
-size = "tiny"  # tini/mini/medium/medium-ext/large/xl/xxl
+size = "large"  # tini/mini/medium/medium-ext/large/xl/xxl
 
 if (size == "tiny"):
     MODEL_NAME = "100"
@@ -148,8 +148,8 @@ RWKV: It’s a large and very expensive piece of science equipment. If I underst
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 1.1
-top_p = 0.9
+TEMPERATURE = 1.7
+top_p = 0.8
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
 DEBUG_DEBUG = False  # True False --> show softmax output
@@ -171,11 +171,11 @@ state = torch.zeros(
     argsnums["n_layer"] * 5, argsnums["n_embd"], device="cpu" if args["RUN_DEVICE"] == "cpu" else "cuda", dtype=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.bfloat16 if args["FLOAT_MODE"] == "bf16" else torch.float16)
 for i in range(argsnums["n_layer"]):
     state[5*i+4] -= 1e30
-init_state = state
+init_state = state.clone()
 
 
 print(f'\nOptimizing speed...')
-model.forward([187], state)
+model.forward([187], init_state)
 gc.collect()
 torch.cuda.empty_cache()
 
@@ -225,12 +225,13 @@ print("torch.cuda.memory_reserved: %fGB" %
 print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
+
 for i in tqdm(range(src_len)):
     x = ctx[: i + 1]
     if i == src_len - 1:
         init_out, init_state = model.forward(x, init_state)
     else:
-        o, state = model.forward(
+        oo, init_state = model.forward(
             x, init_state, preprocess_only=True)
 gc.collect()
 torch.cuda.empty_cache()
@@ -296,6 +297,8 @@ def sample(ctxx, state, nla):
 
 print(("-" * 50) + '\n')
 
+saveStates = {}
+
 
 # bot.py
 
@@ -307,8 +310,12 @@ client = discord.Client(
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
+
 currstate = init_state
 model_tokens = tokenizer.tokenizer.encode(context)
+
+saveStates["empty"] = ([], state)
+saveStates["questions"] = (model_tokens, init_state)
 
 
 @client.event
@@ -329,6 +336,22 @@ async def on_message(message):
         await message.reply(f"Chat reset. This is powered by RWKV-4-{size} Language Model.")
         return
 
+    if msg[:11] == '+drkv_save ':
+        saveStates[msg[11:]] = (model_tokens, currstate)
+        await message.reply(f"Saved state {msg[11:]}")
+        return
+
+    if msg[:11] == '+drkv_load ':
+        if msg[11:] in saveStates:
+            model_tokens, currstate = saveStates[msg[11:]]
+            await message.reply(f"Loaded state {msg[11:]}")
+        else:
+            await message.reply(f"State {msg[11:]} not found")
+        return
+
+    if msg[:11] == '+drkv_list ':
+        await message.reply(f"Saved states: {', '.join(saveStates.keys())}")
+        return
     if msg[:6] == '+drkv ':
 
         real_msg = msg[6:].strip()
@@ -358,7 +381,6 @@ async def on_message(message):
 
             model_tokens = tt
             currstate = statelist[-1]
-
             if "\n\n" in tokenizer.tokenizer.decode(tt[begin:]):
                 print(tokenizer.tokenizer.decode(tt[begin:]))
                 if tokenizer.tokenizer.decode(tt[begin:])[-1] != "\n":
@@ -369,4 +391,4 @@ async def on_message(message):
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
 
-client.run(os.environ['TOKEN'])
+client.run(os.environ["TOKEN"])
