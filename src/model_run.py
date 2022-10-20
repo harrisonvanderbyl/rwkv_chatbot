@@ -13,6 +13,7 @@ import torch.nn as nn
 from typing import List, Dict
 from torch import autocast
 import numpy as np
+from tqdm import tqdm
 # Make sure to use nightly build of torchdynamo
 # import torchdynamo
 # MyFunction = torchdynamo.optimize(
@@ -262,9 +263,9 @@ class RWKV_RNN(nn.Module):
             state[5*i+4] -= 1e30
         return state
 
-    @torch.jit.export
+    @torch.jit.ignore
     def loadContext(self, ctx: List[int], state: torch.Tensor, start: int = 0):
-        for i in range(len(ctx))[start:]:
+        for i in tqdm(range(len(ctx))[start:]):
             x = ctx[: i + 1]
             if i == len(ctx) - 1:
                 init_out = self.forward(x, state, preprocess_only=False)

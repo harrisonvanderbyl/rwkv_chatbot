@@ -219,14 +219,15 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         torch.cuda.empty_cache()
 
     record_time('preprocess')
-    for i in range(600):
+    with torch.no_grad():
+        for i in range(100):
 
-        (ctx1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
+            (ctx1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
 
-        char = tokenizer.tokenizer.decode(ctx1[-1])
+            char = tokenizer.tokenizer.decode(ctx1[-1])
 
-        if '\ufffd' not in char:
-            print(char, end="", flush=True)
+            if '\ufffd' not in char:
+                print(char, end="", flush=True)
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')
