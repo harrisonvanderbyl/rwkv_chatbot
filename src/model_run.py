@@ -263,8 +263,8 @@ class RWKV_RNN(nn.Module):
         return state
 
     @torch.jit.export
-    def loadContext(self, ctx: List[int], state):
-        for i in range(len(ctx)):
+    def loadContext(self, ctx: List[int], state: torch.Tensor, start: int = 0):
+        for i in range(len(ctx))[start:]:
             x = ctx[: i + 1]
             if i == len(ctx) - 1:
                 init_out = self.forward(x, state, preprocess_only=False)
