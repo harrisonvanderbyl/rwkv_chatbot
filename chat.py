@@ -20,86 +20,6 @@ try:
     os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
 except:
     pass
-import inquirer
-files = os.listdir()
-# filter by ending in .pth
-files = [f for f in files if f.endswith(".pth")]
-
-questions = [
-    inquirer.List('file',
-                  message="What model do you want to use?",
-                  choices=files,
-                  ),
-]
-file = inquirer.prompt(questions)["file"]
-
-torch.backends.cudnn.benchmark = True
-torch.backends.cudnn.allow_tf32 = True
-torch.backends.cuda.matmul.allow_tf32 = True
-np.set_printoptions(precision=4, suppress=True, linewidth=200)
-args = {}
-argsnums = {}
-
-########################################################################################################
-# Step 1: set model & config
-# Do this first: pip install torchdynamo
-########################################################################################################
-
-
-TOKEN_MODE = "pile"
-WORD_NAME = [
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-]  # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = None
-vocab_size = 50277
-
-
-# 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
-args["RUN_DEVICE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
-                                                    message="What device do you want to use?",
-                                                    choices=[
-                                                        "cpu", "cuda"],
-                                                    )])["RUN_DEVICE"]
-
-
-# how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
-if (args["RUN_DEVICE"] == "cuda"):
-    argsnums["cudalayers"] = inquirer.text(
-        message="How many layers to offload to cuda? (default:all)")
-    if argsnums["cudalayers"] == "":
-        argsnums["cudalayers"] = 100
-    else:
-        argsnums["cudalayers"] = int(argsnums["cudalayers"])
-# fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
-                                                    message="What float mode do you want to use?",
-                                                    choices=[
-                                                        "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
-                                                    )])["FLOAT_MODE"]
-# print config
-print("RUN_DEVICE:", args["RUN_DEVICE"])
-print("FLOAT_MODE:", args["FLOAT_MODE"])
-print("cudalayers:", argsnums["cudalayers"]
-      if "cudalayers" in argsnums else "all")
-print("")
-
-torch.set_num_threads(12)
-# opt
-opt = "none"  # none // jit
-
-if (args["RUN_DEVICE"] == "cpu" and args["FLOAT_MODE"] == "fp16"):
-    raise (Warning("fp16 is only supported on cuda"))
-
-
-args["MODEL_NAME"] = file
-argsnums["ctx_len"] = 4068
-argsnums["vocab_size"] = vocab_size
-argsnums["head_qk"] = 0
-argsnums["pre_ffn"] = 0
-argsnums["grad_cp"] = 0
-argsnums["my_pos_emb"] = 0
-os.environ["RWKV_RUN_DEVICE"] = args["RUN_DEVICE"]
 
 ########################################################################################################
 # Step 2: set prompt & sampling stuffs
@@ -144,13 +64,8 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-print(f'\nUsing {args["RUN_DEVICE"].upper()}. Loading {file}...')
-
-model = RWKV_RNN(args, argsnums)
-
-if (opt == "jit"):
-
-    model = torch.jit.script(model)
+import loadModel
+model = loadModel.loadModel()
 
 
 print(f'\nOptimizing speed...')
@@ -158,7 +73,12 @@ gc.collect()
 torch.cuda.empty_cache()
 
 # input(0)
-
+TOKEN_MODE = "pile"
+WORD_NAME = [
+    "20B_tokenizer.json",
+    "20B_tokenizer.json",
+]  # [vocab, vocab] for Pile model
+UNKNOWN_CHAR = None
 print(f'\nLoading tokenizer {WORD_NAME}...')
 tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
 if TOKEN_MODE == "pile":
@@ -265,9 +185,9 @@ async def on_message(message):
         model_tokens = model_tokens + tknew
         begin = len(model_tokens)
 
-        model.loadContext(model_tokens, currstate, begin=before)
+        currstate = model.loadContext(model_tokens, currstate, begin=before)
         for i in tqdm(range(100)):
-            (model_tokens) = model.run(model_tokens, currstate)
+            (model_tokens,currstate) = model.run(model_tokens, currstate)
             if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
                 break
         send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
