@@ -160,7 +160,7 @@ class RWKV_RNN(nn.Module):
 
         if(self.RUN_DEVICE=="cuda"):
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}")
-            state = state.to(f"{sx.device.type}:{sx.device.index}")
+            state = state.to(f"{ssx.device.type}:{ssx.device.index}")
         
         x = torch.layer_norm(
                     ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
