@@ -63,19 +63,27 @@ args["RUN_DEVICE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
 
 
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
+numdevices = int(torch.cuda.device_count())
+layerdist = []
 if (args["RUN_DEVICE"] == "cuda"):
-    argsnums["cudalayers"] = inquirer.text(
-        message="How many layers to offload to cuda? (default:all)")
-    if argsnums["cudalayers"] == "":
-        argsnums["cudalayers"] = 100
-    else:
-        argsnums["cudalayers"] = int(argsnums["cudalayers"])
+    for devic in range(numdevices):
+        dev = inquirer.text(
+            message=f"How many layers would you like on device {devic}?")
+        if dev == "":
+            dev = 100
+        else:
+            dev = int(dev)
+        layerdist += [f"cuda:{devic}"] * dev
+print(layerdist)
+layerdist += ["proc"]*100
+
 # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
 args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
                                                     message="What float mode do you want to use?",
                                                     choices=[
                                                         "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
                                                     )])["FLOAT_MODE"]
+
 # print config
 print("RUN_DEVICE:", args["RUN_DEVICE"])
 print("FLOAT_MODE:", args["FLOAT_MODE"])
@@ -85,7 +93,7 @@ print("")
 
 torch.set_num_threads(12)
 # opt
-opt = "none"  # none // jit
+opt = "jit"  # none // jit
 
 if (args["RUN_DEVICE"] == "cpu" and args["FLOAT_MODE"] == "fp16"):
     raise (Warning("fp16 is only supported on cuda"))
@@ -135,8 +143,8 @@ RWKV: It’s a large and very expensive piece of science equipment. If I underst
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 0.9
-top_p = 0.9
+TEMPERATURE = 1.4
+top_p = 0.4
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
 DEBUG_DEBUG = False  # True False --> show softmax output
@@ -145,7 +153,8 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 print(f'\nUsing {args["RUN_DEVICE"].upper()}. Loading {file}...')
 
-model = RWKV_RNN(args, argsnums)
+model = RWKV_RNN(args, argsnums,layerdist)
+print(model.n_layer)
 state1 = model.empty_state()
 
 if (opt == "jit"):
@@ -203,7 +212,7 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-model.loadContext(ctx1, state1)
+state1 = model.loadContext(ctx1, state1)
 stateRefresh = state1.clone()
 
 
@@ -222,7 +231,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
 
-            (ctx1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
+            (ctx1,state1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
 
             char = tokenizer.tokenizer.decode(ctx1[-1])
 
