@@ -127,18 +127,18 @@ async def on_ready():
 
 # init empty save state and question context
 init_state = model.empty_state()
-ctx1 = tokenizer.tokenizer.encode(context)
+model_tokens = tokenizer.tokenizer.encode(context)
 
 
 saveStates = {}
 saveStates["empty"] = ([187], init_state.clone())
 
 # Put the prompt into the init_state
-model.loadContext(ctx1, init_state)
+init_state = model.loadContext(model_tokens, init_state)
 saveStates["questions"] = (model_tokens, init_state.clone())
 
-src_ctx1 = ctx1.copy()
-
+src_model_tokens = model_tokens.copy()
+currstate = init_state
 
 @client.event
 async def on_message(message):
@@ -155,7 +155,7 @@ async def on_message(message):
         model_tokens = tokenizer.tokenizer.encode(context)
         currstate = init_state
 
-        await message.reply(f"Chat reset. This is powered by RWKV-4-{file} Language Model.")
+        await message.reply(f"Chat reset. This is powered by RWKV-4 Language Model.")
         return
 
     if msg[:11] == '+drkv_save ':
@@ -185,7 +185,7 @@ async def on_message(message):
         model_tokens = model_tokens + tknew
         begin = len(model_tokens)
 
-        currstate = model.loadContext(model_tokens, currstate, begin=before)
+        currstate = model.loadContext(model_tokens, currstate, start=before)
         for i in tqdm(range(100)):
             (model_tokens,currstate) = model.run(model_tokens, currstate)
             if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
