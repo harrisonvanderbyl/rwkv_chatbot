@@ -29,9 +29,9 @@ DEBUG_TIME = False   # True False - show trained time-coeffs
 def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
 
     if probs.device.type == "cpu":
-        
+
         probs = probs.float().numpy()
-        
+
         sorted_probs = np.sort(probs)[::-1]
         cumulative_probs = np.cumsum(sorted_probs)
         cutoff = float(sorted_probs[np.argmax(
@@ -57,7 +57,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
 
 
 class RWKV_RNN(nn.Module):
-    def __init__(self, args, argsnumns, layers:list[str]):
+    def __init__(self, args, argsnumns, layers: list[str]):
         super().__init__()
 
         self.args = args
@@ -105,18 +105,18 @@ class RWKV_RNN(nn.Module):
                 except:
                     pass
                 if args["RUN_DEVICE"] == "cuda" and x != 'emb.weight':
-                    
+
                     piece = x.split('.')[1]
-                    if(piece in ["weight","bias"]):
+                    if (piece in ["weight", "bias"]):
                         processedLayer = self.layerdist[self.n_layer-1]
-                        if(processedLayer == "proc"):
+                        if (processedLayer == "proc"):
                             processedLayer = "cuda:0"
                     else:
                         processedLayer = self.layerdist[int(x.split('.')[1])]
-                        if(processedLayer == "proc"):
+                        if (processedLayer == "proc"):
                             processedLayer = "cpu"
-                    
-                    w[x] = w[x].to(device=processedLayer,non_blocking=True)
+
+                    w[x] = w[x].to(device=processedLayer, non_blocking=True)
                 if (args["RUN_DEVICE"] == 'cuda'):
                     if (w[x].device.type == "cpu"):
                         w[x] = w[x].pin_memory()
@@ -140,7 +140,7 @@ class RWKV_RNN(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def FF(self, sx,ln2w,ln2b, state, i: int, time_mix_k, time_mix_r, kw, vw, rw):
+    def FF(self, sx, ln2w, ln2b, state, i: int, time_mix_k, time_mix_r, kw, vw, rw):
         x = torch.layer_norm(sx, (self.n_emb,), weight=ln2w, bias=ln2b)
         xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
         xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
@@ -155,16 +155,15 @@ class RWKV_RNN(nn.Module):
 
     # @MyFunction
 
-    def SA(self, sx,ln1w,ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
+    def SA(self, sx, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
         ssx = sx
 
-        if(self.RUN_DEVICE=="cuda"):
+        if (self.RUN_DEVICE == "cuda" and f"{kw.device.type}:{kw.device.index}" != f"{sx.device.type}:{sx.device.index}"):
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}")
             state = state.to(f"{ssx.device.type}:{ssx.device.index}")
-        
+
         x = torch.layer_norm(
-                    ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
-       
+            ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
 
         xk = x * time_mix_k + state[5*i+1] * (1 - time_mix_k)
         xv = x * time_mix_v + state[5*i+1] * (1 - time_mix_v)
@@ -196,12 +195,11 @@ class RWKV_RNN(nn.Module):
         state[5*i+4] = p
 
         rwkv = (r * a) / b
-        return ssx+(ow @ rwkv) , state
+        return ssx+(ow @ rwkv), state
 
     def forward(self, ctx: List[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
             w = self.w
-            args = self.args
 
             x: torch.Tensor = w["emb.weight"][ctx[-1]]
 
@@ -216,17 +214,15 @@ class RWKV_RNN(nn.Module):
                 i = o
 
                 d: dict[str, torch.Tensor] = w
-                
+
                 d = {}
                 for rr in w.keys():
                     if ("blocks."+str(i)+"." in rr):
-                        if (self.RUN_DEVICE == "cuda" and self.layerdist[i]=="proc"):
+                        if (self.RUN_DEVICE == "cuda" and self.layerdist[i] == "proc"):
                             d[rr] = w[rr].to("cuda:0", non_blocking=True)
                         else:
                             d[rr] = w[rr]
-                processedDevice = self.layerdist[i]
-               
-                
+
                 ln1w = d["blocks."+str(i)+".ln1.weight"]
                 ln1b = d["blocks."+str(i)+".ln1.bias"]
                 tmk = d["blocks."+str(i)+".ffn.time_mix_k"]
@@ -245,31 +241,30 @@ class RWKV_RNN(nn.Module):
                 avw = d["blocks."+str(i)+".att.value.weight"]
                 arw = d["blocks."+str(i)+".att.receptance.weight"]
                 aow = d["blocks."+str(i)+".att.output.weight"]
-                
-               
+
                 if o == 0:
                     x = torch.layer_norm(
                         x, (self.n_emb,), weight=d["blocks.0.ln0.weight"], bias=d["blocks.0.ln0.bias"])
                # print(i,x.device.index,ln1b.device.index,processedDevice)
-                
-                sx,state = self.SA(x, ln1w, ln1b, state, i,
-                             atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
-                             )
-                
-                rx,state = self.FF(sx,ln2w,ln2b, state, i,
-                             tmk, tmr, tmkw, tmvw, tmrw)
+
+                sx, state = self.SA(x, ln1w, ln1b, state, i,
+                                    atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
+                                    )
+
+                rx, state = self.FF(sx, ln2w, ln2b, state, i,
+                                    tmk, tmr, tmkw, tmvw, tmrw)
                 x = rx
-                if ((self.layerdist[i]=="proc")):
+                if ((self.layerdist[i] == "proc")):
 
                     for rr in w.keys():
                         if ("blocks."+str(i)+"." in rr):
 
                             del d[rr]
-            
+
             # state = state.to("cuda:0")
             if preprocess_only:
-                return x , state
-            
+                return x, state
+
             # x = x.to("cuda:0")
             x = torch.layer_norm(
                 x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])
@@ -293,7 +288,7 @@ class RWKV_RNN(nn.Module):
             if i == len(ctx) - 1:
                 init_out, state = self.forward(x, state, preprocess_only=False)
             else:
-                o,state = self.forward(
+                o, state = self.forward(
                     x, state, preprocess_only=True)
         return state
 
@@ -314,7 +309,7 @@ class RWKV_RNN(nn.Module):
     @torch.jit.export
     def run(self, ctxx: List[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
 
-        out1,state = self.forward(ctxx, state1, preprocess_only=False)
+        out1, state = self.forward(ctxx, state1, preprocess_only=False)
 
         out1[0] = -99  # disable <|endoftext|>
 
@@ -329,4 +324,4 @@ class RWKV_RNN(nn.Module):
         )
         ctxx += [ttt]
 
-        return ctxx,state
+        return ctxx, state
