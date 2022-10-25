@@ -114,15 +114,8 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 init_state = model.empty_state()
 model_tokens = tokenizer.tokenizer.encode(context)
 
-
-saveStates = {}
-saveStates["empty"] = ([187], init_state.clone())
-
 # Put the prompt into the init_state
 init_state = model.loadContext(model_tokens, init_state)
-saveStates["questions"] = (model_tokens, init_state.clone())
-
-src_model_tokens = model_tokens.copy()
 currstate = init_state
 
 while (1):
@@ -132,40 +125,19 @@ while (1):
 
     msg = message.strip()
 
-    if msg == '+reset_drkv' or msg == '+drkv_reset':
-        model_tokens = tokenizer.tokenizer.encode(context)
-        currstate = init_state
+    real_msg = msg.strip()
+    new = f"\nUser: {real_msg}\n\nRWKV: "
+    tknew = tokenizer.tokenizer.encode(new)
 
-        print("Resetting to context")
+    before = len(model_tokens)
+    model_tokens += tknew
+    begin = len(model_tokens)
 
-    elif msg[:11] == '+drkv_save ':
-        saveStates[msg[11:]] = (model_tokens, currstate)
-        print(f"Saved state {msg[11:]}")
+    currstate = model.loadContext(model_tokens, currstate, start=before)
 
-    elif msg[:11] == '+drkv_load ':
-        if msg[11:] in saveStates:
-            model_tokens, currstate = saveStates[msg[11:]]
-            print(f"Loaded state {msg[11:]}")
-        else:
-            print(f"State {msg[11:]} not found")
-
-    elif msg[:11] == '+drkv_list ':
-        print(f"Saved states: {', '.join(saveStates.keys())}")
-    else:
-
-        real_msg = msg.strip()
-        new = f"\nUser: {real_msg}\n\nRWKV: "
-        tknew = tokenizer.tokenizer.encode(new)
-
-        before = len(model_tokens)
-        model_tokens = model_tokens + tknew
-        begin = len(model_tokens)
-
-        currstate = model.loadContext(model_tokens, currstate, start=before)
-
-        for i in tqdm(range(100)):
-            (model_tokens, currstate) = model.run(model_tokens, currstate)
-            if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
-                break
-        os.system("clear")
-        print(tokenizer.tokenizer.decode(model_tokens), flush=True)
+    for i in tqdm(range(100)):
+        (model_tokens, currstate) = model.run(model_tokens, currstate)
+        if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
+            break
+    os.system("clear")
+    print(tokenizer.tokenizer.decode(model_tokens), flush=True)

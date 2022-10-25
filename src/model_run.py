@@ -156,12 +156,12 @@ class RWKV_RNN(nn.Module):
     # @MyFunction
 
     def SA(self, sx, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
-        ssx = sx
 
         if self.RUN_DEVICE == "cuda":
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}")
             state = state.to(f"{ssx.device.type}:{ssx.device.index}")
-
+        else:
+            ssx = sx
         x = torch.layer_norm(
             ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
 
@@ -282,14 +282,13 @@ class RWKV_RNN(nn.Module):
         return state
 
     @ torch.jit.ignore
-    def loadContext(self, ctx: List[int], state: torch.Tensor, start: int = 0):
+    def loadContext(self, ctx: List[int], statex: torch.Tensor, start: int = 0):
+        state = statex.clone()
+
         for i in tqdm(range(len(ctx))[start:]):
             x = ctx[: i + 1]
-            if i == len(ctx) - 1:
-                init_out, state = self.forward(x, state, preprocess_only=False)
-            else:
-                o, state = self.forward(
-                    x, state, preprocess_only=True)
+            o, state = self.forward(
+                x, state, preprocess_only=True)
         return state
 
     @ torch.jit.export
