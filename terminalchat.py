@@ -136,7 +136,7 @@ while (1):
     before = len(curr["model_tokens"])
 
     currstatex = model.loadContext(
-        curr["model_tokens"]+curr["tknew"], curr["state"], silent=True)
+        curr["model_tokens"]+curr["tknew"], curr["state"], start=before, silent=True)
     curr["state"] = currstatex
 
     after = len(curr["model_tokens"]+curr["tknew"])
