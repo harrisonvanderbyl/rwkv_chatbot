@@ -124,29 +124,32 @@ curr = {
     "model_tokens": model_tokens,
     "tknew": []
 }
+gc.collect()
+torch.cuda.empty_cache()
+with torch.no_grad():
+    while (1):
+        message = input("User: ")
 
-while (1):
-    message = input("User: ")
+        msg = message.strip()
 
-    msg = message.strip()
+        real_msg = msg.strip()
+        new = f"User: {real_msg}\n\nRWKV: "
+        curr["tknew"] = tokenizer.tokenizer.encode(new)
 
-    real_msg = msg.strip()
-    new = f"User: {real_msg}\n\nRWKV: "
-    curr["tknew"] = tokenizer.tokenizer.encode(new)
+        before = len(curr["model_tokens"])
+        curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
+        curr["state"] = model.loadContext(
+            ctx=curr["model_tokens"], statex=curr["state"], start=before, silent=True)
 
-    before = len(curr["model_tokens"])
-    curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
-    curr["state"] = model.loadContext(
-        ctx=curr["model_tokens"], statex=curr["state"], start=before, silent=True)
+        after = len(curr["model_tokens"])
 
-    after = len(curr["model_tokens"])
+        for i in range(100):
+            curr["model_tokens"], curr["state"] = model.run(
+                curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
 
-    for i in range(100):
-        curr["model_tokens"], curr["state"] = model.run(
-            curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
+            if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
+                break
 
-        if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
-            break
-
-    print(tokenizer.tokenizer.decode(
-        curr["model_tokens"][after-5:]), end="")
+            char = tokenizer.tokenizer.decode(curr["model_tokens"][-1])
+            if '\ufffd' not in char:
+                print(char, end="", flush=True)
