@@ -115,12 +115,11 @@ init_state = model.empty_state()
 model_tokens = tokenizer.tokenizer.encode(context)
 
 # Put the prompt into the init_state
-init_state = model.loadContext(model_tokens, init_state)
-currstate = init_state
+
 
 curr = {
     "context": context,
-    "state": currstate,
+    "state":  model.loadContext(model_tokens, init_state),
     "model_tokens": model_tokens,
     "tknew": []
 }
@@ -136,9 +135,9 @@ while (1):
 
     before = len(curr["model_tokens"])
 
-    currstate = model.loadContext(
-        curr["model_tokens"]+curr["tknew"], curr["state"], start=before, silent=True)
-    curr["state"] = currstate
+    currstatex = model.loadContext(
+        curr["model_tokens"]+curr["tknew"], curr["state"], silent=True)
+    curr["state"] = currstatex
 
     after = len(curr["model_tokens"]+curr["tknew"])
     curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
