@@ -118,6 +118,12 @@ model_tokens = tokenizer.tokenizer.encode(context)
 init_state = model.loadContext(model_tokens, init_state)
 currstate = init_state
 
+curr = {
+    "context": context,
+    "state": currstate,
+    "model_tokens": model_tokens,
+}
+
 while (1):
     message = input("User: ")
     # print(
@@ -127,17 +133,21 @@ while (1):
 
     real_msg = msg.strip()
     new = f"\nUser: {real_msg}\n\nRWKV: "
+    print("RWKV: ", end="")
     tknew = tokenizer.tokenizer.encode(new)
 
-    before = len(model_tokens)
-    model_tokens += tknew
-    begin = len(model_tokens)
+    before = len(curr["model_tokens"])
 
-    currstate = model.loadContext(model_tokens, currstate, start=before)
+    currstate = model.loadContext(
+        curr["model_tokens"]+tknew, curr["state"], start=before)
+    curr["state"] = currstate
+    curr["model_tokens"] += tknew
+    for i in range(100):
+        (model_tokens1, currstate1) = model.run(
+            curr["model_tokens"], curr["state"])
+        curr["model_tokens"] = model_tokens1
+        curr["state"] = currstate1
 
-    for i in tqdm(range(100)):
-        (model_tokens, currstate) = model.run(model_tokens, currstate)
-        if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
+        print(tokenizer.tokenizer.decode(curr["model_tokens"][-1]), end="")
+        if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
             break
-    os.system("clear")
-    print(tokenizer.tokenizer.decode(model_tokens), flush=True)

@@ -162,6 +162,7 @@ class RWKV_RNN(nn.Module):
             state = state.to(f"{ssx.device.type}:{ssx.device.index}")
         else:
             ssx = sx
+
         x = torch.layer_norm(
             ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
 
@@ -210,6 +211,8 @@ class RWKV_RNN(nn.Module):
                 pos_emb = w["pos_emb"][len(ctx)-1]
                 x = x + pos_emb
 
+            buffer = {"state": state}
+
             for o in range(self.n_layer):
                 i = o
 
@@ -247,12 +250,13 @@ class RWKV_RNN(nn.Module):
                         x, (self.n_emb,), weight=d["blocks.0.ln0.weight"], bias=d["blocks.0.ln0.bias"])
                # print(i,x.device.index,ln1b.device.index,processedDevice)
 
-                sx, state = self.SA(x, ln1w, ln1b, state, i,
-                                    atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
-                                    )
+                sx, state1 = self.SA(x, ln1w, ln1b, buffer["state"], i,
+                                     atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
+                                     )
 
-                rx, state = self.FF(sx, ln2w, ln2b, state, i,
-                                    tmk, tmr, tmkw, tmvw, tmrw)
+                rx, state2 = self.FF(sx, ln2w, ln2b, state1, i,
+                                     tmk, tmr, tmkw, tmvw, tmrw)
+                buffer["state"] = state2
                 x = rx
                 if ((self.layerdist[i] == "proc")):
 
@@ -263,7 +267,7 @@ class RWKV_RNN(nn.Module):
 
             # state = state.to("cuda:0")
             if preprocess_only:
-                return x, state
+                return x, buffer["state"]
 
             # x = x.to("cuda:0")
             x = torch.layer_norm(
@@ -271,7 +275,7 @@ class RWKV_RNN(nn.Module):
 
             x = (w["head.weight"] @ x)
 
-            return x, state
+            return x, buffer["state"]
 
     @ torch.jit.export
     def empty_state(self):
@@ -283,13 +287,14 @@ class RWKV_RNN(nn.Module):
 
     @ torch.jit.ignore
     def loadContext(self, ctx: List[int], statex: torch.Tensor, start: int = 0):
-        state = statex.clone()
+        buffer = {"state": statex.clone()}
 
-        for i in tqdm(range(len(ctx))[start:]):
+        for i in (range(len(ctx))[start:]):
             x = ctx[: i + 1]
-            o, state = self.forward(
-                x, state, preprocess_only=True)
-        return state
+            o, statez = self.forward(
+                x, buffer["state"], preprocess_only=True)
+            buffer["state"] = statez
+        return buffer["state"]
 
     @ torch.jit.export
     def sample_logits(self, ozut: torch.Tensor, x: List[int], ctx_len: int, temperature: float = 1.0, top_p_usual: float = 0.8):
