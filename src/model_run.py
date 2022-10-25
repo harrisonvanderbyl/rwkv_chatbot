@@ -158,11 +158,11 @@ class RWKV_RNN(nn.Module):
 
     def SA(self, sx: torch.Tensor, ln1w, ln1b, statex, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw: torch.Tensor, vw, rw, ow):
 
-        if self.RUN_DEVICE == "cuda" and not (str(kw.device.index) == str(sx.device.index)):
+        if self.RUN_DEVICE == "cuda":
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}",
                         non_blocking=True)
             state = statex.to(
-                f"{ssx.device.type}:{ssx.device.index}", non_blocking=True)
+                f"{kw.device.type}:{kw.device.index}", non_blocking=True)
         else:
             ssx = sx
             state = statex
