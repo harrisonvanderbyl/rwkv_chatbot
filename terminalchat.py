@@ -133,7 +133,7 @@ while (1):
 
     real_msg = msg.strip()
     new = f"\nUser: {real_msg}\n\nRWKV: "
-    print("RWKV: ", end="")
+    print("\nRWKV: ", end="")
     tknew = tokenizer.tokenizer.encode(new)
 
     before = len(curr["model_tokens"])
@@ -148,6 +148,10 @@ while (1):
         curr["model_tokens"] = model_tokens1
         curr["state"] = currstate1
 
-        print(tokenizer.tokenizer.decode(curr["model_tokens"][-1]), end="")
+        print(tokenizer.tokenizer.decode(
+            curr["model_tokens"][-1]), end="", flush=True)
         if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
             break
+    else:
+        # print if no break
+        print("...\n\n", end="", flush=True)
