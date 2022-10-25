@@ -135,19 +135,15 @@ while (1):
     curr["tknew"] = tokenizer.tokenizer.encode(new)
 
     before = len(curr["model_tokens"])
-
-    currstatex = model.loadContext(
-        curr["model_tokens"]+curr["tknew"], curr["state"], start=before, silent=True)
-    curr["state"] = currstatex.clone()
-
-    after = len(curr["model_tokens"]+curr["tknew"])
     curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
-    for i in range(100):
-        model_tokens1, currstate1 = model.run(
-            curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
-        curr["model_tokens"] = model_tokens1
+    curr["state"] = model.loadContext(
+        ctx=curr["model_tokens"], statex=curr["state"], start=before, silent=True)
 
-        curr["state"] = currstate1.clone()
+    after = len(curr["model_tokens"])
+
+    for i in range(100):
+        curr["model_tokens"], curr["state"] = model.run(
+            curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
 
         if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
             break

@@ -160,9 +160,9 @@ class RWKV_RNN(nn.Module):
 
         if self.RUN_DEVICE == "cuda":
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}",
-                        non_blocking=True)
+                        non_blocking=True).clone()
             state = statex.to(
-                f"{kw.device.type}:{kw.device.index}", non_blocking=True)
+                f"{kw.device.type}:{kw.device.index}", non_blocking=True).clone()
         else:
             ssx = sx
             state = statex
@@ -260,8 +260,8 @@ class RWKV_RNN(nn.Module):
 
                 rx, state2 = self.FF(sx, ln2w, ln2b, state1, i,
                                      tmk, tmr, tmkw, tmvw, tmrw)
-                buffer["state"] = state2
-                x = rx
+                buffer["state"] = state2.clone()
+                x = rx.clone()
                 if ((self.layerdist[i] == "proc")):
 
                     for rr in w.keys():
@@ -274,12 +274,9 @@ class RWKV_RNN(nn.Module):
                 return x, buffer["state"]
 
             # x = x.to("cuda:0")
-            x = torch.layer_norm(
-                x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])
 
-            x = (w["head.weight"] @ x)
-
-            return x, buffer["state"]
+            return (w["head.weight"] @ torch.layer_norm(
+                x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])), buffer["state"]
 
     @ torch.jit.export
     def empty_state(self):
