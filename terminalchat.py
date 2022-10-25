@@ -122,36 +122,35 @@ curr = {
     "context": context,
     "state": currstate,
     "model_tokens": model_tokens,
+    "tknew": []
 }
 
 while (1):
     message = input("User: ")
-    # print(
-    #     f"message received({message.guild.name}:{message.channel.name}):", message.content)
 
     msg = message.strip()
 
     real_msg = msg.strip()
     new = f"\nUser: {real_msg}\n\nRWKV: "
-    print("\nRWKV: ", end="")
-    tknew = tokenizer.tokenizer.encode(new)
+    curr["tknew"] = tokenizer.tokenizer.encode(new)
 
     before = len(curr["model_tokens"])
 
     currstate = model.loadContext(
-        curr["model_tokens"]+tknew, curr["state"], start=before)
+        curr["model_tokens"]+curr["tknew"], curr["state"], start=before, silent=True)
     curr["state"] = currstate
-    curr["model_tokens"] += tknew
+
+    after = len(curr["model_tokens"]+curr["tknew"])
+    curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
     for i in range(100):
-        (model_tokens1, currstate1) = model.run(
-            curr["model_tokens"], curr["state"])
+        model_tokens1, currstate1 = model.run(
+            curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
         curr["model_tokens"] = model_tokens1
+
         curr["state"] = currstate1
 
-        print(tokenizer.tokenizer.decode(
-            curr["model_tokens"][-1]), end="", flush=True)
         if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
             break
-    else:
-        # print if no break
-        print("...\n\n", end="", flush=True)
+
+    print(tokenizer.tokenizer.decode(
+        curr["model_tokens"][after-5:]), end="")

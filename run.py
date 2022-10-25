@@ -51,7 +51,6 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 ########################################################################################################
 
 
-
 print(model.n_layer)
 state1 = model.empty_state()
 
@@ -131,7 +130,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
 
-            (ctx1,state1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
+            (ctx1, state1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
 
             char = tokenizer.tokenizer.decode(ctx1[-1])
 

@@ -140,7 +140,8 @@ class RWKV_RNN(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def FF(self, sx, ln2w, ln2b, state, i: int, time_mix_k, time_mix_r, kw, vw, rw):
+    def FF(self, sx, ln2w, ln2b, statex, i: int, time_mix_k, time_mix_r, kw, vw, rw):
+        state = statex
         x = torch.layer_norm(sx, (self.n_emb,), weight=ln2w, bias=ln2b)
         xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
         xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
@@ -155,13 +156,16 @@ class RWKV_RNN(nn.Module):
 
     # @MyFunction
 
-    def SA(self, sx, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, statex, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw: torch.Tensor, vw, rw, ow):
 
-        if self.RUN_DEVICE == "cuda":
-            ssx = sx.to(f"{kw.device.type}:{kw.device.index}")
-            state = state.to(f"{ssx.device.type}:{ssx.device.index}")
+        if self.RUN_DEVICE == "cuda" and not (str(kw.device.index) == str(sx.device.index)):
+            ssx = sx.to(f"{kw.device.type}:{kw.device.index}",
+                        non_blocking=True)
+            state = statex.to(
+                f"{ssx.device.type}:{ssx.device.index}", non_blocking=True)
         else:
             ssx = sx
+            state = statex
 
         x = torch.layer_norm(
             ssx, (self.n_emb,), weight=ln1w, bias=ln1b)
@@ -198,7 +202,7 @@ class RWKV_RNN(nn.Module):
         rwkv = (r * a) / b
         return ssx+(ow @ rwkv), state
 
-    def forward(self, ctx: List[int], state: torch.Tensor, preprocess_only: bool = False):
+    def forward(self, ctx: list[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
             w = self.w
 
@@ -286,10 +290,10 @@ class RWKV_RNN(nn.Module):
         return state
 
     @ torch.jit.ignore
-    def loadContext(self, ctx: List[int], statex: torch.Tensor, start: int = 0):
+    def loadContext(self, ctx: list[int], statex: torch.Tensor, start: int = 0, silent=False):
         buffer = {"state": statex.clone()}
-
-        for i in (range(len(ctx))[start:]):
+        m = tqdm if not silent else lambda x: x
+        for i in m(range(len(ctx))[start:]):
             x = ctx[: i + 1]
             o, statez = self.forward(
                 x, buffer["state"], preprocess_only=True)
@@ -311,7 +315,7 @@ class RWKV_RNN(nn.Module):
         return sample(probs, temperature, top_p_usual)
 
     @ torch.jit.export
-    def run(self, ctxx: List[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
+    def run(self, ctxx: list[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
 
         out1, state = self.forward(ctxx, state1, preprocess_only=False)
 
