@@ -45,6 +45,7 @@ RWKV: Only if you tell me more about yourself - what are your interests?
 User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
 
 RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
+
 '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
@@ -130,7 +131,7 @@ while (1):
     msg = message.strip()
 
     real_msg = msg.strip()
-    new = f"\nUser: {real_msg}\n\nRWKV: "
+    new = f"User: {real_msg}\n\nRWKV: "
     curr["tknew"] = tokenizer.tokenizer.encode(new)
 
     before = len(curr["model_tokens"])
@@ -146,7 +147,7 @@ while (1):
             curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
         curr["model_tokens"] = model_tokens1
 
-        curr["state"] = currstate1
+        curr["state"] = currstate1.clone()
 
         if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
             break
