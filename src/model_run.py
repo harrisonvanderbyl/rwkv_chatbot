@@ -158,7 +158,7 @@ class RWKV_RNN(nn.Module):
     def SA(self, sx, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
         ssx = sx
 
-        if (self.RUN_DEVICE == "cuda" and f"{kw.device.type}:{kw.device.index}" != f"{sx.device.type}:{sx.device.index}"):
+        if self.RUN_DEVICE == "cuda":
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}")
             state = state.to(f"{ssx.device.type}:{ssx.device.index}")
 
@@ -273,7 +273,7 @@ class RWKV_RNN(nn.Module):
 
             return x, state
 
-    @torch.jit.export
+    @ torch.jit.export
     def empty_state(self):
         state = torch.zeros(
             self.n_layer * 5, self.n_emb, device=self.RUN_DEVICE, dtype=torch.float32 if self.FLOAT_MODE == "fp32" else torch.bfloat16 if self.FLOAT_MODE == "bf16" else torch.float16)
@@ -281,7 +281,7 @@ class RWKV_RNN(nn.Module):
             state[5*i+4] -= 1e30
         return state
 
-    @torch.jit.ignore
+    @ torch.jit.ignore
     def loadContext(self, ctx: List[int], state: torch.Tensor, start: int = 0):
         for i in tqdm(range(len(ctx))[start:]):
             x = ctx[: i + 1]
@@ -292,7 +292,7 @@ class RWKV_RNN(nn.Module):
                     x, state, preprocess_only=True)
         return state
 
-    @torch.jit.export
+    @ torch.jit.export
     def sample_logits(self, ozut: torch.Tensor, x: List[int], ctx_len: int, temperature: float = 1.0, top_p_usual: float = 0.8):
         # out[self.UNKNOWN_CHAR] = -float('Inf')
        # out[self.UNKNOWN_CHAR] = -float('Inf')
@@ -306,7 +306,7 @@ class RWKV_RNN(nn.Module):
 
         return sample(probs, temperature, top_p_usual)
 
-    @torch.jit.export
+    @ torch.jit.export
     def run(self, ctxx: List[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
 
         out1, state = self.forward(ctxx, state1, preprocess_only=False)
