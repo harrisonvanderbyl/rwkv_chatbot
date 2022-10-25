@@ -51,7 +51,7 @@ RWKV: It’s a large and very expensive piece of science equipment. If I underst
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 0.9
+TEMPERATURE = 1.2
 top_p = 0.9
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 

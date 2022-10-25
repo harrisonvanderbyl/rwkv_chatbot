@@ -100,7 +100,7 @@ class RWKV_RNN(nn.Module):
 
                 w[x].requires_grad = False
                 try:
-                    if (int(x.split('.')[1]) > self.n_layer):
+                    if (int(x.split('.')[1])+1 > self.n_layer):
                         self.n_layer = int(x.split('.')[1])+1
                 except:
                     pass
@@ -152,7 +152,7 @@ class RWKV_RNN(nn.Module):
         clamped = torch.relu(dx)
         k = torch.square(clamped)
         kv = (vw @ k)
-        return sx+(r * kv), state
+        return x+(r * kv), state
 
     # @MyFunction
 
@@ -160,9 +160,9 @@ class RWKV_RNN(nn.Module):
 
         if self.RUN_DEVICE == "cuda":
             ssx = sx.to(f"{kw.device.type}:{kw.device.index}",
-                        non_blocking=True).clone()
+                        non_blocking=True)
             state = statex.to(
-                f"{kw.device.type}:{kw.device.index}", non_blocking=True).clone()
+                f"{kw.device.type}:{kw.device.index}", non_blocking=True)
         else:
             ssx = sx
             state = statex
@@ -200,7 +200,7 @@ class RWKV_RNN(nn.Module):
         state[5*i+4] = p
 
         rwkv = (r * a) / b
-        return ssx+(ow @ rwkv), state
+        return x+(ow @ rwkv), state
 
     def forward(self, ctx: list[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
@@ -260,8 +260,8 @@ class RWKV_RNN(nn.Module):
 
                 rx, state2 = self.FF(sx, ln2w, ln2b, state1, i,
                                      tmk, tmr, tmkw, tmvw, tmrw)
-                buffer["state"] = state2.clone()
-                x = rx.clone()
+                buffer["state"] = state2
+                x = rx
                 if ((self.layerdist[i] == "proc")):
 
                     for rr in w.keys():
@@ -278,7 +278,7 @@ class RWKV_RNN(nn.Module):
             return (w["head.weight"] @ torch.layer_norm(
                 x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])), buffer["state"]
 
-    @ torch.jit.export
+    @ torch.jit.ignore
     def empty_state(self):
         state = torch.zeros(
             self.n_layer * 5, self.n_emb, device=self.RUN_DEVICE, dtype=torch.float32 if self.FLOAT_MODE == "fp32" else torch.bfloat16 if self.FLOAT_MODE == "bf16" else torch.float16)
@@ -297,7 +297,7 @@ class RWKV_RNN(nn.Module):
             buffer["state"] = statez
         return buffer["state"]
 
-    @ torch.jit.export
+    @ torch.jit.ignore
     def sample_logits(self, ozut: torch.Tensor, x: List[int], ctx_len: int, temperature: float = 1.0, top_p_usual: float = 0.8):
         # out[self.UNKNOWN_CHAR] = -float('Inf')
        # out[self.UNKNOWN_CHAR] = -float('Inf')
@@ -311,7 +311,7 @@ class RWKV_RNN(nn.Module):
 
         return sample(probs, temperature, top_p_usual)
 
-    @ torch.jit.export
+    @ torch.jit.ignore
     def run(self, ctxx: list[int], state1: torch.Tensor, ctxlen: int = 1024, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
 
         out1, state = self.forward(ctxx, state1, preprocess_only=False)
