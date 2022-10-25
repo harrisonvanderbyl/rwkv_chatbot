@@ -152,7 +152,7 @@ class RWKV_RNN(nn.Module):
         clamped = torch.relu(dx)
         k = torch.square(clamped)
         kv = (vw @ k)
-        return x+(r * kv), state
+        return sx+(r * kv), state
 
     # @MyFunction
 
@@ -200,7 +200,7 @@ class RWKV_RNN(nn.Module):
         state[5*i+4] = p
 
         rwkv = (r * a) / b
-        return x+(ow @ rwkv), state
+        return ssx+(ow @ rwkv), state
 
     def forward(self, ctx: list[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
