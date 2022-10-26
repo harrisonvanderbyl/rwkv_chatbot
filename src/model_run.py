@@ -66,6 +66,11 @@ class RWKV_RNN(nn.Module):
         self.RUN_DEVICE = args["RUN_DEVICE"]
         self.layerdist = layers
         self.n_layer = 0
+        self.procDevice = list(filter(
+            lambda x: x != "proc", self.layerdist)).pop()
+        if (self.procDevice == "proc"):
+            self.procDevice = self.layerdist[-1]
+
         with torch.no_grad():
             w: Dict[str, torch.Tensor] = torch.load(
                 args["MODEL_NAME"], map_location='cpu')
@@ -110,7 +115,7 @@ class RWKV_RNN(nn.Module):
                     if (piece in ["weight", "bias"]):
                         processedLayer = self.layerdist[self.n_layer-1]
                         if (processedLayer == "proc"):
-                            processedLayer = "cuda:0"
+                            processedLayer = self.procDevice
                     else:
                         processedLayer = self.layerdist[int(x.split('.')[1])]
                         if (processedLayer == "proc"):
@@ -158,8 +163,6 @@ class RWKV_RNN(nn.Module):
 
     def SA(self, sx: torch.Tensor, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw: torch.Tensor, vw, rw, ow):
 
-        
-
         x = torch.layer_norm(
             sx, (self.n_emb,), weight=ln1w, bias=ln1b)
 
@@ -197,22 +200,19 @@ class RWKV_RNN(nn.Module):
 
     def forward(self, ctx: list[int], state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
-            if(self.layerdist[0]!=self.layerdist[self.n_layer-1]):
+            if (self.layerdist[0] != self.layerdist[self.n_layer-1]):
                 state = state.to(device=self.layerdist[0])
+
             w = self.w
 
             x: torch.Tensor = w["emb.weight"][ctx[-1]]
 
-            
             if ("pos_emb" in w.keys()):
-                pos_emb = w["pos_emb"][(len(ctx)%1024)-1]
+                pos_emb = w["pos_emb"][(len(ctx) % 1024)-1]
                 x = x + pos_emb
 
-            
             if self.RUN_DEVICE == 'cuda':
                 x = x.to(device=self.layerdist[0], non_blocking=True)
-
-            
 
             for o in range(self.n_layer):
                 i = o
@@ -223,7 +223,8 @@ class RWKV_RNN(nn.Module):
                 for rr in w.keys():
                     if ("blocks."+str(i)+"." in rr):
                         if (self.RUN_DEVICE == "cuda" and self.layerdist[i] == "proc"):
-                            d[rr] = w[rr].to("cuda:0", non_blocking=True)
+                            d[rr] = w[rr].to(
+                                self.procDevice, non_blocking=True)
                         else:
                             d[rr] = w[rr]
 
@@ -246,63 +247,69 @@ class RWKV_RNN(nn.Module):
                 arw = d["blocks."+str(i)+".att.receptance.weight"]
                 aow = d["blocks."+str(i)+".att.output.weight"]
 
-                if( i == 0 ):
+                if (i == 0):
                     x = torch.layer_norm(
                         x, (self.n_emb,), weight=d["blocks.0.ln0.weight"], bias=d["blocks.0.ln0.bias"])
                 else:
-                    # print(self.layerdist[i]!=self.layerdist[i-1],i,self.layerdist[i],self.layerdist[i-1])
-                    if(self.layerdist[i]!=self.layerdist[i-1]):
-                        x = x.to(device=self.layerdist[i])
-                        state = state.to(device=self.layerdist[i])
-                    
-               # print(i,x.device.index,ln1b.device.index,processedDevice)
+                    if (self.layerdist[i] != self.layerdist[i-1]):
+                        if (self.layerdist[i] == "proc"):
+                            x = x.to(device=self.procDevice)
+                            state = state.to(device=self.procDevice)
+                        else:
+                            x = x.to(device=self.layerdist[i])
+                            state = state.to(device=self.layerdist[i])
 
                 sx, state = self.SA(x, ln1w, ln1b, state, i,
-                                     atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
-                                     )
+                                    atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
+                                    )
 
                 rx, state = self.FF(sx, ln2w, ln2b, state, i,
-                                     tmk, tmr, tmkw, tmvw, tmrw)
-                
+                                    tmk, tmr, tmkw, tmvw, tmrw)
+
                 x = rx
+
+                # Delete Procedurally Moved Layer
                 if ((self.layerdist[i] == "proc")):
 
                     for rr in w.keys():
                         if ("blocks."+str(i)+"." in rr):
 
                             del d[rr]
-            
-            # state = state.to("cuda:0")
+
             if preprocess_only:
                 return x, state
-
-            # x = x.to("cuda:0")
 
             return (w["head.weight"] @ torch.layer_norm(
                 x, (self.n_emb,), weight=w["ln_out.weight"], bias=w["ln_out.bias"])), state
 
     @ torch.jit.ignore
     def empty_state(self):
+        device = self.layerdist[0]
+        if (device == "proc"):
+            if (self.RUN_DEVICE == "cuda"):
+                device = self.procDevice
+            else:
+                device = "cpu"
+
         state = torch.zeros(
-            self.n_layer * 5, self.n_emb, device=self.layerdist[0] if self.layerdist[0] != "proc" else "cpu", dtype=torch.float32 if self.FLOAT_MODE == "fp32" else torch.bfloat16 if self.FLOAT_MODE == "bf16" else torch.float16)
+            self.n_layer * 5, self.n_emb, device=device, dtype=torch.float32 if self.FLOAT_MODE == "fp32" else torch.bfloat16 if self.FLOAT_MODE == "bf16" else torch.float16)
         for i in range(self.n_layer):
             state[5*i+4] -= 1e30
         return state
 
     @ torch.jit.ignore
-    def loadContext(self, ctx: list[int] = [], newctx:list[int] = [187], statex: torch.Tensor | None = None, silent=False):
+    def loadContext(self, ctx: list[int] = [], newctx: list[int] = [187], statex: torch.Tensor | None = None, silent=False):
 
         if statex is None:
             statex = self.empty_state()
 
-        
         m = tqdm if not silent else lambda x: x
         for i in m(range(len(newctx))):
             x = ctx+newctx[:i+1]
             o, statex = self.forward(
                 x, statex, preprocess_only=True)
-           
-        return ctx+newctx,statex
+
+        return ctx+newctx, statex
 
     @ torch.jit.ignore
     def sample_logits(self, ozut: torch.Tensor, x: List[int], temperature: float = 1.0, top_p_usual: float = 0.8):

@@ -20,6 +20,8 @@ try:
 except:
     pass
 import inquirer
+
+
 def loadModel():
     files = os.listdir()
     # filter by ending in .pth
@@ -27,9 +29,9 @@ def loadModel():
 
     questions = [
         inquirer.List('file',
-                    message="What model do you want to use?",
-                    choices=files,
-                    ),
+                      message="What model do you want to use?",
+                      choices=files,
+                      ),
     ]
     file = inquirer.prompt(questions)["file"]
 
@@ -45,9 +47,7 @@ def loadModel():
     # Do this first: pip install torchdynamo
     ########################################################################################################
 
-
     vocab_size = 50277
-
 
     # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
     args["RUN_DEVICE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
@@ -55,7 +55,6 @@ def loadModel():
                                                         choices=[
                                                             "cpu", "cuda"],
                                                         )])["RUN_DEVICE"]
-
 
     # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
     numdevices = int(torch.cuda.device_count())
@@ -70,8 +69,19 @@ def loadModel():
                 dev = int(dev)
             layerdist += [f"cuda:{devic}"] * dev
     print(layerdist)
-    layerdist += ["proc"]*100
 
+    if (args["RUN_DEVICE"] == "cuda"):
+        if (numdevices == 1):
+            layerdist += ["proc"] * 100 + ["cuda:0"]
+        else:
+            layerdist += ["proc"] * 100 + [inquirer.prompt([inquirer.List('RUN_DEVICE',
+                                                                          message="What device do you want to use for cuda streaming?",
+                                                                          choices=map(lambda m: f"cuda:{m}", range(
+                                                                                  numdevices)),
+                                                                          )])["RUN_DEVICE"]]
+
+    else:
+        layerdist = ["cpu"]*100
     # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
     args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
                                                         message="What float mode do you want to use?",
@@ -83,7 +93,7 @@ def loadModel():
     print("RUN_DEVICE:", args["RUN_DEVICE"])
     print("FLOAT_MODE:", args["FLOAT_MODE"])
     print("cudalayers:", argsnums["cudalayers"]
-        if "cudalayers" in argsnums else "all")
+          if "cudalayers" in argsnums else "all")
     print("")
 
     torch.set_num_threads(12)
@@ -92,7 +102,6 @@ def loadModel():
 
     if (args["RUN_DEVICE"] == "cpu" and args["FLOAT_MODE"] == "fp16"):
         raise (Warning("fp16 is only supported on cuda"))
-
 
     args["MODEL_NAME"] = file
     argsnums["ctx_len"] = 4068
@@ -106,7 +115,7 @@ def loadModel():
     ########################################################################################################
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
-    model = RWKV_RNN(args, argsnums,layerdist)
+    model = RWKV_RNN(args, argsnums, layerdist)
     if (opt == "jit"):
 
         model = torch.jit.script(model)
