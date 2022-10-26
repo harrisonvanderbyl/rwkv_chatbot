@@ -51,7 +51,7 @@ RWKV: It’s a large and very expensive piece of science equipment. If I underst
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 1.2
+TEMPERATURE = 1.0
 top_p = 0.9
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
@@ -112,44 +112,32 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 # bot.py
 
 # init empty save state and question context
-init_state = model.empty_state()
 model_tokens = tokenizer.tokenizer.encode(context)
 
-# Put the prompt into the init_state
+state = model.loadContext(newctx=model_tokens)
 
 
-curr = {
-    "context": context,
-    "state":  model.loadContext(model_tokens, init_state),
-    "model_tokens": model_tokens,
-    "tknew": []
-}
-gc.collect()
-torch.cuda.empty_cache()
-with torch.no_grad():
-    while (1):
-        message = input("User: ")
+for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
+    print("--")
+    time_ref = time.time_ns()
+    state = model.loadContext(ctx=state[0],statex=state[1],newctx=tokenizer.tokenizer.encode(f"User: {input('User:')}\n\nRWKV:"))
 
-        msg = message.strip()
+    if TRIAL == 0:
 
-        real_msg = msg.strip()
-        new = f"User: {real_msg}\n\nRWKV: "
-        curr["tknew"] = tokenizer.tokenizer.encode(new)
+        gc.collect()
+        torch.cuda.empty_cache()
 
-        before = len(curr["model_tokens"])
-        curr["model_tokens"] = curr["model_tokens"]+curr["tknew"]
-        curr["state"] = model.loadContext(
-            ctx=curr["model_tokens"], statex=curr["state"], start=before, silent=True)
-
-        after = len(curr["model_tokens"])
-
+    with torch.no_grad():
         for i in range(100):
-            curr["model_tokens"], curr["state"] = model.run(
-                curr["model_tokens"], curr["state"], temp=TEMPERATURE, top_p=top_p)
 
-            if (tokenizer.tokenizer.decode(curr["model_tokens"])[-4:].endswith('\n\n')):
-                break
+            state = model.run(ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
 
-            char = tokenizer.tokenizer.decode(curr["model_tokens"][-1])
+            char = tokenizer.tokenizer.decode(state[0][-1])
+
             if '\ufffd' not in char:
                 print(char, end="", flush=True)
+            
+            if(tokenizer.tokenizer.decode(state[0])[-2:] == "\n\n"):
+                break
+
+   

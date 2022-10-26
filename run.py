@@ -42,8 +42,8 @@ RWKV: It’s a large and very expensive piece of science equipment. If I underst
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
-TEMPERATURE = 1.4
-top_p = 0.4
+TEMPERATURE = 1.0
+top_p = 0.8
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
 DEBUG_DEBUG = False  # True False --> show softmax output
@@ -111,15 +111,13 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-state1 = model.loadContext(ctx1, state1)
-stateRefresh = state1.clone()
+state = model.loadContext(newctx=ctx1)
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
     time_ref = time.time_ns()
-    state1 = stateRefresh.clone()
-    ctx1 = src_ctx1.copy()
+    
 
     if TRIAL == 0:
 
@@ -130,9 +128,9 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
 
-            (ctx1, state1) = model.run(ctx1, state1, temp=TEMPERATURE, top_p=top_p)
+            state = model.run(ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
 
-            char = tokenizer.tokenizer.decode(ctx1[-1])
+            char = tokenizer.tokenizer.decode(state[0][-1])
 
             if '\ufffd' not in char:
                 print(char, end="", flush=True)
