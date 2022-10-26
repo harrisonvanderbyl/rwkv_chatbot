@@ -298,7 +298,7 @@ class RWKV_RNN(nn.Module):
         return state
 
     @ torch.jit.ignore
-    def loadContext(self, ctx: list[int] = [], newctx: list[int] = [187], statex: torch.Tensor | None = None, silent=False):
+    def loadContext(self, ctx: list[int] = [], newctx: list[int] = [187], statex=None, silent=False):
 
         if statex is None:
             statex = self.empty_state()
