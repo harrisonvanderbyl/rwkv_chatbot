@@ -120,7 +120,8 @@ state = model.loadContext(newctx=model_tokens)
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
     time_ref = time.time_ns()
-    state = model.loadContext(ctx=state[0],statex=state[1],newctx=tokenizer.tokenizer.encode(f"User: {input('User:')}\n\nRWKV:"))
+    state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
+        f"User: {input('User: ')}\n\nRWKV:"))
 
     if TRIAL == 0:
 
@@ -130,14 +131,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
 
-            state = model.run(ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
+            state = model.run(
+                ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
 
             char = tokenizer.tokenizer.decode(state[0][-1])
 
             if '\ufffd' not in char:
                 print(char, end="", flush=True)
-            
-            if(tokenizer.tokenizer.decode(state[0])[-2:] == "\n\n"):
-                break
 
-   
+            if (tokenizer.tokenizer.decode(state[0])[-2:] == "\n\n"):
+                break
