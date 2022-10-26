@@ -76,8 +76,8 @@ def loadModel():
         else:
             layerdist += ["proc"] * 100 + [inquirer.prompt([inquirer.List('RUN_DEVICE',
                                                                           message="What device do you want to use for cuda streaming?",
-                                                                          choices=map(lambda m: f"cuda:{m}", range(
-                                                                                  numdevices)),
+                                                                          choices=list(map(lambda m: f"cuda:{m}", range(
+                                                                                  numdevices))),
                                                                           )])["RUN_DEVICE"]]
 
     else:
