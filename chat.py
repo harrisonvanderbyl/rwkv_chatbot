@@ -2,6 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+import loadModel
 import discord
 from genericpath import exists
 from typing import List
@@ -64,7 +65,6 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-import loadModel
 model = loadModel.loadModel()
 
 
@@ -134,11 +134,12 @@ saveStates = {}
 saveStates["empty"] = ([187], init_state.clone())
 
 # Put the prompt into the init_state
-init_state = model.loadContext(model_tokens, init_state)
-saveStates["questions"] = (model_tokens, init_state.clone())
+init_state = model.loadContext([], model_tokens, init_state)
+saveStates["questions"] = (init_state[0], init_state[1].clone())
 
 src_model_tokens = model_tokens.copy()
 currstate = init_state
+
 
 @client.event
 async def on_message(message):
@@ -159,13 +160,13 @@ async def on_message(message):
         return
 
     if msg[:11] == '+drkv_save ':
-        saveStates[msg[11:]] = (model_tokens, currstate)
+        saveStates[msg[11:]] = (currstate[0], currstate[1].clone())
         await message.reply(f"Saved state {msg[11:]}")
         return
 
     if msg[:11] == '+drkv_load ':
         if msg[11:] in saveStates:
-            model_tokens, currstate = saveStates[msg[11:]]
+            currstate = saveStates[msg[11:]]
             await message.reply(f"Loaded state {msg[11:]}")
         else:
             await message.reply(f"State {msg[11:]} not found")
@@ -181,16 +182,14 @@ async def on_message(message):
         tknew = tokenizer.tokenizer.encode(new)
         print(f'### add ###\n[{new}]')
 
-        before = len(model_tokens)
-        model_tokens = model_tokens + tknew
-        begin = len(model_tokens)
+        begin = len(currstate[0] + tknew)
 
-        currstate = model.loadContext(model_tokens, currstate, start=before)
+        currstate = model.loadContext(currstate[0], tknew, currstate[1])
         for i in tqdm(range(100)):
-            (model_tokens,currstate) = model.run(model_tokens, currstate)
-            if (tokenizer.tokenizer.decode(model_tokens)[-2:] == '\n\n'):
+            currstate = model.run(currstate[0], currstate[1])
+            if (tokenizer.tokenizer.decode(currstate[0])[-2:] == '\n\n'):
                 break
-        send_msg = tokenizer.tokenizer.decode(model_tokens[begin:]).strip()
+        send_msg = tokenizer.tokenizer.decode(currstate[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
 
