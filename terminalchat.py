@@ -115,13 +115,22 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 model_tokens = tokenizer.tokenizer.encode(context)
 
 state = model.loadContext(newctx=model_tokens)
-
+savestates = {
+    "init": (state[0], state[1].clone())
+}
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
     time_ref = time.time_ns()
+    inp = input('User: ')
+    if (inp.startswith("save ")):
+        savestates[inp[5:]] = (state[0], state[1].clone())
+        continue
+    if (inp.startswith("load ")):
+        state = (savestates[inp[5:]][0], savestates[inp[5:]][1].clone())
+        continue
     state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
-        f"User: {input('User: ')}\n\nRWKV:"))
+        f"User: {inp}\n\nRWKV:"))
 
     if TRIAL == 0:
 
