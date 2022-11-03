@@ -114,10 +114,18 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 # init empty save state and question context
 model_tokens = tokenizer.tokenizer.encode(context)
 
-state = model.loadContext(newctx=model_tokens)
-savestates = {
-    "init": (state[0], state[1].clone())
-}
+#  see if save_state file exists
+if os.path.isfile(f"save_states_{model.n_emb}_{model.n_layer}.pt"):
+    print("Loading save state...")
+    savestates = torch.load(f"save_states_{model.n_emb}_{model.n_layer}.pt")
+    state = savestates["init"]
+
+else:
+    state = model.loadContext(newctx=model_tokens)
+    savestates = {
+        "init": (state[0], state[1].clone())
+    }
+    torch.save(savestates, f"save_states_{model.n_emb}_{model.n_layer}.pt")
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
@@ -125,9 +133,16 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     inp = input('User: ')
     if (inp.startswith("save ")):
         savestates[inp[5:]] = (state[0], state[1].clone())
+        # Save to file
+        torch.save(savestates, f"save_states_{model.n_emb}_{model.n_layer}.pt")
+        print("Saved to file.")
         continue
     if (inp.startswith("load ")):
+
+        savestates = torch.load(
+            f"save_states_{model.n_emb}_{model.n_layer}.pt")
         state = (savestates[inp[5:]][0], savestates[inp[5:]][1].clone())
+
         continue
     state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
         f"User: {inp}\n\nRWKV:"))
