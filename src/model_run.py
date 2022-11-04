@@ -304,7 +304,7 @@ class RWKV_RNN(nn.Module):
             statex = self.empty_state()
 
         m = tqdm if not silent else lambda x: x
-        for i in m(range(len(newctx))):
+        for i in m(range(len(newctx)-1)):
             x = ctx+newctx[:i+1]
             o, statex = self.forward(
                 x, statex, preprocess_only=True)

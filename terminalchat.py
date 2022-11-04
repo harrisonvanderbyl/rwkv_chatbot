@@ -145,7 +145,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
         continue
     state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
-        f"User: {inp}\n\nRWKV:"))
+        f"\n\nUser: {inp}\n\nRWKV:"))
 
     if TRIAL == 0:
 
