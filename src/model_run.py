@@ -28,32 +28,17 @@ DEBUG_TIME = False   # True False - show trained time-coeffs
 @torch.jit.ignore
 def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
 
-    if probs.device.type == "cpu":
+    sorted_probs = torch.sort(probs, descending=True)[0]
+    cumulative_probs = torch.cumsum(
+        sorted_probs.float(), dim=-1).cpu().numpy()
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
+    probs[probs < cutoff] = 0
+    if temperature != 1.0:
+        probs = probs.pow(1.0 / temperature)
 
-        probs = probs.float().numpy()
-
-        sorted_probs = np.sort(probs)[::-1]
-        cumulative_probs = np.cumsum(sorted_probs)
-        cutoff = float(sorted_probs[np.argmax(
-            cumulative_probs > top_p_usual)])
-        probs[probs < cutoff] = 0
-        if temperature != 1.0:
-            probs = np.power(probs, 1.0 / temperature)
-        probs = probs / np.sum(probs)
-        out = np.random.choice(a=len(probs), p=probs)
-        return out
-    else:
-        sorted_probs = torch.sort(probs, descending=True)[0]
-        cumulative_probs = torch.cumsum(
-            sorted_probs.float(), dim=-1).cpu().numpy()
-        cutoff = float(sorted_probs[np.argmax(
-            cumulative_probs > top_p_usual)])
-        probs[probs < cutoff] = 0
-        if temperature != 1.0:
-            probs = probs.pow(1.0 / temperature)
-
-        out: int = torch.multinomial(probs.float(), 1, True)[0]
-        return out
+    out = torch.multinomial(probs.float(), 3, True)
+    return out
 
 
 class RWKV_RNN(nn.Module):
@@ -329,8 +314,8 @@ class RWKV_RNN(nn.Module):
         out1, state = self.forward(ctxx, state1, preprocess_only=False)
 
         out1[0] = -99  # disable <|endoftext|>
-
-        out1[187] += nla
+        # out1[535] = -99
+        # out1[187] = -99
 
         ttt = self.sample_logits(
             out1,
@@ -338,6 +323,30 @@ class RWKV_RNN(nn.Module):
             temperature=temp,
             top_p_usual=top_p,
         )
-        ctxx += [ttt]
+        options = []
+        for i in range(len(ttt)):
+            out2, state2 = self.forward(
+                ctxx+[ttt[i]], state.clone(), preprocess_only=False)
 
-        return ctxx, state
+            out2[0] = -99  # disable
+            out2[187] += nla
+
+            ttt2 = self.sample_logits(
+                out2,
+                ctxx+[ttt[i]],
+                temperature=temp,
+                top_p_usual=top_p,
+            )
+
+            for j in range(len(ttt2)):
+
+                score = out1[ttt[i]] + out2[ttt2[j]]
+
+                if (ttt[i] == 535 or ttt[i] == 187):
+                    options.append((score, ttt[i], ttt[i], state))
+                else:
+                    options.append((score, ttt[i], ttt2[j], state2))
+
+        options.sort(key=lambda x: x[0], reverse=True)
+
+        return ctxx + [options[3][1], options[3][2]], options[3][3]

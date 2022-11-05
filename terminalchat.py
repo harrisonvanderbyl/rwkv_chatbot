@@ -113,7 +113,7 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 # init empty save state and question context
 model_tokens = tokenizer.tokenizer.encode(context)
-
+print(tokenizer.tokenizer.encode("\n\n"))
 #  see if save_state file exists
 if os.path.isfile(f"save_states_{model.n_emb}_{model.n_layer}.pt"):
     print("Loading save state...")
@@ -157,6 +157,11 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = model.run(
                 ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
+
+            char = tokenizer.tokenizer.decode(state[0][-2])
+
+            if '\ufffd' not in char:
+                print(char, end="", flush=True)
 
             char = tokenizer.tokenizer.decode(state[0][-1])
 
