@@ -37,7 +37,7 @@ NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
 TEMPERATURE = 1.0
-top_p = 0.8
+top_p = 0.9
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
 DEBUG_DEBUG = False  # True False --> show softmax output
@@ -118,16 +118,16 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         torch.cuda.empty_cache()
 
     record_time('preprocess')
+    state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+
     with torch.no_grad():
         for i in range(100):
 
             state = model.run(
-                ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
-
-            char = tokenizer.tokenizer.decode(state[0][-1])
-
-            if '\ufffd' not in char:
-                print(char, end="", flush=True)
+                state, temp=TEMPERATURE, top_p=top_p, endChars=[])
+            print(tokenizer.tokenizer.decode(state[0]["ctx"]))
+    state = (state[0]["ctx"], state[0]["state"])
+    print(tokenizer.tokenizer.decode(state[0]))
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')
