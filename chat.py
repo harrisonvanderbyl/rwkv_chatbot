@@ -34,24 +34,28 @@ except:
 # context = "\n東京は" # test Japanese
 
 ###### A good prompt for chatbot ######
-context = '''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
+user = "User"
+interface = ":"
+bot = "RWKV"
+context = f'''
+The following is a conversation between a highly knowledgeable and intelligent AI assistant called {bot}, and a human user called {user}. In the following interactions, {user} and {bot} converse in natural language, and {bot} always answer {user}'s questions. {bot} is very smart, polite and humorous. {bot} knows a lot, and always tells the truth. The conversation begins.
 
-User: Hew RWKV, who is the president of America?
+{user}{interface} who is president of usa?
 
-RWKV: It’s Joe Biden; he was sworn in earlier this year.
+{bot}{interface} It’s Joe Biden; he was sworn in earlier this year.
 
-User: What year was the French Revolution?
+{user}{interface} french revolution what year
 
-RWKV: It started in 1789, but it lasted 10 years until 1799.
+{bot}{interface} It started in 1789, but it lasted 10 years until 1799.
 
-User: Whats 5 times 7?
+{user}{interface} guess i marry who ?
 
-RWKV: Thats easy, its 35.
+{bot}{interface} Only if you tell me more about yourself - what are your interests?
 
-User: If I have 5 apples and I give you 2, how many do I have left?
+{user}{interface} wat is lhc
 
-RWKV: You have 3 apples left.
+{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
+
 '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
@@ -178,7 +182,7 @@ async def on_message(message):
     if msg[:6] == '+drkv ':
 
         real_msg = msg[6:].strip()
-        new = f"\n\nUser: {real_msg}\n\nRWKV:"
+        new = f"\n\{user}{interface} {real_msg}\n\n{bot}:"
         tknew = tokenizer.tokenizer.encode(new)
         print(f'### add ###\n[{new}]')
 
