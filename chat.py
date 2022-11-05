@@ -178,7 +178,7 @@ async def on_message(message):
     if msg[:6] == '+drkv ':
 
         real_msg = msg[6:].strip()
-        new = f"User: {real_msg}\n\nRWKV:"
+        new = f"\n\nUser: {real_msg}\n\nRWKV:"
         tknew = tokenizer.tokenizer.encode(new)
         print(f'### add ###\n[{new}]')
 

@@ -324,7 +324,7 @@ class RWKV_RNN(nn.Module):
         return sample(probs, temperature, top_p_usual)
 
     @ torch.jit.ignore
-    def run(self, ctxx: list[int], state1: torch.Tensor, temp: float = 1.2, top_p: float = 0.8, nla: float = 0):
+    def run(self, ctxx: list[int], state1: torch.Tensor, temp: float = 1.0, top_p: float = 0.9, nla: float = 0):
 
         out1, state = self.forward(ctxx, state1, preprocess_only=False)
 
