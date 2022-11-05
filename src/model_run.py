@@ -309,44 +309,36 @@ class RWKV_RNN(nn.Module):
         return sample(probs, temperature, top_p_usual)
 
     @ torch.jit.ignore
-    def run(self, ctxx: list[int], state1: torch.Tensor, temp: float = 1.0, top_p: float = 0.9, nla: float = 0):
-
-        out1, state = self.forward(ctxx, state1, preprocess_only=False)
-
-        out1[0] = -99  # disable <|endoftext|>
-        # out1[535] = -99
-        # out1[187] = -99
-
-        ttt = self.sample_logits(
-            out1,
-            ctxx,
-            temperature=temp,
-            top_p_usual=top_p,
-        )
+    def run(self, currstate: list({"score": float, "ctx": list[int], "state": torch.Tensor}), temp: float = 1.0, top_p: float = 0.9, nla: float = 0):
         options = []
-        for i in range(len(ttt)):
-            out2, state2 = self.forward(
-                ctxx+[ttt[i]], state.clone(), preprocess_only=False)
+        for i in range(len(currstate)):
 
-            out2[0] = -99  # disable
-            out2[187] += nla
+            ctx = currstate[i]["ctx"]
 
-            ttt2 = self.sample_logits(
-                out2,
-                ctxx+[ttt[i]],
+            if (ctx[-2:] == [187, 187] or ctx[-1] == 535):
+                options.append(currstate[i])
+                continue
+            state = currstate[i]["state"]
+            score = currstate[i]["score"]
+
+            out1, state = self.forward(ctx, state.clone())
+
+            ttt = self.sample_logits(
+                out1,
+                ctx,
                 temperature=temp,
                 top_p_usual=top_p,
             )
 
-            for j in range(len(ttt2)):
+            for j in range(len(ttt)):
+                options.append(
+                    {"score": score+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
-                score = out1[ttt[i]] + out2[ttt2[j]]
+        options.sort(key=lambda x: x["score"], reverse=True)
+        options = options[:5]
+        scores = list(map(lambda x: x["score"], options))
+        cumscore = sum(scores)
+        options = list(map(lambda x: {
+                       "score": x["score"]/cumscore, "ctx": x["ctx"], "state": x["state"]}, options))
 
-                if (ttt[i] == 535 or ttt[i] == 187):
-                    options.append((score, ttt[i], ttt[i], state))
-                else:
-                    options.append((score, ttt[i], ttt2[j], state2))
-
-        options.sort(key=lambda x: x[0], reverse=True)
-
-        return ctxx + [options[0][1], options[0][2]], options[0][3]
+        return options

@@ -185,10 +185,15 @@ async def on_message(message):
         begin = len(currstate[0] + tknew)
 
         currstate = model.loadContext(currstate[0], tknew, currstate[1])
-        for i in tqdm(range(100)):
-            currstate = model.run(currstate[0], currstate[1])
-            if (tokenizer.tokenizer.decode(currstate[0])[-2:] == '\n\n'):
-                break
+        state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+        with torch.no_grad():
+            for i in tqdm(range(100)):
+
+                state = model.run(
+                    state, temp=TEMPERATURE, top_p=top_p)
+
+        currstate = (state[0]["ctx"], state[0]["state"])
+
         send_msg = tokenizer.tokenizer.decode(currstate[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)

@@ -147,6 +147,8 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
         f"\n\nUser: {inp}\n\nRWKV:"))
 
+    state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+
     if TRIAL == 0:
 
         gc.collect()
@@ -156,17 +158,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
 
             state = model.run(
-                ctxx=state[0], state1=state[1], temp=TEMPERATURE, top_p=top_p)
-
-            char = tokenizer.tokenizer.decode(state[0][-2])
-
-            if '\ufffd' not in char:
-                print(char, end="", flush=True)
-
-            char = tokenizer.tokenizer.decode(state[0][-1])
-
-            if '\ufffd' not in char:
-                print(char, end="", flush=True)
-
-            if (tokenizer.tokenizer.decode(state[0])[-2:] == "\n\n"):
-                break
+                state, temp=TEMPERATURE, top_p=top_p)
+            print(tokenizer.tokenizer.decode(state[0]["ctx"]))
+    state = (state[0]["ctx"], state[0]["state"])
+    print(tokenizer.tokenizer.decode(state[0]))
