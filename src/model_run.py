@@ -349,4 +349,4 @@ class RWKV_RNN(nn.Module):
 
         options.sort(key=lambda x: x[0], reverse=True)
 
-        return ctxx + [options[3][1], options[3][2]], options[3][3]
+        return ctxx + [options[0][1], options[0][2]], options[0][3]
