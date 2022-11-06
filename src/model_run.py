@@ -309,7 +309,7 @@ class RWKV_RNN(nn.Module):
         return sample(probs, temperature, top_p_usual)
 
     @ torch.jit.ignore
-    def run(self, currstate: list({"score": float, "ctx": list[int], "state": torch.Tensor}), temp: float = 1.4, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
+    def run(self, currstate: list({"score": float, "ctx": list[int], "state": torch.Tensor}), temp: float = 1.0, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
         options = []
         for i in range(len(currstate)):
 
@@ -335,7 +335,7 @@ class RWKV_RNN(nn.Module):
                     {"score": score*out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
-        options = options[:2] + options[-2:]
+        options = options[:4] + options[-2:]
         scores = list(map(lambda x: x["score"], options))
         cumscore = sum(scores)
         options = list(map(lambda x: {
