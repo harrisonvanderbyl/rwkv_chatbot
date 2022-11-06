@@ -230,9 +230,9 @@ async def on_message(message):
     if msg[:11] == '+drkv_cont ':
         real_msg = msg[11:].strip()
 
-        begin = len(tknew)
-
         state = storys[int(real_msg)]
+
+        begin = len(state[0])
 
         state = [{"score": 1, "state": state[1], "ctx": state[0]}]
         with torch.no_grad():
