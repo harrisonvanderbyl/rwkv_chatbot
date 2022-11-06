@@ -37,7 +37,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
     if temperature != 1.0:
         probs = probs.pow(1.0 / temperature)
 
-    out = torch.multinomial(probs.float(), 5, True)
+    out = torch.multinomial(probs.float(), 3, True)
     return out
 
 
@@ -332,7 +332,7 @@ class RWKV_RNN(nn.Module):
 
             for j in range(len(ttt)):
                 options.append(
-                    {"score": score+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
+                    {"score": score*out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
         options = options[:2] + options[-2:]
