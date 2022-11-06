@@ -144,6 +144,8 @@ saveStates["questions"] = (init_state[0], init_state[1].clone())
 src_model_tokens = model_tokens.copy()
 currstate = init_state
 
+storys = []
+
 
 @client.event
 async def on_message(message):
@@ -201,5 +203,49 @@ async def on_message(message):
         send_msg = tokenizer.tokenizer.decode(currstate[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
+    if msg[:10] == '+drkv_gen ':
+
+        real_msg = msg[10:].strip()
+        new = f"{real_msg}".replace("\\n", "\n")
+        tknew = tokenizer.tokenizer.encode(new)
+        print(f'### add ###\n[{new}]')
+
+        begin = len(tknew)
+
+        state = model.loadContext([], tknew, model.empty_state())
+        state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+        with torch.no_grad():
+            for i in tqdm(range(100)):
+
+                state = model.run(
+                    state, temp=TEMPERATURE, top_p=top_p, endChars=[])
+
+        state = (state[0]["ctx"], state[0]["state"])
+
+        send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
+        print(f'### send ###\n[{send_msg}]')
+        await message.reply(send_msg+"\n continue with +drkv_cont "+len(storys))
+        storys.append(state)
+
+    if msg[:11] == '+drkv_cont ':
+        real_msg = msg[11:].strip()
+
+        begin = len(tknew)
+
+        state = storys[int(real_msg)]
+
+        state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+        with torch.no_grad():
+            for i in tqdm(range(100)):
+                state = model.run(
+                    state, temp=TEMPERATURE, top_p=top_p, endChars=[])
+
+        state = (state[0]["ctx"], state[0]["state"])
+
+        send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
+        print(f'### send ###\n[{send_msg}]')
+        await message.reply(send_msg+"\n continue with +drkv_cont "+real_msg)
+        storys[int(real_msg)] = state
+
 
 client.run(os.environ["TOKEN"])
