@@ -335,7 +335,7 @@ class RWKV_RNN(nn.Module):
                     {"score": score+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
-        options = options[:4]
+        options = options[:2] + options[-2:]
         scores = list(map(lambda x: x["score"], options))
         cumscore = sum(scores)
         options = list(map(lambda x: {
