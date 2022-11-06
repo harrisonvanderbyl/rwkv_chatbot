@@ -332,7 +332,7 @@ class RWKV_RNN(nn.Module):
 
             for j in range(len(ttt)):
                 options.append(
-                    {"score": score*out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
+                    {"score": score*0.9+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
         options = options[:4] + options[-2:]
