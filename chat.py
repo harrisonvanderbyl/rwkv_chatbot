@@ -224,7 +224,7 @@ async def on_message(message):
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
-        await message.reply(send_msg+"\n continue with +drkv_cont "+len(storys))
+        await message.reply(send_msg+"\n continue with +drkv_cont "+str(len(storys)))
         storys.append(state)
 
     if msg[:11] == '+drkv_cont ':
