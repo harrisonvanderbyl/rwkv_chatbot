@@ -21,6 +21,10 @@
             "/rwkv-12-768-6.onnx"
           );
 
+          const decoder = await fetch("decoder.json").then((response) =>
+            response.json()
+          );
+
           // prepare inputs. a tensor need its corresponding TypedArray as data
           const dataA = new BigInt64Array(1);
           dataA[0] = BigInt(1);
@@ -56,15 +60,19 @@
               tokens: new ort.Tensor("int64", outdata, [1]),
               state: result.outstate,
             };
-            output.push(outdata[0]);
-            console.log(outdata[0]);
+            output.push(decoder[outdata[0]]);
+            console.log(decoder[outdata[0]]);
           }
           console.log(output);
 
           // read from results
-          const dataC = JSON.stringify(results);
-          console.log(results);
-          document.write(`data of result tensor 'c': ${dataC}`);
+          console.log(output);
+          document.write(
+            `result: ${output
+              .map((e) => e?.replace(/([^a-z0-9]+)/gi, " ") ?? " ")
+              .join("")
+              .trim()}`
+          );
         } catch (e) {
           document.write(`failed to inference ONNX model: ${e}.`);
         }
