@@ -20,8 +20,8 @@
           // const sessionOption = { executionProviders: ["webgl"] };
 
           const session = await ort.InferenceSession.create(
-            "rwkv-12-768-6-fixed.onnx"
-            // sessionOption, cant get opengl rendering to work
+            "rwkv-12-768-6.onnx"
+            // sessionOption, cant get opengl rendering
           );
 
           const decoder = await fetch("rwkv_chatbot/decoder.json").then(
