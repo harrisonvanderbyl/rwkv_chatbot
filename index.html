@@ -18,11 +18,11 @@
           // it has 2 inputs: 'a'(float32, 3x4) and 'b'(float32, 4x3)
           // it has 1 output: 'c'(float32, 3x3)
           const session = await ort.InferenceSession.create(
-            "/rwkv-12-768-6.onnx"
+            "rwkv_chatbot/rwkv-12-768-6.onnx"
           );
 
-          const decoder = await fetch("decoder.json").then((response) =>
-            response.json()
+          const decoder = await fetch("rwkv_chatbot/decoder.json").then(
+            (response) => response.json()
           );
 
           // prepare inputs. a tensor need its corresponding TypedArray as data
