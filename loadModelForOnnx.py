@@ -87,7 +87,7 @@ def loadModel():
     model = RWKV_RNN(args, argsnums)
     if (opt == "jit"):
 
-        model = torch.jit.script(
-            model)
+        model = torch.jit.trace(
+            model, (torch.LongTensor([187]), model.empty_state()))
 
     return model

@@ -92,4 +92,4 @@ input_names = ["tokens", "state"]
 output_names = ["probs", "outstate"]
 
 torch.onnx.export(model, (torch.LongTensor([187]), model.empty_state()), f"rwkv-{model.n_layer}-{model.n_emb}-{model.FLOAT_MODE}.onnx",
-                  input_names=input_names, output_names=output_names, export_params=True, verbose=False)
+                  input_names=input_names, output_names=output_names, export_params=True, verbose=False, opset_version=17)

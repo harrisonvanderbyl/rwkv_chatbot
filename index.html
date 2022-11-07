@@ -17,8 +17,11 @@
           // the model in this example contains a single MatMul node
           // it has 2 inputs: 'a'(float32, 3x4) and 'b'(float32, 4x3)
           // it has 1 output: 'c'(float32, 3x3)
+          // const sessionOption = { executionProviders: ["webgl"] };
+
           const session = await ort.InferenceSession.create(
-            "rwkv-12-768-6.onnx"
+            "rwkv-12-768-6-fixed.onnx"
+            // sessionOption, cant get opengl rendering to work
           );
 
           const decoder = await fetch("rwkv_chatbot/decoder.json").then(
