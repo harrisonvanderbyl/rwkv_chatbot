@@ -24,8 +24,8 @@
             // sessionOption, cant get opengl rendering
           );
 
-          const decoder = await fetch("rwkv_chatbot/decoder.json").then(
-            (response) => response.json()
+          const decoder = await fetch("decoder.json").then((response) =>
+            response.json()
           );
 
           // prepare inputs. a tensor need its corresponding TypedArray as data
