@@ -18,7 +18,7 @@
           // it has 2 inputs: 'a'(float32, 3x4) and 'b'(float32, 4x3)
           // it has 1 output: 'c'(float32, 3x3)
           const session = await ort.InferenceSession.create(
-            "https://github.com/harrisonvanderbyl/rwkv_chatbot/raw/main/rwkv-12-768-6.onnx"
+            "rwkv-12-768-6.onnx"
           );
 
           const decoder = await fetch("rwkv_chatbot/decoder.json").then(
