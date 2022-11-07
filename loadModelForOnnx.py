@@ -87,6 +87,7 @@ def loadModel():
     model = RWKV_RNN(args, argsnums)
     if (opt == "jit"):
 
-        model = torch.jit.script(model)
+        model = torch.jit.script(
+            model)
 
     return model

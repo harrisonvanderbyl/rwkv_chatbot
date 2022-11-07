@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+  <header>
+    <title>
+      ONNX Runtime JavaScript examples: Quick Start - Web (using script tag)
+    </title>
+  </header>
+  <body>
+    <!-- import ONNXRuntime Web from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <script>
+      // use an async context to call onnxruntime functions.
+      async function main() {
+        try {
+          // create a new session and load the specific model.
+          //
+          // the model in this example contains a single MatMul node
+          // it has 2 inputs: 'a'(float32, 3x4) and 'b'(float32, 4x3)
+          // it has 1 output: 'c'(float32, 3x3)
+          const session = await ort.InferenceSession.create(
+            "/rwkv-12-768-6.onnx"
+          );
+
+          // prepare inputs. a tensor need its corresponding TypedArray as data
+          const dataA = new BigInt64Array(1);
+          dataA[0] = BigInt(1);
+
+          const empty_state = () => {
+            const dataB = new Float32Array(12 * 5 * 768);
+            // for i in range(layers):
+            //     state[5*i+4] -= 1e30
+            for (let i = 0; i < dataB.length; i++) {
+              dataB[i] = 0;
+            }
+
+            return new ort.Tensor("float32", dataB, [12 * 5, 768]);
+          };
+          const tensorA = new ort.Tensor("int64", dataA, [1]);
+          const tensorB = empty_state();
+
+          // prepare feeds. use model input names as keys.
+          var feeds = { tokens: tensorA, state: tensorB };
+          const output = [];
+          // feed inputs and run
+          for (let i = 0; i < 100; i++) {
+            const result = await session.run(feeds);
+            const outdata = new BigInt64Array(1);
+            // Greedy decoding
+            outdata[0] = BigInt(
+              result.probs.data.reduce(
+                (a, b, c) => (b > a[0] ? [b, c] : a),
+                [0, 0]
+              )[1]
+            );
+            feeds = {
+              tokens: new ort.Tensor("int64", outdata, [1]),
+              state: result.outstate,
+            };
+            output.push(outdata[0]);
+            console.log(outdata[0]);
+          }
+          console.log(output);
+
+          // read from results
+          const dataC = JSON.stringify(results);
+          console.log(results);
+          document.write(`data of result tensor 'c': ${dataC}`);
+        } catch (e) {
+          document.write(`failed to inference ONNX model: ${e}.`);
+        }
+      }
+
+      main();
+    </script>
+  </body>
+</html>

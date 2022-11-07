@@ -25,6 +25,63 @@ print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM}\n')
 DEBUG_TIME = False   # True False - show trained time-coeffs
 
 
+def createTensors(model_name):
+    n_layer = 0
+
+    with torch.no_grad():
+        w: Dict[str, torch.Tensor] = torch.load(
+            model_name+".pth", map_location='cpu')
+        # refine weights and send to correct device
+        keys = list(w.keys())
+        for x in keys:
+            if '.time_' in x:
+                w[x] = w[x].squeeze()
+                if DEBUG_TIME:
+                    print(x, w[x].numpy())
+            if '.time_decay' in x:
+                w[x] = w[x].float()
+                w[x] = -torch.exp(w[x])
+
+            w[x].requires_grad = False
+            w[x] = w[x].to(dtype=torch.bfloat16)
+            try:
+                if (int(x.split('.')[1])+1 > n_layer):
+                    n_layer = int(x.split('.')[1])+1
+            except:
+                pass
+
+    # store weights in self.w
+
+    keys = list(w.keys())
+
+    w = [[w["emb.weight"], w["blocks.0.ln0.weight"],
+          w["blocks.0.ln0.bias"]],
+         reduce(lambda y, x: y+[
+             w[f"blocks.{x}.ln1.weight"],
+             w[f"blocks.{x}.ln1.bias"],
+             w[f"blocks.{x}.ln2.weight"],
+             w[f"blocks.{x}.ln2.bias"],
+             w[f"blocks.{x}.att.time_decay"],
+             w[f"blocks.{x}.att.time_first"],
+             w[f"blocks.{x}.att.time_mix_k"],
+             w[f"blocks.{x}.att.time_mix_v"],
+             w[f"blocks.{x}.att.time_mix_r"],
+             w[f"blocks.{x}.att.key.weight"],
+             w[f"blocks.{x}.att.value.weight"],
+             w[f"blocks.{x}.att.receptance.weight"],
+             w[f"blocks.{x}.att.output.weight"],
+             w[f"blocks.{x}.ffn.time_mix_k"],
+             w[f"blocks.{x}.ffn.time_mix_r"],
+             w[f"blocks.{x}.ffn.key.weight"],
+             w[f"blocks.{x}.ffn.receptance.weight"],
+             w[f"blocks.{x}.ffn.value.weight"],
+         ], range(n_layer), []),
+         [w["ln_out.weight"], w["ln_out.bias"],
+          w["head.weight"]
+          ]]
+    torch.save(w, model_name+"_converted.pth")
+
+
 class RWKV_RNN(nn.Module):
     def __init__(self, args, argsnumns):
         super().__init__()
@@ -34,78 +91,65 @@ class RWKV_RNN(nn.Module):
         self.FLOAT_MODE = torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args[
             "FLOAT_MODE"] == "fp16" else torch.bfloat16
         self.RUN_DEVICE = args["RUN_DEVICE"]
-        self.n_layer = 0
 
-        with torch.no_grad():
-            w: Dict[str, torch.Tensor] = torch.load(
-                args["MODEL_NAME"], map_location='cpu')
-            self.n_emb = len(w['blocks.0.ln1.weight'])
-            # refine weights and send to correct device
-            keys = list(w.keys())
-            if 'pos_emb_x' in keys:
-                w['pos_emb'] = (w['pos_emb_x'] + w['pos_emb_y']
-                                ).reshape(argsnumns["ctx_len"]+1, -1)[:-1, :]
-            keys = list(w.keys())
-            print_need_newline = False
-            for x in keys:
-                if '.time_' in x:
-                    w[x] = w[x].squeeze()
-                    if DEBUG_TIME:
-                        print(x, w[x].numpy())
-                if '.time_decay' in x:
-                    w[x] = w[x].float()
-                    w[x] = -torch.exp(w[x])
+        if (not "_converted" in args["MODEL_NAME"]):
+            createTensors(args["MODEL_NAME"][:-4])
+            w: List(List(torch.Tensor)) = torch.load(
+                args["MODEL_NAME"][:-4]+"_converted.pth", map_location=self.RUN_DEVICE)
+        else:
+            w: List(List(torch.Tensor)) = torch.load(
+                args["MODEL_NAME"], map_location=self.RUN_DEVICE)
 
-                w[x] = w[x].to(dtype=self.FLOAT_MODE, device=self.RUN_DEVICE)
+        self.preProcess = w[0]
+        self.ln1w = w[1][0::18]
+        self.ln1b = w[1][1::18]
+        self.ln2w = w[1][2::18]
+        self.ln2b = w[1][3::18]
+        self.time_decay = w[1][4::18]
+        self.time_first = w[1][5::18]
+        self.time_mix_k = w[1][6::18]
+        self.time_mix_v = w[1][7::18]
+        self.time_mix_r = w[1][8::18]
+        self.key = w[1][9::18]
+        self.value = w[1][10::18]
+        self.receptance = w[1][11::18]
+        self.outputv = w[1][12::18]
+        self.time_mix_k_ffn = w[1][13::18]
+        self.time_mix_r_ffn = w[1][14::18]
+        self.key_ffn = w[1][15::18]
+        self.receptance_ffn = w[1][16::18]
+        self.value_ffn = w[1][17::18]
+        self.postProcess = w[2]
 
-                w[x].requires_grad = False
-                try:
-                    if (int(x.split('.')[1])+1 > self.n_layer):
-                        self.n_layer = int(x.split('.')[1])+1
-                except:
-                    pass
+        def setToProp(x):
+            x = x.to(dtype=self.FLOAT_MODE, device=self.RUN_DEVICE)
+            return x
 
-                if ('blocks.' not in x) or ('blocks.0.' in x):
-                    if print_need_newline:
-                        print('\n', end='')
-                        print_need_newline = False
-                    print(x.ljust(40), str(w[x].dtype).replace(
-                        'torch.', '').ljust(10), w[x].device)
+        self.preProcess = list(map(setToProp, self.preProcess))
+        self.ln1w = list(map(setToProp, self.ln1w))
+        self.ln1b = list(map(setToProp, self.ln1b))
+        self.ln2w = list(map(setToProp, self.ln2w))
+        self.ln2b = list(map(setToProp, self.ln2b))
+        self.time_decay = list(map(setToProp, self.time_decay))
+        self.time_first = list(map(setToProp, self.time_first))
+        self.time_mix_k = list(map(setToProp, self.time_mix_k))
+        self.time_mix_v = list(map(setToProp, self.time_mix_v))
+        self.time_mix_r = list(map(setToProp, self.time_mix_r))
+        self.key = list(map(setToProp, self.key))
+        self.value = list(map(setToProp, self.value))
+        self.receptance = list(map(setToProp, self.receptance))
+        self.outputv = list(map(setToProp, self.outputv))
+        self.time_mix_k_ffn = list(map(setToProp, self.time_mix_k_ffn))
+        self.time_mix_r_ffn = list(map(setToProp, self.time_mix_r_ffn))
+        self.key_ffn = list(map(setToProp, self.key_ffn))
+        self.receptance_ffn = list(map(setToProp, self.receptance_ffn))
+        self.value_ffn = list(map(setToProp, self.value_ffn))
+        self.postProcess = list(map(setToProp, self.postProcess))
 
-                else:
-                    print_need_newline = True
-                    print(
-                        '.' if "cpu" in f'{w[x].device}' else "x", end='', flush=True)
+        print(len(self.outputv), len(self.ln1w))
 
-        # store weights in self.w
-
-        keys = list(w.keys())
-
-        self.w = [w["emb.weight"], w["blocks.0.ln0.weight"],
-                  w["blocks.0.ln0.bias"]] +\
-            reduce(lambda y, x: y+[
-                w[f"blocks.{x}.ln1.weight"],
-                w[f"blocks.{x}.ln1.bias"],
-                w[f"blocks.{x}.ln2.weight"],
-                w[f"blocks.{x}.ln2.bias"],
-                w[f"blocks.{x}.att.time_decay"],
-                w[f"blocks.{x}.att.time_first"],
-                w[f"blocks.{x}.att.time_mix_k"],
-                w[f"blocks.{x}.att.time_mix_v"],
-                w[f"blocks.{x}.att.time_mix_r"],
-                w[f"blocks.{x}.att.key.weight"],
-                w[f"blocks.{x}.att.value.weight"],
-                w[f"blocks.{x}.att.receptance.weight"],
-                w[f"blocks.{x}.att.output.weight"],
-                w[f"blocks.{x}.ffn.time_mix_k"],
-                w[f"blocks.{x}.ffn.time_mix_r"],
-                w[f"blocks.{x}.ffn.key.weight"],
-                w[f"blocks.{x}.ffn.receptance.weight"],
-                w[f"blocks.{x}.ffn.value.weight"],
-            ], range(self.n_layer), []) +\
-            [w["ln_out.weight"], w["ln_out.bias"],
-             w["head.weight"]
-             ]
+        self.n_layer = len(self.ln1w)
+        self.n_emb = self.preProcess[1].shape[0]
         self.state = self.empty_state()
         self.eval()
         self.myEmptyState = self.empty_state()
@@ -163,47 +207,42 @@ class RWKV_RNN(nn.Module):
         rwkv = (r * a) / b
         return sx+(ow @ rwkv), state
 
-    def forward(self, ctx: torch.Tensor, state: torch.Tensor):
+    def forward(self, ctx: torch.LongTensor, state: torch.Tensor):
+        state = state.to(
+            dtype=self.FLOAT_MODE)
         with torch.no_grad():
 
-            w = self.w
-
-            x: torch.Tensor = w[0][int(ctx[0])]
+            x: torch.Tensor = self.preProcess[0][ctx[0]]
 
             x = torch.layer_norm(
-                x, (self.n_emb,), weight=self.w[1], bias=self.w[2])
-            for o in range(self.n_layer):
-                i = o
+                x, (self.n_emb,), weight=self.preProcess[1], bias=self.preProcess[2])
+            for i in range(len(self.ln1w)):
 
-                startpos = i*18 + 3
+                ln1w = self.ln1w[i]
+                ln1b = self.ln1b[i]
 
-                d = w[startpos:startpos+18]
+                ln2w = self.ln2w[i]
+                ln2b = self.ln2b[i]
 
-                ln1w = d[0]
-                ln1b = d[1]
+                atc = self.time_decay[i]
+                atf = self.time_first[i]
 
-                ln2w = d[2]
-                ln2b = d[3]
+                atmk = self.time_mix_k[i]
+                atmv = self.time_mix_v[i]
+                atmr = self.time_mix_r[i]
 
-                atc = d[4]
-                atf = d[5]
+                atd = self.key[i]
+                avw = self.value[i]
 
-                atmk = d[6]
-                atmv = d[7]
-                atmr = d[8]
+                arw = self.receptance[i]
+                aow = self.outputv[i]
 
-                atd = d[9]
-                avw = d[10]
+                tmk = self.time_mix_k_ffn[i]
+                tmr = self.time_mix_r_ffn[i]
 
-                arw = d[11]
-                aow = d[12]
-
-                tmk = d[13]
-                tmr = d[14]
-
-                tmkw = d[15]
-                tmrw = d[16]
-                tmvw = d[17]
+                tmkw = self.key_ffn[i]
+                tmrw = self.receptance_ffn[i]
+                tmvw = self.value_ffn[i]
 
                 sx, state = self.SA(x, ln1w, ln1b, state, i,
                                     atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
@@ -214,8 +253,8 @@ class RWKV_RNN(nn.Module):
 
                 x = rx
 
-            return (w[-1] @ torch.layer_norm(
-                x, (self.n_emb,), weight=w[-3], bias=w[-2])), state
+            return (self.postProcess[2] @ torch.layer_norm(
+                x, (self.n_emb,), weight=self.postProcess[0], bias=self.postProcess[1])), state
 
     @ torch.jit.export
     def empty_state(self):

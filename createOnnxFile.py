@@ -85,19 +85,11 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(self, ctx: list[int], statex: torch.Tensor, newctx: list[int]):
-    for i in (range(len(newctx))):
-        x = ctx+newctx[:i+1]
-        o, statex = self.forward(
-            torch.tensor(x), statex)
-    return ctx+newctx, statex
-
-
-tokens = loadContext(model, ctx=[], newctx=ctx1, statex=model.empty_state())
+# tokens = loadContext(model, ctx=[], newctx=ctx1, statex=model.empty_state())
 
 
 input_names = ["tokens", "state"]
-output_names = ["output1"]
+output_names = ["probs", "outstate"]
 
-torch.onnx.export(model, (torch.tensor(tokens[0][-1:]), tokens[1]), f"rwkv-{model.n_layer}-{model.n_emb}-{model.FLOAT_MODE}.onnx", verbose=False,
-                  input_names=input_names, output_names=output_names, export_params=True)
+torch.onnx.export(model, (torch.LongTensor([187]), model.empty_state()), f"rwkv-{model.n_layer}-{model.n_emb}-{model.FLOAT_MODE}.onnx",
+                  input_names=input_names, output_names=output_names, export_params=True, verbose=False)
