@@ -252,10 +252,10 @@ def createRWKVModules(Path, RunDevice, FloatMode):
     if (not "_converted" in Path):
         createTensors(Path[: -4])
         w: List(List(torch.Tensor)) = torch.load(
-            Path[:-4]+"_converted.pth", map_location=RunDevice)
+            Path[:-4]+"_converted.pth", map_location="cpu")
     else:
         w: List(List(torch.Tensor)) = torch.load(
-            Path, map_location=RunDevice)
+            Path, map_location="cpu")
 
     PreProcess = RWKV_PREPROCESS(
         setToProp(w[0]))
