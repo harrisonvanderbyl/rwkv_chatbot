@@ -13,7 +13,6 @@ import types
 import time
 import gc
 import torch
-import torchdynamo
 from src.utils import TOKENIZER
 from tqdm import tqdm
 try:
