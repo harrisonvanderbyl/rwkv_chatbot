@@ -3,6 +3,7 @@ import time
 import gc
 import torch
 from src.utils import TOKENIZER
+import os
 from tqdm import tqdm
 
 from torch.nn import functional as F
@@ -92,4 +93,4 @@ torch.save(
     emptyState, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.emptyState.pt")
 
 torch.onnx.export(model, (torch.LongTensor([187]), emptyState), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.onnx",
-                  input_names=input_names, output_names=output_names, export_params=True, verbose=False, opset_version=17)
+                  input_names=input_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")))
