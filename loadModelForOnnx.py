@@ -60,7 +60,7 @@ def loadModel():
     args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
                                                         message="What float mode do you want to use?",
                                                         choices=[
-                                                            "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
+                                                            "fp32", "bf16", "fp16"],
                                                         )])["FLOAT_MODE"]
 
     # print config
