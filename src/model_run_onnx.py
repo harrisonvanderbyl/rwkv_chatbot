@@ -239,7 +239,7 @@ def empty_state(n_emb, layers, floatMode, device):
     return state
 
 
-def createRWKVModules(Path, RunDevice, FloatMode):
+def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
 
     def setToProp(x):
         x = x.to(dtype=FloatMode, device=RunDevice)
@@ -264,7 +264,7 @@ def createRWKVModules(Path, RunDevice, FloatMode):
         list(map(setToProp, w[2])))
     Layers = []
     print(len(w[1]))
-    groups = 6
+    groups = chunkSize
     for i in range(len(w[1]))[::18*groups]:
         print(i)
         mm = w[1][i:i+18*groups]

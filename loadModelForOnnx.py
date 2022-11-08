@@ -63,6 +63,10 @@ def loadModel():
                                                             "fp32", "bf16", "fp16"],
                                                         )])["FLOAT_MODE"]
 
+    args["CHUNK_SIZE"] = inquirer.text(
+        message="What chunk size do you want to use?", default="128")
+
+    args["CHUNK_SIZE"] = int(args["CHUNK_SIZE"])
     # print config
     print("RUN_DEVICE:", args["RUN_DEVICE"])
     print("FLOAT_MODE:", args["FLOAT_MODE"])
@@ -70,11 +74,11 @@ def loadModel():
 
     torch.set_num_threads(12)
     # opt
-    opt = inquirer.prompt([inquirer.List('opt',
-                                         message="What jit mode do you want to use?",
-                                         choices=[
-                                             "script", "trace", "none"],
-                                         )])["opt"]
+    # opt = inquirer.prompt([inquirer.List('opt',
+    #                                      message="What jit mode do you want to use?",
+    #                                      choices=[
+    #                                          "script", "trace", "none"],
+    #                                      )])["opt"]
 
     args["MODEL_NAME"] = file
     argsnums["ctx_len"] = 4068
@@ -89,7 +93,7 @@ def loadModel():
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
     pre, layers, post = createRWKVModules(
-        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"])
+        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"])
 
     emptyState = empty_state(pre.preProcess[1].shape[0], sum(list(map(lambda x: len(x.ln1w), layers))), torch.float32 if args["FLOAT_MODE"]
                              == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
