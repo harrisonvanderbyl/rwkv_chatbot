@@ -191,7 +191,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
                 None, {"tokens": [chars[-1]], "state": tokens[1]})
 
             chars += [sample_logits(
-                myout[0], temp=TEMPERATURE, top_p_usual=top_p)]
+                torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])
