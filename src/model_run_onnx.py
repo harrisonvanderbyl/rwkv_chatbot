@@ -129,7 +129,7 @@ class RWKV_LAYER(nn.Module):
         self.receptance_ffn = w[16::18]
         self.value_ffn = w[17::18]
 
-        print(len(self.outputv), len(self.ln1w))
+        print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
         self.eval()
@@ -190,7 +190,6 @@ class RWKV_LAYER(nn.Module):
     def forward(self, x: torch.Tensor, state: torch.Tensor):
 
         with torch.no_grad():
-
             for i in range(len(self.ln1w)):
 
                 ln1w = self.ln1w[i]

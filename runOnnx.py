@@ -57,6 +57,9 @@ post = ort.InferenceSession(
     f"{loadFile}/postprocess.onnx", providers=providers)
 layers = os.listdir(loadFile)
 layers = filter(lambda x: "layer" in x, layers)
+layers = list(layers)
+layers.sort()
+print(layers)
 layers = list(map(lambda x: ort.InferenceSession(
     f"{loadFile}/{x}", providers=providers), layers))
 ###### A good prompt for chatbot ######
