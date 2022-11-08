@@ -92,7 +92,6 @@ def loadModel():
     model = RWKV_RNN(args, argsnums)
 
     emptyState = model.empty_state()
-    preprocess = model.preProcess[0]
 
     if (opt == "script"):
 
@@ -101,8 +100,8 @@ def loadModel():
         model = torch.jit.optimize_for_inference(model)
     elif (opt == "trace"):
         model = torch.jit.trace(
-            model, ((preprocess[187]), model.empty_state()))
+            model, (torch.LongTensor([187]), model.empty_state()))
         model = torch.jit.freeze(model)
         model = torch.jit.optimize_for_inference(model)
 
-    return model, emptyState, preprocess
+    return model, emptyState

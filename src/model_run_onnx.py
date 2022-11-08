@@ -211,12 +211,12 @@ class RWKV_RNN(nn.Module):
         rwkv = (r * a) / b
         return sx+(ow @ rwkv), state
 
-    def forward(self, ctx: torch.Tensor, state: torch.Tensor):
+    def forward(self, ctx: torch.LongTensor, state: torch.Tensor):
 
         with torch.no_grad():
 
             x = torch.layer_norm(
-                ctx, (self.n_emb,), weight=self.preProcess[1], bias=self.preProcess[2])
+                self.preProcess[0][ctx[0]], (self.n_emb,), weight=self.preProcess[1], bias=self.preProcess[2])
 
             for i in range(len(self.ln1w)):
 

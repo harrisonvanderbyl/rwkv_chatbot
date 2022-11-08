@@ -39,7 +39,6 @@ elif floatmode == "torch.float32":
 elif floatmode == 15:
     floatmode = torch.bfloat16
 
-preprocess = torch.load(loadFile+".preprocess.pt")
 emptyState = torch.load(loadFile+".emptyState.pt")
 
 
@@ -148,20 +147,19 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
         o, statex = self.run(None,
-                             {self.get_inputs()[0].name: preprocess[x[-1]].numpy(), self.get_inputs()[1].name: statex})
+                             {self.get_inputs()[0].name: [x[-1]], self.get_inputs()[1].name: statex})
 
     return ctx+newctx, statex
 
 
-tokens = loadContext(model, ctx=[], newctx=ctx1, statex=emptyState)
+tokens = loadContext(model, ctx=[], newctx=ctx1, statex=emptyState.to("cpu"))
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    out = torch.tensor(ozut)
-    probs = F.softmax(out, dim=-1)
+    probs = F.softmax(ozut.float(), dim=-1)
 
     sorted_probs = torch.sort(probs, descending=True)[0]
     cumulative_probs = torch.cumsum(
@@ -190,7 +188,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = model.run(
-                None, {"tokens": preprocess[chars[-1]].numpy(), "state": tokens[1]})
+                None, {"tokens": [chars[-1]], "state": tokens[1]})
 
             chars += [sample_logits(
                 myout[0], temp=TEMPERATURE, top_p_usual=top_p)]
