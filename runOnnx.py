@@ -16,8 +16,7 @@ import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
 files = os.listdir("onnx")
-# filter by ending in .pth
-files = [f for f in files if f.endswith(".onnx")]
+
 
 questions = [
     inquirer.List('file',
@@ -25,21 +24,21 @@ questions = [
                   choices=files,
                   ),
 ]
-loadFile = "onnx/"+inquirer.prompt(questions)["file"][:-5]
+loadFile = "onnx/"+inquirer.prompt(questions)["file"]
 
 
 embed = int(loadFile.split("-")[2])
 layers = int(loadFile.split("-")[1])
 floatmode = (loadFile.split("-")[3])
 
-if floatmode == 5:
+if floatmode == "torch.float16":
     floatmode = torch.float16
 elif floatmode == "torch.float32":
     floatmode = torch.float32
-elif floatmode == 15:
+elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
-emptyState = torch.load(loadFile+".emptyState.pt")
+emptyState = torch.load(loadFile+"/emptyState.pt")
 
 
 providers = [
@@ -53,7 +52,12 @@ providers = [
     'CPUExecutionProvider',
 ]
 
-model = ort.InferenceSession(f"{loadFile}.onnx", providers=providers)
+pre = ort.InferenceSession(f"{loadFile}/preprocess.onnx", providers=providers)
+post = ort.InferenceSession(
+    f"{loadFile}/postprocess.onnx", providers=providers)
+layers = os.listdir(loadFile)
+layers = filter(lambda x: "layer" in x, layers)
+layers = list(map(lambda x: ort.InferenceSession(f"{loadFile}/{x}"), layers))
 ###### A good prompt for chatbot ######
 context = '''
 The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
@@ -140,19 +144,20 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(self, ctx: list[int], statex, newctx: list[int]):
-    print(self.get_inputs()[0].name)
-    print(self.get_inputs()[1].name)
+def loadContext(ctx: list[int], statex, newctx: list[int]):
     statex = statex.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, statex = self.run(None,
-                             {self.get_inputs()[0].name: [x[-1]], self.get_inputs()[1].name: statex})
+        o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
+
+        for l in layers:
+            o, statex = l.run(None,
+                              {l.get_inputs()[0].name: o, l.get_inputs()[1].name: statex})
 
     return ctx+newctx, statex
 
 
-tokens = loadContext(model, ctx=[], newctx=ctx1, statex=emptyState.to("cpu"))
+tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState.to("cpu"))
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -187,8 +192,15 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
-            myout = model.run(
-                None, {"tokens": [chars[-1]], "state": tokens[1]})
+
+            statex = tokens[1]
+            o, = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
+
+            for l in layers:
+                o, statex = l.run(None,
+                                  {l.get_inputs()[0].name: o, l.get_inputs()[1].name: statex})
+
+            myout = (post.run(None, {post.get_inputs()[0].name: o})[0], statex)
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

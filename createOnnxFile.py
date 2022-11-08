@@ -13,7 +13,7 @@ from torch.nn import functional as F
 import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-model, emptyState = loadModelForOnnx.loadModel()
+pre, layers, post, emptyState = loadModelForOnnx.loadModel()
 ###### A good prompt for chatbot ######
 context = '''
 The '''
@@ -88,9 +88,27 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 input_names = ["tokens", "state"]
 output_names = ["probs", "outstate"]
+try:
+    os.mkdir("onnx")
+except:
+    pass
 
+try:
+    os.mkdir(
+        f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}")
+except:
+    pass
 torch.save(
-    emptyState, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.emptyState.pt")
+    emptyState, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/emptyState.pt")
 
-torch.onnx.export(model, (torch.LongTensor([187]), emptyState), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.onnx",
-                  input_names=input_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")))
+torch.onnx.export(pre, (torch.LongTensor([187])), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/preprocess.onnx",
+                  input_names=input_names[0:1], output_names=output_names[0:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")))
+
+testOut = pre(torch.LongTensor([187]))
+
+for m in range(len(layers)):
+    torch.onnx.export(layers[m], (testOut, emptyState), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/layer{m}.onnx",
+                      input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")))
+
+torch.onnx.export(post, (testOut), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/postprocess.onnx", input_names=output_names[:1],
+                  output_names=output_names[:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")))

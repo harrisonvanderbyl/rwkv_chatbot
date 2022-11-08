@@ -4,7 +4,7 @@
 
 from genericpath import exists
 from typing import List
-from src.model_run_onnx import RWKV_RNN
+from src.model_run_onnx import createRWKVModules, empty_state
 import numpy as np
 import math
 import os
@@ -88,19 +88,21 @@ def loadModel():
     ########################################################################################################
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
-    model = RWKV_RNN(args, argsnums)
+    pre, layers, post = createRWKVModules(
+        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"])
 
-    emptyState = model.empty_state()
+    emptyState = empty_state(pre.preProcess[1].shape[0], sum(list(map(lambda x: len(x.ln1w), layers))), torch.float32 if args["FLOAT_MODE"]
+                             == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
 
-    if (opt == "script"):
+    # if (opt == "script"):
 
-        model = torch.jit.script(model)
-        model = torch.jit.freeze(model)
-        model = torch.jit.optimize_for_inference(model)
-    elif (opt == "trace"):
-        model = torch.jit.trace(
-            model, (torch.LongTensor([187]), model.empty_state()))
-        model = torch.jit.freeze(model)
-        model = torch.jit.optimize_for_inference(model)
+    #     model = torch.jit.script(model)
+    #     model = torch.jit.freeze(model)
+    #     model = torch.jit.optimize_for_inference(model)
+    # elif (opt == "trace"):
+    #     model = torch.jit.trace(
+    #         model, (torch.LongTensor([187]), model.empty_state()))
+    #     model = torch.jit.freeze(model)
+    #     model = torch.jit.optimize_for_inference(model)
 
-    return model, emptyState
+    return pre, layers, post, emptyState
