@@ -13,6 +13,7 @@ import types
 import time
 import gc
 import torch
+import torchdynamo
 from src.utils import TOKENIZER
 from tqdm import tqdm
 try:
@@ -70,7 +71,11 @@ def loadModel():
 
     torch.set_num_threads(12)
     # opt
-    opt = "jit"  # none // jit
+    opt = inquirer.prompt([inquirer.List('opt',
+                                         message="What jit mode do you want to use?",
+                                         choices=[
+                                             "script", "trace", "none"],
+                                         )])["opt"]
 
     args["MODEL_NAME"] = file
     argsnums["ctx_len"] = 4068
@@ -85,9 +90,19 @@ def loadModel():
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
     model = RWKV_RNN(args, argsnums)
-    if (opt == "jit"):
 
+    emptyState = model.empty_state()
+    preprocess = model.preProcess[0]
+
+    if (opt == "script"):
+
+        model = torch.jit.script(model)
+        model = torch.jit.freeze(model)
+        model = torch.jit.optimize_for_inference(model)
+    elif (opt == "trace"):
         model = torch.jit.trace(
-            model, (torch.LongTensor([187]), model.empty_state()))
+            model, ((preprocess[187]), model.empty_state()))
+        model = torch.jit.freeze(model)
+        model = torch.jit.optimize_for_inference(model)
 
-    return model
+    return model, emptyState, preprocess

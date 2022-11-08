@@ -125,6 +125,10 @@ class RWKV_RNN(nn.Module):
             x = x.to(dtype=self.FLOAT_MODE, device=self.RUN_DEVICE)
             return x
 
+        def setToCpu(x):
+            x = x.to(dtype=self.FLOAT_MODE, device="cpu")
+            return x
+
         self.preProcess = list(map(setToProp, self.preProcess))
         self.ln1w = list(map(setToProp, self.ln1w))
         self.ln1b = list(map(setToProp, self.ln1b))
@@ -207,15 +211,13 @@ class RWKV_RNN(nn.Module):
         rwkv = (r * a) / b
         return sx+(ow @ rwkv), state
 
-    def forward(self, ctx: torch.LongTensor, state: torch.Tensor):
-        state = state.to(
-            dtype=self.FLOAT_MODE)
+    def forward(self, ctx: torch.Tensor, state: torch.Tensor):
+
         with torch.no_grad():
 
-            x: torch.Tensor = self.preProcess[0][ctx[0]]
-
             x = torch.layer_norm(
-                x, (self.n_emb,), weight=self.preProcess[1], bias=self.preProcess[2])
+                ctx, (self.n_emb,), weight=self.preProcess[1], bias=self.preProcess[2])
+
             for i in range(len(self.ln1w)):
 
                 ln1w = self.ln1w[i]

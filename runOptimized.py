@@ -15,46 +15,11 @@ import onnxruntime as ort
 import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-files = os.listdir("onnx")
-# filter by ending in .pth
-files = [f for f in files if f.endswith(".onnx")]
+import loadModelForOnnx
+# context = "\n深圳是" # test Chinese
+# context = "\n東京は" # test Japanese
+model, emptyState, preprocess = loadModelForOnnx.loadModel()
 
-questions = [
-    inquirer.List('file',
-                  message="What model do you want to use?",
-                  choices=files,
-                  ),
-]
-loadFile = "onnx/"+inquirer.prompt(questions)["file"][:-5]
-
-
-embed = int(loadFile.split("-")[2])
-layers = int(loadFile.split("-")[1])
-floatmode = (loadFile.split("-")[3])
-
-if floatmode == 5:
-    floatmode = torch.float16
-elif floatmode == "torch.float32":
-    floatmode = torch.float32
-elif floatmode == 15:
-    floatmode = torch.bfloat16
-
-preprocess = torch.load(loadFile+".preprocess.pt")
-emptyState = torch.load(loadFile+".emptyState.pt")
-
-
-providers = [
-    ('CUDAExecutionProvider', {
-        'device_id': 0,
-        'arena_extend_strategy': 'kNextPowerOfTwo',
-        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
-        'cudnn_conv_algo_search': 'EXHAUSTIVE',
-        'do_copy_in_default_stream': True,
-    }),
-    'CPUExecutionProvider',
-]
-
-model = ort.InferenceSession(f"{loadFile}.onnx", providers=providers)
 ###### A good prompt for chatbot ######
 context = '''
 The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
@@ -142,13 +107,10 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 
 def loadContext(self, ctx: list[int], statex, newctx: list[int]):
-    print(self.get_inputs()[0].name)
-    print(self.get_inputs()[1].name)
-    statex = statex.numpy()
+
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, statex = self.run(None,
-                             {self.get_inputs()[0].name: preprocess[x[-1]].numpy(), self.get_inputs()[1].name: statex})
+        o, statex = self.forward(preprocess[x[-1]], statex)
 
     return ctx+newctx, statex
 
@@ -189,8 +151,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
-            myout = model.run(
-                None, {"tokens": preprocess[chars[-1]].numpy(), "state": tokens[1]})
+            myout = model.forward(preprocess[chars[-1]], tokens[1])
 
             chars += [sample_logits(
                 myout[0], temp=TEMPERATURE, top_p_usual=top_p)]

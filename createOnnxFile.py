@@ -12,7 +12,7 @@ from torch.nn import functional as F
 import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-model = loadModelForOnnx.loadModel()
+model, emptyState, preprocess = loadModelForOnnx.loadModel()
 ###### A good prompt for chatbot ######
 context = '''
 The '''
@@ -27,9 +27,6 @@ top_p_newline = 0.9  # only used in TOKEN_MODE = char
 DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
-
-
-print(model.n_layer)
 
 
 print(f'\nOptimizing speed...')
@@ -91,5 +88,10 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 input_names = ["tokens", "state"]
 output_names = ["probs", "outstate"]
 
-torch.onnx.export(model, (torch.LongTensor([187]), model.empty_state()), f"rwkv-{model.n_layer}-{model.n_emb}-{model.FLOAT_MODE}.onnx",
+torch.save(
+    preprocess, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.preprocess.pt")
+torch.save(
+    emptyState, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.emptyState.pt")
+
+torch.onnx.export(model, (preprocess[187], emptyState), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}.onnx",
                   input_names=input_names, output_names=output_names, export_params=True, verbose=False, opset_version=17)
