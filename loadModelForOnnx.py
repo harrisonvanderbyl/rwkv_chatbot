@@ -89,7 +89,7 @@ def loadModel():
     argsnums["my_pos_emb"] = 0
     os.environ["RWKV_RUN_DEVICE"] = args["RUN_DEVICE"]
 
-    if (torch.cuda.device_count > 1):
+    if (torch.cuda.device_count() > 1):
         args["RUN_DEVICE"] = ["cuda:0"]*int(inquirer.text(
             message="Detected at least 2 Cuda Devices, how many chunks would you like to store on primary device, before offloading additional chunks?", default="20")) + ["cuda:1"]*20
     else:
