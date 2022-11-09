@@ -155,12 +155,12 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = (pre.forward(
-                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]), tokens[1])
+                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]).to(device=layers[0].ln1w.device), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 
             chars += [sample_logits(
-                post.forward(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]
+                post.forward(myout[0].to("cpu")), temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])

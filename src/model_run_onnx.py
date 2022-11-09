@@ -260,18 +260,18 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
             Path, map_location="cpu")
 
     PreProcess = RWKV_PREPROCESS(
-        setToProp(w[0]))
+        setToCpu(w[0]))
 
     PostProcess = RWKV_POSTPROCESS(
-        list(map(setToProp, w[2])))
-    Layers = []
+        list(map(setToCpu, w[2])))
+    Layers: list(RWKV_LAYER) = []
     print(len(w[1]))
     groups = chunkSize
     for i in range(len(w[1]))[::18*groups]:
         print(i)
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
-        Layers = Layers+[RWKV_LAYER(
+        Layers: List[RWKV_LAYER] = Layers+[RWKV_LAYER(
             list(map(setToProp, mm)), int(i/18))]
 
     return PreProcess, Layers, PostProcess
