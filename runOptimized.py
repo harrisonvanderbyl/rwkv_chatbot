@@ -111,7 +111,7 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
     for i in tqdm.tqdm(range(len(newctx))):
 
         x = ctx+newctx[:i+1]
-        o = pre.forward([x[-1]])
+        o = pre.forward([x[-1]]).to(device=layers[0].ln1w.device)
         for s in self:
             o, statex = s.forward(o, statex)
 
