@@ -55,7 +55,7 @@ providers = [
     'CPUExecutionProvider',
 ]
 
-providers2 = providers*3 + 10*[
+providers2 = [providers]*3 + 10*[[
     ('CUDAExecutionProvider', {
         'device_id': 1,
         'arena_extend_strategy': 'kNextPowerOfTwo',
@@ -64,7 +64,7 @@ providers2 = providers*3 + 10*[
         'do_copy_in_default_stream': True,
     }),
     'CPUExecutionProvider',
-]
+]]
 
 
 pre = ort.InferenceSession(
