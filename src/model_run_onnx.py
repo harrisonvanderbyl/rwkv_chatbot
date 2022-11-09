@@ -105,6 +105,7 @@ class RWKV_POSTPROCESS(nn.Module):
         self.postProcess = postprocess
 
     def forward(self, x: torch.Tensor):
+        x = x.to(device=self.postProcess[0].device)
         return (self.postProcess[2] @ torch.layer_norm(
                 x, (self.postProcess[0].shape[0],), weight=self.postProcess[0], bias=self.postProcess[1]))
 
@@ -191,6 +192,8 @@ class RWKV_LAYER(nn.Module):
         return sx+(ow @ rwkv), state
 
     def forward(self, x: torch.Tensor, state: torch.Tensor):
+        x = x.to(device=self.ln1b[0].device)
+        state = state.to(device=self.ln1b[0].device)
 
         with torch.no_grad():
             for i in range(len(self.ln1w)):
@@ -243,9 +246,8 @@ def empty_state(n_emb, layers, floatMode, device):
 
 def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
 
-    def setToProp(x):
-        x = x.to(dtype=FloatMode, device=RunDevice)
-        return x
+    def setToProp(i):
+        return lambda x: x.to(dtype=FloatMode, device=RunDevice[i])
 
     def setToCpu(x):
         x = x.to(dtype=FloatMode, device="cpu")
@@ -263,7 +265,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
         setToCpu(w[0]))
 
     PostProcess = RWKV_POSTPROCESS(
-        list(map(setToCpu, w[2])))
+        list(map(setToProp(-1), w[2])))
     Layers: list(RWKV_LAYER) = []
     print(len(w[1]))
     groups = chunkSize
@@ -272,6 +274,6 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
         Layers: List[RWKV_LAYER] = Layers+[RWKV_LAYER(
-            list(map(setToProp, mm)), int(i/18))]
+            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18))]
 
     return PreProcess, Layers, PostProcess

@@ -111,7 +111,7 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
     for i in tqdm.tqdm(range(len(newctx))):
 
         x = ctx+newctx[:i+1]
-        o = pre.forward([x[-1]]).to(device=layers[0].ln1w[0].device)
+        o = pre.forward([x[-1]])
         for s in self:
             o, statex = s.forward(o, statex)
 
@@ -155,7 +155,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = (pre.forward(
-                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]).to(device=layers[0].ln1w[0].device), tokens[1])
+                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 
