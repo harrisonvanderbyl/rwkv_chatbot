@@ -159,7 +159,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = (pre.forward(
-                [chars[-1]]*ist + [char[-2]]*snd + [char[-3]]*trd), tokens[1])
+                [chars[-1]]*ist + [chars[-2]]*snd + [chars[-3]]*trd), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 
