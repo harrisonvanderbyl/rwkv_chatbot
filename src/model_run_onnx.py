@@ -238,7 +238,7 @@ class RWKV_LAYER(nn.Module):
 
 def empty_state(n_emb, layers, floatMode, device):
     state = torch.zeros(
-        layers * 5, n_emb, device=device, dtype=floatMode)
+        layers * 5, n_emb, device="cpu", dtype=floatMode)
     for i in range(layers):
         state[5*i+4] -= 1e30
     return state
