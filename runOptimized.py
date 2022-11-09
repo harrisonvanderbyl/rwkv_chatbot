@@ -152,17 +152,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         gc.collect()
         torch.cuda.empty_cache()
 
-    ist = int(inquirer.text("tkn -1 weight") or "5")
-    snd = int(inquirer.text("tkn -2 weight") or "1")
-    trd = int(inquirer.text("tkn -3 weight") or "0")
-
     record_time('preprocess')
     tokens = (origistate[0], origistate[1].clone())
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = (pre.forward(
-                [chars[-1]]*ist + [chars[-2]]*snd + [chars[-3]]*trd), tokens[1])
+                [chars[-1]]*5 + [chars[-2]]), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 
