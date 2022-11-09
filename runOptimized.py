@@ -18,7 +18,7 @@ import tqdm
 import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-model, emptyState, preprocess = loadModelForOnnx.loadModel()
+pre, layers, post, emptyState = loadModelForOnnx.loadModel()
 
 ###### A good prompt for chatbot ######
 context = '''
@@ -109,13 +109,16 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
     for i in tqdm.tqdm(range(len(newctx))):
+
         x = ctx+newctx[:i+1]
-        o, statex = self.forward(preprocess[x[-1]], statex)
+        o = pre.forward([x[-1]])
+        for s in self:
+            o, statex = s.forward(o, statex)
 
     return ctx+newctx, statex
 
 
-tokens = loadContext(model, ctx=[], newctx=ctx1, statex=emptyState)
+tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -151,10 +154,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
-            myout = model.forward(preprocess[chars[-1]], tokens[1])
+            myout = (pre.forward(
+                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]), tokens[1])
+            for l in layers:
+                myout = l.forward(myout[0], myout[1])
 
             chars += [sample_logits(
-                myout[0], temp=TEMPERATURE, top_p_usual=top_p)]
+                post.forward(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])
