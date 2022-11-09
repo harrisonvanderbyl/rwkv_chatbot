@@ -15,6 +15,9 @@ import onnxruntime as ort
 import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
+
+so = ort.SessionOptions()
+so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 files = os.listdir("onnx")
 
 
@@ -52,16 +55,29 @@ providers = [
     'CPUExecutionProvider',
 ]
 
-pre = ort.InferenceSession(f"{loadFile}/preprocess.onnx", providers=providers)
+providers2 = providers*3 + 10*[
+    ('CUDAExecutionProvider', {
+        'device_id': 1,
+        'arena_extend_strategy': 'kNextPowerOfTwo',
+        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
+        'cudnn_conv_algo_search': 'EXHAUSTIVE',
+        'do_copy_in_default_stream': True,
+    }),
+    'CPUExecutionProvider',
+]
+
+
+pre = ort.InferenceSession(
+    f"{loadFile}/preprocess.onnx", providers=providers, sess_options=so)
 post = ort.InferenceSession(
-    f"{loadFile}/postprocess.onnx", providers=providers)
+    f"{loadFile}/postprocess.onnx", providers=providers, sess_options=so)
 layers = os.listdir(loadFile)
 layers = filter(lambda x: "layer" in x, layers)
 layers = list(layers)
 layers.sort()
 print(layers)
 layers = list(map(lambda x: ort.InferenceSession(
-    f"{loadFile}/{x}", providers=providers), layers))
+    f"{loadFile}/{x[1]}", providers=providers2[x[0]], sess_options=so), enumerate(layers)))
 ###### A good prompt for chatbot ######
 context = '''
 The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
