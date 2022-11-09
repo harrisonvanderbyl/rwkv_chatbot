@@ -120,6 +120,10 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
 tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
 
+ist = int(inquirer.text("tkn -1 weight") or "5")
+snd = int(inquirer.text("tkn -2 weight") or "1")
+trd = int(inquirer.text("tkn -3 weight") or "0")
+
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     # out[self.UNKNOWN_CHAR] = -float('Inf')
@@ -155,7 +159,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             myout = (pre.forward(
-                [chars[-1], chars[-1], chars[-1], chars[-1], chars[-2]]), tokens[1])
+                [chars[-1]]*ist + [char[-2]]*snd + [char[-3]]*trd), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 
