@@ -273,7 +273,13 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
         print(i)
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
-        Layers: List[RWKV_LAYER] = Layers+[RWKV_LAYER(
-            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18))]
+        modelLayer = RWKV_LAYER(
+            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18))
+        modelLayer = torch.jit.trace(
+            modelLayer, (PreProcess.forward([127]), empty_state(PreProcess.preProcess.shape[1], int(len(w[1])/18), FloatMode, int(i/18))))
 
-    return PreProcess, Layers, PostProcess
+        modelLayer = torch.jit.optimize_for_inference(modelLayer)
+        torch.jit.enable_onednn_fusion(modelLayer)
+        Layers: List[RWKV_LAYER] = Layers+[modelLayer]
+
+    return PreProcess, Layers, PostProcess, int(len(w[1])/18)

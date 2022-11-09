@@ -111,7 +111,7 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
     for i in tqdm.tqdm(range(len(newctx))):
 
         x = ctx+newctx[:i+1]
-        o = pre.forward([x[-1]])
+        o = pre.preProcess[x[-1]]
         for s in self:
             o, statex = s.forward(o, statex)
 
@@ -157,8 +157,9 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
-            myout = (pre.forward(
-                [chars[-1]]*5 + [chars[-2]]), tokens[1])
+            myout = (pre.preProcess[chars[-1]], tokens[1])
+            # (
+            #     [chars[-1]]*5 + [chars[-2]]), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
 

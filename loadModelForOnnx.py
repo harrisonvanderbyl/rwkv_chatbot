@@ -98,10 +98,10 @@ def loadModel():
     ########################################################################################################
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
-    pre, layers, post = createRWKVModules(
+    pre, layers, post, n_layer = createRWKVModules(
         FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"])
 
-    emptyState = empty_state(pre.preProcess[1].shape[0], sum(list(map(lambda x: len(x.ln1w), layers))), torch.float32 if args["FLOAT_MODE"]
+    emptyState = empty_state(pre.preProcess[1].shape[0], n_layer, torch.float32 if args["FLOAT_MODE"]
                              == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
 
     # if (opt == "script"):
