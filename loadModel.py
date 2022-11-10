@@ -116,8 +116,8 @@ def loadModel():
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
     model = RWKV_RNN(args, argsnums, layerdist)
-    if (opt == "jit"):
+    # if (opt == "jit"):
 
-        model = torch.jit.script(model)
+    #     model = torch.jit.script(model)
 
     return model

@@ -3,6 +3,7 @@
 ########################################################################################################
 
 from ast import Delete
+from functools import reduce
 import types
 import torch
 import math
@@ -39,6 +40,13 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
 
     out = torch.multinomial(probs.float(), 2, True)
     return out
+
+
+def isIn(a: list(dict(dict(list(int)))), b: dict(list(int))):
+    for i in a:
+        if i["ctx"] == b["ctx"]:
+            return True
+    return False
 
 
 class RWKV_RNN(nn.Module):
@@ -336,6 +344,10 @@ class RWKV_RNN(nn.Module):
                     {"score": score*0.9+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
+        # remove duplicates using reduce
+
+        options = reduce(lambda x, y: x if isIn(x, y) else x+[y], options, [])
+        options = list({v['ctx']: v for v in options}.values())
         options = options[:6]
         scores = list(map(lambda x: x["score"], options))
         cumscore = sum(scores)
