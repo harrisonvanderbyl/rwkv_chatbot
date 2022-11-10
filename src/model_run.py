@@ -42,7 +42,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
     return out
 
 
-def isIn(a: list(dict(dict(list(int)))), b: dict(list(int))):
+def isIn(a, b):
     for i in a:
         if i["ctx"] == b["ctx"]:
             return True
