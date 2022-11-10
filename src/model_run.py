@@ -347,7 +347,6 @@ class RWKV_RNN(nn.Module):
         # remove duplicates using reduce
 
         options = reduce(lambda x, y: x if isIn(x, y) else x+[y], options, [])
-        options = list({v['ctx']: v for v in options}.values())
         options = options[:6]
         scores = list(map(lambda x: x["score"], options))
         cumscore = sum(scores)
