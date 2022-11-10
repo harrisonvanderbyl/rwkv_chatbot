@@ -135,10 +135,10 @@ model_tokens = tokenizer.tokenizer.encode(context)
 
 
 saveStates = {}
-saveStates["empty"] = ([187], init_state.clone())
+saveStates["empty"] = ([187, 187], init_state.clone())
 
 # Put the prompt into the init_state
-init_state = model.loadContext([], model_tokens, init_state)
+init_state = model.loadContext([187, 187], model_tokens, init_state)
 saveStates["questions"] = (init_state[0], init_state[1].clone())
 
 src_model_tokens = model_tokens.copy()
