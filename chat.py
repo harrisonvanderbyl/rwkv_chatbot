@@ -191,7 +191,7 @@ async def on_message(message):
         begin = len(currstate[0] + tknew)
 
         currstate = model.loadContext(
-            currstate[0], currstate[-1:]+tknew, currstate[1])
+            currstate[0], tknew, currstate[1])
         state = [{"score": 1, "state": currstate[1], "ctx": currstate[0]}]
         with torch.no_grad():
             for i in tqdm(range(100)):
