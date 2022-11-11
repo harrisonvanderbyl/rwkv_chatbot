@@ -325,7 +325,7 @@ class RWKV_RNN(nn.Module):
 
             ctx = currstate[i]["ctx"]
             if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
-                currstate[i]["score"] *= 2.0
+
                 options.append(currstate[i])
                 continue
 
