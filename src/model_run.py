@@ -207,7 +207,7 @@ class RWKV_RNN(nn.Module):
                 x = x + pos_emb
 
             if self.RUN_DEVICE == 'cuda':
-                x = x.to(device=self.procDevice, non_blocking=True)
+                x = x.to(device="cuda:0", non_blocking=True)
 
             for o in range(self.n_layer):
                 i = o
