@@ -39,6 +39,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
         probs = probs.pow(1.0 / temperature)
 
     out = torch.multinomial(probs.float(), 2, True)
+    # print(sorted_probs[:3])
     return out
 
 
@@ -336,22 +337,22 @@ class RWKV_RNN(nn.Module):
             ttt = self.sample_logits(
                 out1,
                 ctx,
-                temperature=temp,
-                top_p_usual=top_p,
+                temperature=1.2,
+                top_p_usual=0.9,
             )
 
             for j in range(len(ttt)):
                 options.append(
-                    {"score": score*0.9+out1[ttt[j]], "ctx": ctx+[ttt[j]], "state": state})
+                    {"score": (score*-0.5+out1[ttt[j]]/100.0), "ctx": ctx+[ttt[j]], "state": state})
 
         options.sort(key=lambda x: x["score"], reverse=True)
         # remove duplicates using reduce
 
         options = reduce(lambda x, y: x if isIn(x, y) else x+[y], options, [])
-        options = options[:6]
-        scores = list(map(lambda x: x["score"], options))
-        cumscore = sum(scores)
-        options = list(map(lambda x: {
-                       "score": x["score"]/cumscore, "ctx": x["ctx"], "state": x["state"]}, options))
+        options = options[:4]
+        # scores = list(map(lambda x: x["score"], options))
+        # cumscore = sum(scores)
+        # options = list(map(lambda x: {
+        #                "score": x["score"]/cumscore, "ctx": x["ctx"], "state": x["state"]}, options))
 
         return options

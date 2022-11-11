@@ -20,18 +20,11 @@ import loadModel
 model = loadModel.loadModel()
 ###### A good prompt for chatbot ######
 context = '''
-Information: 
-Language: javascript
-Code:
+The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
 
-// create an array of words
-var words = ["hello", "world", "goodbye", "moon", "sun", "stars"];
+User: What is 5*5? show your working.
 
-// get a random word
-var word = words[Math.floor(Math.random() * words.length)];
-
-// print the word
-'''
+RWKV:'''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
@@ -53,7 +46,7 @@ init_state = state1
 
 
 print(f'\nOptimizing speed...')
-model.forward([187], state1)
+model.forward([187, 187], state1)
 gc.collect()
 torch.cuda.empty_cache()
 
@@ -105,7 +98,7 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-state = model.loadContext(newctx=ctx1)
+state = model.loadContext(ctx=[127, 127], newctx=ctx1)
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
@@ -125,9 +118,10 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = model.run(
                 state, temp=TEMPERATURE, top_p=top_p, endChars=[])
-            print(tokenizer.tokenizer.decode(state[0]["ctx"]))
+            print(tokenizer.tokenizer.decode(
+                state[0]["ctx"])+str(state[0]["score"]), end='')
+
     state = (state[0]["ctx"], state[0]["state"])
-    print(tokenizer.tokenizer.decode(state[0]))
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')
