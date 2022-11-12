@@ -116,9 +116,9 @@ class RWKV_RNN(nn.Module):
                             processedLayer = "cpu"
 
                     w[x] = w[x].to(device=processedLayer, non_blocking=True)
-                # if (args["RUN_DEVICE"] == 'cuda'):
-                #     if (w[x].device.type == "cpu"):
-                #         w[x] = w[x].pin_memory()
+                if (args["RUN_DEVICE"] == 'cuda'):
+                    if (w[x].device.type == "cpu"):
+                        w[x] = w[x].pin_memory()
                 if ('blocks.' not in x) or ('blocks.0.' in x):
                     if print_need_newline:
                         print('\n', end='')
@@ -337,7 +337,7 @@ class RWKV_RNN(nn.Module):
             ttt = self.sample_logits(
                 out1,
                 ctx,
-                temperature=1.2,
+                temperature=0.8,
                 top_p_usual=0.9,
             )
 
