@@ -38,7 +38,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
     if temperature != 1.0:
         probs = probs.pow(1.0 / temperature)
 
-    out = torch.multinomial(probs.float(), 2, True)
+    out = torch.multinomial(probs.float(), 1, True)
     # print(sorted_probs[:3])
     return out
 
