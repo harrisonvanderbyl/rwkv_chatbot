@@ -19,12 +19,29 @@ import loadModel
 # context = "\n東京は" # test Japanese
 model = loadModel.loadModel()
 ###### A good prompt for chatbot ######
-context = '''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
+user = "User"
+interface = ":"
+bot = "RWKV"
+context = f'''
+The following is a conversation between a highly knowledgeable and intelligent AI assistant called {bot}, and a human user called {user}. In the following interactions, {user} and {bot} converse in natural language, and {bot} always answer {user}'s questions. {bot} is very smart, polite and humorous. {bot} knows a lot, and always tells the truth. The conversation begins.
 
-User: What is 5*5? show your working.
+{user}{interface} who is president of usa?
 
-RWKV:'''
+{bot}{interface} It’s Joe Biden; he was sworn in earlier this year.
+
+{user}{interface} french revolution what year
+
+{bot}{interface} It started in 1789, but it lasted 10 years until 1799.
+
+{user}{interface} guess i marry who ?
+
+{bot}{interface} Only if you tell me more about yourself - what are your interests?
+
+{user}{interface} wat is lhc
+
+{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
+
+'''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
@@ -119,9 +136,11 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             state = model.run(
                 state, temp=TEMPERATURE, top_p=top_p, endChars=[])
             print(tokenizer.tokenizer.decode(
-                state[0]["ctx"])+str(state[0]["score"]), end='')
+                state[0]["ctx"][-1]), end='')
 
     state = (state[0]["ctx"], state[0]["state"])
+
+    "1.87"
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')

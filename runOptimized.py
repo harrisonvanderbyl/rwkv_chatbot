@@ -1,3 +1,7 @@
+import matplotlib.pyplot as plt
+import loadModelForOnnx
+import tqdm
+import onnxruntime as ort
 from genericpath import exists
 from typing import List
 import numpy as np
@@ -8,14 +12,16 @@ import torch
 from src.utils import TOKENIZER
 import inquirer
 from torch.nn import functional as F
+
+from sty import Style, RgbFg, fg
+
+fg.orange = Style(RgbFg(255, 150, 50))
+
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
-import onnxruntime as ort
-import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
 pre, layers, post, emptyState = loadModelForOnnx.loadModel()
@@ -154,6 +160,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
     record_time('preprocess')
     tokens = (origistate[0], origistate[1].clone())
+    xout = 0.0
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
@@ -162,17 +169,22 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             #     [chars[-1]]*5 + [chars[-2]]), tokens[1])
             for l in layers:
                 myout = l.forward(myout[0], myout[1])
-
+            rmout = myout[0]
+            xout = post.forward(rmout)
             chars += [sample_logits(
-                post.forward(myout[0].to("cpu")), temp=TEMPERATURE, top_p_usual=top_p)]
+                xout, temp=TEMPERATURE, top_p_usual=top_p)]
+
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])
 
             if '\ufffd' not in char:
-                print(char, end="", flush=True)
+                fg.orange = Style(RgbFg(int((xout[chars[-1]])*255), 0, 0))
+
+                print(fg.orange+char, end="", flush=True)
 
     record_time('total')
+
     # print(f'\n\n{time_slot}\n\n')
     print(
         f"\n\n--- preprocess {round(time_slot['preprocess'], 2)}s, generation {round(time_slot['total']-time_slot['preprocess'], 2)}s ", end=''

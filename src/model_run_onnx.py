@@ -140,11 +140,11 @@ class RWKV_LAYER(nn.Module):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def FF(self, sx, ln2w, ln2b, statex, i: int, time_mix_k, time_mix_r, kw, vw, rw):
+    def FF(self, sx: torch.Tensor, ln2w, ln2b, statex, i: int, time_mix_k: torch.Tensor, time_mix_r: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor):
         state = statex
         x = torch.layer_norm(sx, (ln2w.shape[0],), weight=ln2w, bias=ln2b)
-        xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
-        xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
+        xk = torch.lerp(state[5*i+0], x, time_mix_k)
+        xr = torch.lerp(state[5*i+0], x, time_mix_r)
         state[5*i+0] = x
 
         r = torch.sigmoid((rw @ xr))
@@ -154,21 +154,17 @@ class RWKV_LAYER(nn.Module):
         kv = (vw @ k)
         return sx+(r * kv), state
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, state, i: int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw: torch.Tensor, vw, rw, ow):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, state: torch.Tensor, i: int, time_mix_k: torch.Tensor, time_mix_v: torch.Tensor, time_mix_r: torch.Tensor, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor, ow: torch.Tensor):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        xk = x * time_mix_k + state[5*i+1] * (1 - time_mix_k)
-        xv = x * time_mix_v + state[5*i+1] * (1 - time_mix_v)
-        xr = x * time_mix_r + state[5*i+1] * (1 - time_mix_r)
+        k = kw @ torch.lerp(state[5*i+1], x, time_mix_v)
+        v = vw @ torch.lerp(state[5*i+1], x, time_mix_v)
+        rr = rw @ torch.lerp(state[5*i+1], x, time_mix_r)
 
         state[5*i+1] = x
-
-        r = torch.sigmoid((rw @ xr))
-        k = (kw @ xk)
-        v = (vw @ xv)
-
+        r = torch.sigmoid(rr)
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
