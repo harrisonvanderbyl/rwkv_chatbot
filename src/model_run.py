@@ -51,7 +51,7 @@ def isIn(a, b):
 
 
 class RWKV_RNN(nn.Module):
-    def __init__(self, args, argsnumns, layers: list[str]):
+    def __init__(self, args, argsnumns, layers: list):
         super().__init__()
 
         self.args = args
@@ -192,7 +192,7 @@ class RWKV_RNN(nn.Module):
         rwkv = (r * a) / b
         return sx+(ow @ rwkv), state
 
-    def forward(self, ctx: list[int], state: torch.Tensor, preprocess_only: bool = False):
+    def forward(self, ctx: list, state: torch.Tensor, preprocess_only: bool = False):
         with torch.no_grad():
             if (self.layerdist[0] != self.layerdist[self.n_layer-1]):
                 state = state.to(device=self.layerdist[0])
@@ -293,7 +293,7 @@ class RWKV_RNN(nn.Module):
         return state
 
     @ torch.jit.ignore
-    def loadContext(self, ctx: list[int] = [], newctx: list[int] = [187], statex=None, silent=False):
+    def loadContext(self, ctx: list = [], newctx: list = [187], statex=None, silent=False):
 
         if statex is None:
             statex = self.empty_state()
@@ -307,7 +307,7 @@ class RWKV_RNN(nn.Module):
         return ctx+newctx, statex
 
     @ torch.jit.ignore
-    def sample_logits(self, ozut: torch.Tensor, x: List[int], temperature: float = 1.0, top_p_usual: float = 0.8):
+    def sample_logits(self, ozut: torch.Tensor, x: list, temperature: float = 1.0, top_p_usual: float = 0.8):
         # out[self.UNKNOWN_CHAR] = -float('Inf')
        # out[self.UNKNOWN_CHAR] = -float('Inf')
         # turn to float if is half and cpu
@@ -319,7 +319,7 @@ class RWKV_RNN(nn.Module):
         return sample(probs, temperature, top_p_usual)
 
     @ torch.jit.ignore
-    def run(self, currstate: list({"score": float, "ctx": list[int], "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
+    def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
         options = []
         for i in range(len(currstate)):
 
