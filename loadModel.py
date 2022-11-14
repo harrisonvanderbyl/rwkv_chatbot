@@ -15,6 +15,7 @@ import gc
 import torch
 from src.utils import TOKENIZER
 from tqdm import tqdm
+import wget
 try:
     os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1]
 except:
@@ -27,13 +28,19 @@ def loadModel():
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
 
-    questions = [
+    file = os.environ.get("MODELNAME", inquirer.prompt([
         inquirer.List('file',
                       message="What model do you want to use?",
                       choices=files,
                       ),
-    ]
-    file = inquirer.prompt(questions)["file"]
+    ])["file"])
+
+    url = file
+
+    file = file.split("/")[-1]
+
+    if not file in os.listdir():
+        file = wget.download(url)
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.allow_tf32 = True
@@ -50,19 +57,19 @@ def loadModel():
     vocab_size = 50277
 
     # 'cpu' (already very fast) // 'cuda' // proc (faster then cpu, uses a fraction of the vram of cuda)
-    args["RUN_DEVICE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
-                                                        message="What device do you want to use?",
-                                                        choices=[
-                                                            "cpu", "cuda"],
-                                                        )])["RUN_DEVICE"]
+    args["RUN_DEVICE"] = os.environ.get("RUN_DEVICE", inquirer.prompt([inquirer.List('RUN_DEVICE',
+                                                                                     message="What device do you want to use?",
+                                                                                     choices=[
+                                                                                         "cpu", "cuda"],
+                                                                                     )])["RUN_DEVICE"])
 
     # how many layers to offload to cuda, smaller number is slower, but uses less vram. // 0 -> n_layer // use to speed up proc as well
     numdevices = int(torch.cuda.device_count())
     layerdist = []
     if (args["RUN_DEVICE"] == "cuda"):
         for devic in range(numdevices):
-            dev = inquirer.text(
-                message=f"How many layers would you like on device {devic}?")
+            dev = os.environ.get("VRAMSTORE", inquirer.text(
+                message=f"How many layers would you like on device {devic}?"))
             if dev == "":
                 dev = 100
             else:
@@ -83,11 +90,11 @@ def loadModel():
     else:
         layerdist = ["cpu"]*100
     # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-    args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
-                                                        message="What float mode do you want to use?",
-                                                        choices=[
-                                                            "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
-                                                        )])["FLOAT_MODE"]
+    args["FLOAT_MODE"] = os.environ.get("FLOAT_MODE", inquirer.prompt([inquirer.List('FLOAT_MODE',
+                                                                                     message="What float mode do you want to use?",
+                                                                                     choices=[
+                                                                                         "fp32", "bf16", "fp16"] if args["RUN_DEVICE"] == "cuda" else ["fp32", "bf16"],
+                                                                                     )])["FLOAT_MODE"])
 
     # print config
     print("RUN_DEVICE:", args["RUN_DEVICE"])
