@@ -67,17 +67,19 @@ def createTensors(model_name):
              w[f"blocks.{x}.ln2.bias"],
              w[f"blocks.{x}.att.time_decay"],
              w[f"blocks.{x}.att.time_first"],
-             w[f"blocks.{x}.att.time_mix_k"],
-             w[f"blocks.{x}.att.time_mix_v"],
+             (1 / w[f"blocks.{x}.att.time_mix_k"]-1),
+             (1 / w[f"blocks.{x}.att.time_mix_v"]-1),
+             (1 / w[f"blocks.{x}.att.time_mix_r"]-1),
+             w[f"blocks.{x}.att.key.weight"]*w[f"blocks.{x}.att.time_mix_k"],
+             w[f"blocks.{x}.att.value.weight"]*w[f"blocks.{x}.att.time_mix_v"],
+             w[f"blocks.{x}.att.receptance.weight"] *
              w[f"blocks.{x}.att.time_mix_r"],
-             w[f"blocks.{x}.att.key.weight"],
-             w[f"blocks.{x}.att.value.weight"],
-             w[f"blocks.{x}.att.receptance.weight"],
              w[f"blocks.{x}.att.output.weight"],
-             w[f"blocks.{x}.ffn.time_mix_k"],
+             (1 / w[f"blocks.{x}.ffn.time_mix_k"]-1),
+             (1 / w[f"blocks.{x}.ffn.time_mix_r"]-1),
+             w[f"blocks.{x}.ffn.key.weight"]*w[f"blocks.{x}.ffn.time_mix_k"],
+             w[f"blocks.{x}.ffn.receptance.weight"] *
              w[f"blocks.{x}.ffn.time_mix_r"],
-             w[f"blocks.{x}.ffn.key.weight"],
-             w[f"blocks.{x}.ffn.receptance.weight"],
              w[f"blocks.{x}.ffn.value.weight"],
          ], range(n_layer), []),
          [w["ln_out.weight"], w["ln_out.bias"],
@@ -143,12 +145,12 @@ class RWKV_LAYER(nn.Module):
     def FF(self, sx: torch.Tensor, ln2w, ln2b, statex, i: int, time_mix_k: torch.Tensor, time_mix_r: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor):
         state = statex
         x = torch.layer_norm(sx, (ln2w.shape[0],), weight=ln2w, bias=ln2b)
-        xk = torch.lerp(state[5*i+0], x, time_mix_k)
-        xr = torch.lerp(state[5*i+0], x, time_mix_r)
+        dx = kw @ (x + state[5*i+0]*time_mix_k)
+        xr = rw @ (x + state[5*i+0]*time_mix_r)
         state[5*i+0] = x
 
-        r = torch.sigmoid((rw @ xr))
-        dx = (kw @ xk)
+        r = torch.sigmoid(xr)
+
         clamped = torch.relu(dx)
         k = torch.square(clamped)
         kv = (vw @ k)
@@ -159,12 +161,17 @@ class RWKV_LAYER(nn.Module):
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = kw @ torch.lerp(state[5*i+1], x, time_mix_v)
-        v = vw @ torch.lerp(state[5*i+1], x, time_mix_v)
-        rr = rw @ torch.lerp(state[5*i+1], x, time_mix_r)
+        # k = kw @ torch.lerp(state[5*i+1], x, time_mix_k)\
+        # k = (kw) @ (x) + (time_mix_k) @ state[5*i+5]
+
+        k = kw @ (x + state[5*i+1]*time_mix_k)
+
+        v = vw @ (x + state[5*i+1]*time_mix_v)
+
+        rr = rw @ (x + state[5*i+1]*time_mix_r)
 
         state[5*i+1] = x
-        r = torch.sigmoid(rr)
+        r = ow*torch.sigmoid(rr)
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
@@ -184,8 +191,8 @@ class RWKV_LAYER(nn.Module):
         state[5*i+3] = e1 * bb + e2
         state[5*i+4] = p
 
-        rwkv = (r * a) / b
-        return sx+(ow @ rwkv), state
+        rwkv = r@(a / b)
+        return sx+rwkv, state
 
     def forward(self, x: torch.Tensor, state: torch.Tensor):
         x = x.to(device=self.ln1b[0].device)
