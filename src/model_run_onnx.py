@@ -94,7 +94,7 @@ class RWKV_PREPROCESS(nn.Module):
         self.preProcess = preProcess
 
     def forward(self, x: torch.LongTensor):
-        return self.preProcess[x[0]]
+        return self.preProcess[x[-1]]
 
 
 class RWKV_POSTPROCESS(nn.Module):
