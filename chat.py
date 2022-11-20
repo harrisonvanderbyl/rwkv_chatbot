@@ -164,7 +164,7 @@ def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.
 
 
 # init empty save state and question context
-init_state = emptyState
+init_state = emptyState.clone()
 model_tokens = tokenizer.tokenizer.encode(context)
 
 
@@ -251,7 +251,7 @@ async def on_message(message):
 
         begin = len(tknew)
 
-        state = loadContext(layers, [187, 187], tknew, emptyState)
+        state = loadContext(layers, [187, 187], tknew, emptyState.clone())
 
         with torch.no_grad():
 
