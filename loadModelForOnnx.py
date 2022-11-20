@@ -115,4 +115,9 @@ def loadModel():
     #     model = torch.jit.freeze(model)
     #     model = torch.jit.optimize_for_inference(model)
 
+    # layers = list(map(torch.jit.optimize_for_inference,
+    #             map(lambda x: torch.jit.trace(x, (pre.forward([187]), emptyState)), layers)))
+    # layers = list(map(torch.jit.optimize_for_inference, map(
+    #     lambda x: torch.jit.script(x), layers)))
+
     return pre, layers, post, emptyState

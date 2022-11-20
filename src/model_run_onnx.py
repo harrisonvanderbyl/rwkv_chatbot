@@ -91,7 +91,7 @@ def createTensors(model_name):
 class RWKV_PREPROCESS(nn.Module):
     def __init__(self, preProcess):
         super().__init__()
-        self.preProcess = torch.Tensor(preProcess)
+        self.preProcess = preProcess
 
     def forward(self, x: torch.LongTensor):
         z = self.preProcess[x[0]]/len(x)
@@ -195,8 +195,8 @@ class RWKV_LAYER(nn.Module):
         return sx+rwkv, state
 
     def forward(self, x: torch.Tensor, state: torch.Tensor):
-        x = x.to(device=self.ln1b[0].device)
-        state = state.to(device=self.ln1b[0].device)
+        # x = x.to(device=self.ln1b[0].device)
+        # state = state.to(device=self.ln1b[0].device)
 
         with torch.no_grad():
             for i in range(len(self.ln1w)):
@@ -231,17 +231,15 @@ class RWKV_LAYER(nn.Module):
                                     atmk, atmv, atmr, atf, atc, atd, avw, arw, aow
                                     )
 
-                rx, state = self.FF(sx, ln2w, ln2b, state, i+self.offset,
-                                    tmk, tmr, tmkw, tmvw, tmrw)
-
-                x = rx
+                x, state = self.FF(sx, ln2w, ln2b, state, i+self.offset,
+                                   tmk, tmr, tmkw, tmvw, tmrw)
 
             return x, state
 
 
 def empty_state(n_emb, layers, floatMode, device):
     state = torch.zeros(
-        layers * 5, n_emb, device="cpu", dtype=floatMode)
+        layers * 5, n_emb, device=device[0], dtype=floatMode)
     for i in range(layers):
         state[5*i+4] -= 1e30
     return state
@@ -265,7 +263,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
             Path, map_location="cpu")
 
     PreProcess = RWKV_PREPROCESS(
-        setToCpu(w[0]))
+        setToProp(0)(w[0]))
 
     PostProcess = RWKV_POSTPROCESS(
         list(map(setToProp(-1), w[2])))

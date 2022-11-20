@@ -133,7 +133,7 @@ def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    out = torch.tensor(ozut)
+    out = ozut
     probs = F.softmax(out, dim=-1)
 
     sorted_probs = torch.sort(probs, descending=True)[0]
