@@ -148,13 +148,14 @@ class RWKV_LAYER(nn.Module):
         kwdx = torch.matmul(kw, dx)
         xr = torch.addcmul(x, state[5*i+0], time_mix_r)
         rwxr = torch.matmul(rw, xr)
-        state[5*i+0] = x
         r = torch.sigmoid(rwxr)
         clamped = torch.relu(kwdx)
         k = torch.square(clamped)
         kv = torch.matmul(vw, k)
         rkv = torch.mul(r, kv)
-        return torch.add(sx, rkv), state
+        output = torch.add(sx, rkv)
+        state[5*i+0] = x
+        return output, state
 
     def SA(self, sx: torch.Tensor, ln1w, ln1b, state: torch.Tensor, i: int, time_mix_k: torch.Tensor, time_mix_v: torch.Tensor, time_mix_r: torch.Tensor, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor, ow: torch.Tensor):
 
@@ -198,14 +199,15 @@ class RWKV_LAYER(nn.Module):
         e1aa = torch.mul(e1, aa)
         e2v = torch.mul(e2, v)
 
+        ab = torch.div(a, b)
+        rwkv = torch.matmul(r, ab)
+        output = torch.add(sx, rwkv)
+
         state[5*i+1] = x
         state[5*i+2] = torch.add(e1aa, e2v)
         state[5*i+3] = torch.add(e1bb, e2)
         state[5*i+4] = p
-
-        ab = torch.div(a, b)
-        rwkv = torch.matmul(r, ab)
-        return torch.add(sx, rwkv), state
+        return output, state
 
     def forward(self, x: torch.Tensor, state: torch.Tensor):
 
