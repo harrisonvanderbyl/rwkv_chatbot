@@ -6,6 +6,7 @@ import loadModelForOnnx
 import discord
 from genericpath import exists
 from typing import List
+from torch.nn import functional as F
 from src.model_run import RWKV_RNN
 import numpy as np
 import math
@@ -69,7 +70,7 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-model = loadModelForOnnx.loadModelCompat()
+pre, layers, post, emptyState = loadModelForOnnx.loadModel()
 
 
 print(f'\nOptimizing speed...')
@@ -129,8 +130,41 @@ client = discord.Client(
 async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
+
+def loadContext(self, ctx: list[int], newctx: list[int], statex):
+
+    for i in tqdm(range(len(newctx))):
+
+        x = ctx+newctx[:i+1]
+        o = pre.preProcess[x[-1]]
+        for s in self:
+            o, statex = s.forward(o, statex)
+
+    return ctx+newctx, statex
+
+
+def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # turn to float if is half and cpu
+    out = ozut
+    probs = F.softmax(out, dim=-1)
+
+    sorted_probs = torch.sort(probs, descending=True)[0]
+    cumulative_probs = torch.cumsum(
+        sorted_probs.float(), dim=-1).cpu().numpy()
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = probs.pow(1.0 / temp)
+
+    out: int = torch.multinomial(probs.float(), 1, True)[0]
+    return out
+
+
 # init empty save state and question context
-init_state = model.empty_state()
+init_state = emptyState
 model_tokens = tokenizer.tokenizer.encode(context)
 
 
@@ -138,7 +172,7 @@ saveStates = {}
 saveStates["empty"] = ([187, 187], init_state.clone())
 
 # Put the prompt into the init_state
-init_state = model.loadContext([187, 187], model_tokens, init_state)
+init_state = loadContext(layers, [187, 187], model_tokens, init_state)
 saveStates["questions"] = (init_state[0], init_state[1].clone())
 
 src_model_tokens = model_tokens.copy()
@@ -190,17 +224,21 @@ async def on_message(message):
 
         begin = len(currstate[0] + tknew)
 
-        currstate = model.loadContext(
-            currstate[0], tknew, currstate[1])
-        state = [{"score": 1, "state": currstate[1], "ctx": currstate[0]}]
+        currstate = loadContext(layers,
+                                currstate[0], tknew, currstate[1])
+        state = currstate
         with torch.no_grad():
             for i in tqdm(range(100)):
+                ctx = state[0]
 
-                state = model.run(
-                    state, temp=TEMPERATURE, top_p=top_p)
+                state = (pre.preProcess[state[0][-1]], state[1])
+                for r in layers:
+                    state = r.forward(state[0], state[1])
+                state = (ctx+[sample_logits(post.forward(state[0]))], state[1])
+                if (state[0][-1] == 535 or (state[0][-2] == 187 and state[0][-1] == 187)):
+                    break
 
-        currstate = (state[0]["ctx"], state[0]["state"])
-
+        currstate = state
         send_msg = tokenizer.tokenizer.decode(currstate[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg)
@@ -213,15 +251,18 @@ async def on_message(message):
 
         begin = len(tknew)
 
-        state = model.loadContext([187, 187], tknew, model.empty_state())
-        state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+        state = loadContext(layers, [187, 187], tknew, emptyState)
+
         with torch.no_grad():
+
             for i in tqdm(range(100)):
 
-                state = model.run(
-                    state, temp=TEMPERATURE, top_p=top_p, endChars=[])
+                ctx = state[0]
 
-        state = (state[0]["ctx"], state[0]["state"])
+                state = (pre.preProcess[state[0][-1]], state[1])
+                for r in layers:
+                    state = r.forward(state[0], state[1])
+                state = (ctx+[sample_logits(post.forward(state[0]))], state[1])
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
@@ -235,13 +276,14 @@ async def on_message(message):
 
         begin = len(state[0])
 
-        state = [{"score": 1, "state": state[1], "ctx": state[0]}]
         with torch.no_grad():
             for i in tqdm(range(100)):
-                state = model.run(
-                    state, temp=TEMPERATURE, top_p=top_p, endChars=[])
+                ctx = state[0]
 
-        state = (state[0]["ctx"], state[0]["state"])
+                state = (pre.preProcess[state[0][-1]], state[1])
+                for r in layers:
+                    state = r.forward(state[0], state[1])
+                state = (ctx+[sample_logits(post.forward(state[0]))], state[1])
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')

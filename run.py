@@ -1,53 +1,57 @@
+import matplotlib.pyplot as plt
+import loadModelForOnnx
+import tqdm
+import onnxruntime as ort
 from genericpath import exists
 from typing import List
-from src.model_run import RWKV_RNN
 import numpy as np
-import math
 import os
-import sys
-import types
 import time
 import gc
 import torch
 from src.utils import TOKENIZER
-from tqdm import tqdm
+import inquirer
+from torch.nn import functional as F
+
+from sty import Style, RgbFg, fg
+
+fg.orange = Style(RgbFg(255, 150, 50))
+
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
-import loadModel
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-model = loadModel.loadModel()
+# context = "\n深圳是" # test Chinese
+# context = "\n東京は" # test Japanese
+pre, layers, post, emptyState = loadModelForOnnx.loadModel()
+
 ###### A good prompt for chatbot ######
-user = "User"
-interface = ":"
-bot = "RWKV"
-context = f'''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant called {bot}, and a human user called {user}. In the following interactions, {user} and {bot} converse in natural language, and {bot} always answer {user}'s questions. {bot} is very smart, polite and humorous. {bot} knows a lot, and always tells the truth. The conversation begins.
+context = '''
+The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
 
-{user}{interface} who is president of usa?
+User: OK RWKV, I’m going to start by quizzing you with a few warm-up questions. Who is currently the president of the USA?
 
-{bot}{interface} It’s Joe Biden; he was sworn in earlier this year.
+RWKV: It’s Joe Biden; he was sworn in earlier this year.
 
-{user}{interface} french revolution what year
+User: What year was the French Revolution?
 
-{bot}{interface} It started in 1789, but it lasted 10 years until 1799.
+RWKV: It started in 1789, but it lasted 10 years until 1799.
 
-{user}{interface} guess i marry who ?
+User: Can you guess who I might want to marry?
 
-{bot}{interface} Only if you tell me more about yourself - what are your interests?
+RWKV: Only if you tell me more about yourself - what are your interests?
 
-{user}{interface} wat is lhc
+User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
 
-{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-
+RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
 '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
 
 TEMPERATURE = 1.0
-top_p = 0.9
+top_p = 0.8
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
 DEBUG_DEBUG = False  # True False --> show softmax output
@@ -55,15 +59,8 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 ########################################################################################################
 
 
-print(model.n_layer)
-state1 = model.empty_state()
-
-
-init_state = state1
-
-
 print(f'\nOptimizing speed...')
-model.forward([187, 187], state1)
+
 gc.collect()
 torch.cuda.empty_cache()
 
@@ -115,7 +112,41 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-state = model.loadContext(ctx=[127, 127], newctx=ctx1)
+def loadContext(self, ctx: list[int], statex, newctx: list[int]):
+
+    for i in tqdm.tqdm(range(len(newctx))):
+
+        x = ctx+newctx[:i+1]
+        o = pre.preProcess[x[-1]]
+        for s in self:
+            o, statex = s.forward(o, statex)
+
+    return ctx+newctx, statex
+
+
+tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
+
+origistate = (tokens[0], tokens[1].clone())
+
+
+def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # turn to float if is half and cpu
+    out = ozut
+    probs = F.softmax(out, dim=-1)
+
+    sorted_probs = torch.sort(probs, descending=True)[0]
+    cumulative_probs = torch.cumsum(
+        sorted_probs.float(), dim=-1).cpu().numpy()
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = probs.pow(1.0 / temp)
+
+    out: int = torch.multinomial(probs.float(), 1, True)[0]
+    return out
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
@@ -128,21 +159,32 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         torch.cuda.empty_cache()
 
     record_time('preprocess')
-    state = [{"score": 1, "state": state[1], "ctx": state[0]}]
-
+    tokens = (origistate[0], origistate[1].clone())
+    xout = 0.0
     with torch.no_grad():
         for i in range(100):
+            chars: List[int] = tokens[0]
+            myout = (pre.preProcess[chars[-1]], tokens[1])
+            # (
+            #     [chars[-1]]*5 + [chars[-2]]), tokens[1])
+            for l in layers:
+                myout = l.forward(myout[0], myout[1])
+            rmout = myout[0]
+            xout = post.forward(rmout)
+            chars += [sample_logits(
+                xout, temp=TEMPERATURE, top_p_usual=top_p)]
 
-            state = model.run(
-                state, temp=TEMPERATURE, top_p=top_p, endChars=[])
-            print(tokenizer.tokenizer.decode(
-                state[0]["ctx"][-1]), end='')
+            char = tokenizer.tokenizer.decode(chars[-1])
 
-    state = (state[0]["ctx"], state[0]["state"])
+            tokens = (chars, myout[1])
 
-    "1.87"
+            if '\ufffd' not in char:
+                fg.orange = Style(RgbFg(int((xout[chars[-1]])*255), 0, 0))
+
+                print(fg.orange+char, end="", flush=True)
 
     record_time('total')
+
     # print(f'\n\n{time_slot}\n\n')
     print(
         f"\n\n--- preprocess {round(time_slot['preprocess'], 2)}s, generation {round(time_slot['total']-time_slot['preprocess'], 2)}s ", end=''
