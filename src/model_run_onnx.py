@@ -107,9 +107,8 @@ class RWKV_POSTPROCESS(nn.Module):
         self.postProcess = postprocess
 
     def forward(self, x: torch.Tensor):
-        x = x.to(device=self.postProcess[0].device)
-        return (self.postProcess[2] @ torch.layer_norm(
-                x, (self.postProcess[0].shape[0],), weight=self.postProcess[0], bias=self.postProcess[1]))
+        return torch.matmul(self.postProcess[2], torch.layer_norm(
+            x, (self.postProcess[0].shape[0],), weight=self.postProcess[0], bias=self.postProcess[1]))
 
 
 class RWKV_LAYER(nn.Module):
@@ -145,58 +144,70 @@ class RWKV_LAYER(nn.Module):
     def FF(self, sx: torch.Tensor, ln2w, ln2b, statex, i: int, time_mix_k: torch.Tensor, time_mix_r: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor):
         state = statex
         x = torch.layer_norm(sx, (ln2w.shape[0],), weight=ln2w, bias=ln2b)
-        dx = kw @ (x + state[5*i+0]*time_mix_k)
-        xr = rw @ (x + state[5*i+0]*time_mix_r)
+        dx = torch.addcmul(x, state[5*i+0], time_mix_k)
+        kwdx = torch.matmul(kw, dx)
+        xr = torch.addcmul(x, state[5*i+0], time_mix_r)
+        rwxr = torch.matmul(rw, xr)
         state[5*i+0] = x
-
-        r = torch.sigmoid(xr)
-
-        clamped = torch.relu(dx)
+        r = torch.sigmoid(rwxr)
+        clamped = torch.relu(kwdx)
         k = torch.square(clamped)
-        kv = (vw @ k)
-        return sx+(r * kv), state
+        kv = torch.matmul(vw, k)
+        rkv = torch.mul(r, kv)
+        return torch.add(sx, rkv), state
 
     def SA(self, sx: torch.Tensor, ln1w, ln1b, state: torch.Tensor, i: int, time_mix_k: torch.Tensor, time_mix_v: torch.Tensor, time_mix_r: torch.Tensor, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor, ow: torch.Tensor):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        # k = kw @ torch.lerp(state[5*i+1], x, time_mix_k)\
-        # k = (kw) @ (x) + (time_mix_k) @ state[5*i+5]
+        xtk = torch.addcmul(x, state[5*i+1], time_mix_k)
 
-        k = kw @ (x + state[5*i+1]*time_mix_k)
+        k = torch.matmul(kw, xtk)
 
-        v = vw @ (x + state[5*i+1]*time_mix_v)
+        vtk = torch.addcmul(x, state[5*i+1], time_mix_v)
 
-        rr = rw @ (x + state[5*i+1]*time_mix_r)
+        v = torch.matmul(vw, vtk)
 
-        state[5*i+1] = x
-        r = ow*torch.sigmoid(rr)
+        rtk = torch.addcmul(x, state[5*i+1], time_mix_r)
+
+        rr = torch.matmul(rw, rtk)
+
+        rsig = torch.sigmoid(rr)
+        r = torch.mul(ow, rsig)
         aa = state[5*i+2]
         bb = state[5*i+3]
         pp = state[5*i+4]
-        ww = time_first + k
+        ww = torch.add(time_first, k)
         p = torch.maximum(pp, ww)
         e1 = torch.exp(pp - p)
         e2 = torch.exp(ww - p)
 
-        a = e1 * aa + e2 * v
-        b = e1 * bb + e2
+        e1aa = torch.mul(e1, aa)
+        e2v = torch.mul(e2, v)
+        e1bb = torch.mul(e1, bb)
 
-        ww = pp + time_decay
+        a = torch.add(e1aa, e2v)
+        b = torch.add(e1bb, e2)
+
+        ww = torch.add(pp, time_decay)
         p = torch.maximum(ww, k)
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
-        state[5*i+2] = e1 * aa + e2 * v
-        state[5*i+3] = e1 * bb + e2
+        e1bb = torch.mul(e1, bb)
+        e1aa = torch.mul(e1, aa)
+        e2v = torch.mul(e2, v)
+
+        state[5*i+1] = x
+        state[5*i+2] = torch.add(e1aa, e2v)
+        state[5*i+3] = torch.add(e1bb, e2)
         state[5*i+4] = p
 
-        rwkv = r@(a / b)
-        return sx+rwkv, state
+        ab = torch.div(a, b)
+        rwkv = torch.matmul(r, ab)
+        return torch.add(sx, rwkv), state
 
     def forward(self, x: torch.Tensor, state: torch.Tensor):
-        # x = x.to(device=self.ln1b[0].device)
-        # state = state.to(device=self.ln1b[0].device)
 
         with torch.no_grad():
             for i in range(len(self.ln1w)):
