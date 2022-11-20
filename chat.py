@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import loadModel
+import loadModelForOnnx
 import discord
 from genericpath import exists
 from typing import List
@@ -69,7 +69,7 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-model = loadModel.loadModel()
+model = loadModelForOnnx.loadModelCompat()
 
 
 print(f'\nOptimizing speed...')
