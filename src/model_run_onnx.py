@@ -98,38 +98,56 @@ class RWKV_PREPROCESS(nn.Module):
 
 
 class RWKV_POSTPROCESS(nn.Module):
-    def __init__(self, postprocess):
+    def __init__(self, postprocess: torch.Tensor):
         super().__init__()
 
-        self.postProcess = postprocess
+        self.postProcess0 = postprocess[0]
+        self.postProcess1 = postprocess[1]
+        self.postProcess2 = postprocess[2]
 
     def forward(self, x: torch.Tensor):
-        return torch.matmul(self.postProcess[2], torch.layer_norm(
-            x, (self.postProcess[0].shape[0],), weight=self.postProcess[0], bias=self.postProcess[1]))
+        zz = torch.layer_norm(
+            x, self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
+        out = torch.einsum('ik,k->i', [self.postProcess2, zz])
+        return out
 
 
 class RWKV_LAYER(nn.Module):
     def __init__(self, w, offset):
         super().__init__()
+
+        dtype = w[0].dtype
+        device = w[0].device
+
+        w = list(map(lambda x: x.float().cpu().numpy(), w))
+
+        # w = torch.Tensor(list(arr)).to(
+        #     dtype=dtype, device=device)
+
         self.offset = offset
-        self.ln1w = w[0::18]
-        self.ln1b = w[1::18]
-        self.ln2w = w[2::18]
-        self.ln2b = w[3::18]
-        self.time_decay = w[4::18]
-        self.time_first = w[5::18]
-        self.time_mix_k = w[6::18]
-        self.time_mix_v = w[7::18]
-        self.time_mix_r = w[8::18]
-        self.key = w[9::18]
-        self.value = w[10::18]
-        self.receptance = w[11::18]
-        self.outputv = w[12::18]
-        self.time_mix_k_ffn = w[13::18]
-        self.time_mix_r_ffn = w[14::18]
-        self.key_ffn = w[15::18]
-        self.receptance_ffn = w[16::18]
-        self.value_ffn = w[17::18]
+        self.ln1w = torch.tensor(w[0::18]).to(
+            dtype=dtype, device=device)
+        self.ln1b = torch.tensor(w[1::18]).to(dtype=dtype, device=device)
+        self.ln2w = torch.tensor(w[2::18]).to(dtype=dtype, device=device)
+        self.ln2b = torch.tensor(w[3::18]).to(dtype=dtype, device=device)
+        self.time_decay = torch.tensor(w[4::18]).to(dtype=dtype, device=device)
+        self.time_first = torch.tensor(w[5::18]).to(dtype=dtype, device=device)
+        self.time_mix_k = torch.tensor(w[6::18]).to(dtype=dtype, device=device)
+        self.time_mix_v = torch.tensor(w[7::18]).to(dtype=dtype, device=device)
+        self.time_mix_r = torch.tensor(w[8::18]).to(dtype=dtype, device=device)
+        self.key = torch.tensor(w[9::18]).to(dtype=dtype, device=device)
+        self.value = torch.tensor(w[10::18]).to(dtype=dtype, device=device)
+        self.receptance = torch.tensor(
+            w[11::18]).to(dtype=dtype, device=device)
+        self.outputv = torch.tensor(w[12::18]).to(dtype=dtype, device=device)
+        self.time_mix_k_ffn = torch.tensor(
+            w[13::18]).to(dtype=dtype, device=device)
+        self.time_mix_r_ffn = torch.tensor(
+            w[14::18]).to(dtype=dtype, device=device)
+        self.key_ffn = torch.tensor(w[15::18]).to(dtype=dtype, device=device)
+        self.receptance_ffn = torch.tensor(
+            w[16::18]).to(dtype=dtype, device=device)
+        self.value_ffn = torch.tensor(w[17::18]).to(dtype=dtype, device=device)
 
         print(len(self.outputv), len(self.ln1w), offset)
 
@@ -142,13 +160,13 @@ class RWKV_LAYER(nn.Module):
         state = statex
         x = torch.layer_norm(sx, (ln2w.shape[0],), weight=ln2w, bias=ln2b)
         dx = torch.addcmul(x, state[5*i+0], time_mix_k)
-        kwdx = torch.matmul(kw, dx)
+        kwdx = torch.einsum('ik,k->i', [kw, dx])
         xr = torch.addcmul(x, state[5*i+0], time_mix_r)
-        rwxr = torch.matmul(rw, xr)
+        rwxr = torch.einsum('ik,k->i', [rw, xr])
         r = torch.sigmoid(rwxr)
         clamped = torch.relu(kwdx)
         k = torch.square(clamped)
-        kv = torch.matmul(vw, k)
+        kv = torch.einsum('ik,k->i', [vw, k])
         rkv = torch.mul(r, kv)
         output = torch.add(sx, rkv)
         state[5*i+0] = x
@@ -157,19 +175,19 @@ class RWKV_LAYER(nn.Module):
     def SA(self, sx: torch.Tensor, ln1w, ln1b, state: torch.Tensor, i: int, time_mix_k: torch.Tensor, time_mix_v: torch.Tensor, time_mix_r: torch.Tensor, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor, ow: torch.Tensor):
 
         x = torch.layer_norm(
-            sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
+            sx, ln1w.shape, weight=ln1w, bias=ln1b)
 
         xtk = torch.addcmul(x, state[5*i+1], time_mix_k)
 
-        k = torch.matmul(kw, xtk)
+        k = torch.einsum('ik,k->i', [kw, xtk])
 
         vtk = torch.addcmul(x, state[5*i+1], time_mix_v)
 
-        v = torch.matmul(vw, vtk)
+        v = torch.einsum('ik,k->i', [vw, vtk])
 
         rtk = torch.addcmul(x, state[5*i+1], time_mix_r)
 
-        rr = torch.matmul(rw, rtk)
+        rr = torch.einsum('ik,k->i', [rw, rtk])
 
         rsig = torch.sigmoid(rr)
         r = torch.mul(ow, rsig)
@@ -197,7 +215,7 @@ class RWKV_LAYER(nn.Module):
         e2v = torch.mul(e2, v)
 
         ab = torch.div(a, b)
-        rwkv = torch.matmul(r, ab)
+        rwkv = torch.einsum('ik,k->i', [r, ab])
         output = torch.add(sx, rwkv)
 
         state[5*i+1] = x
@@ -209,7 +227,7 @@ class RWKV_LAYER(nn.Module):
     def forward(self, x: torch.Tensor, state: torch.Tensor):
 
         with torch.no_grad():
-            for i in range(len(self.ln1w)):
+            for i in range(self.ln1w.shape[0]):
 
                 ln1w = self.ln1w[i]
                 ln1b = self.ln1b[i]
