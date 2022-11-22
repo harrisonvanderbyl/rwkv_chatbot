@@ -70,15 +70,18 @@ pre = interOp("pre")
 post = interOp("post")
 layer = interOp("layer-0")
 
-prea = pre.run([192])
+prea, = pre.run([192])
 print(prea[0])
-emptyState = tf.Variable(60*[768*[0.00001]], dtype=tf.float32)
-layera = layer.run(prea[0][0], emptyState)
+mm = 61*[768*[0]]
+mm[0] = prea[0]
+emptyState = tf.Variable(mm, dtype=tf.float32)
+
+layera, = layer.run(emptyState)
 
 layers = [layer]
 print(layera)
 
-print(post.run(layera[0][0]))
+print(post.run(layera))
 
 
 # layers = os.listdir(loadFile)
@@ -175,16 +178,21 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 
 def loadContext(ctx: list[int], statex, newctx: list[int]):
-    statex = statex
+    statex = statex.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
         o, = pre.run([x[-1]])
-        o = o[0]
+
+        statex[0] = o[0]
+        lmx = statex[2][5]
 
         for l in layers:
-            rmi, o = l.run(o, statex)
+            statex, = l.run(statex)
 
-    return ctx+newctx, rmi
+        # print(o[0][0] - statex[0][0])
+        # print(statex[2][5] - lmx)
+
+    return ctx+newctx, statex
 
 
 tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
@@ -223,16 +231,16 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
 
-            rtxx = tokens[1]
-            o, = pre.run([chars[-1]])
-            o = o[0]
-            for l in layers:
-                rtx, o = l.run(o, rtxx)
+            state = tokens[1]
 
-            myout = (post.run(o)[0], rtxx)
+            o, = pre.run([chars[-1]])
+            state[0] = o[0]
+            for l in layers:
+                state, = l.run(state)
+            myout = (post.run(state), state)
 
             chars += [sample_logits(
-                torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]
+                torch.Tensor(myout[0][0]), temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])

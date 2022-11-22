@@ -42,6 +42,7 @@ elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
 emptyState = torch.load(loadFile+"/emptyState.pt")
+print(emptyState.shape)
 
 
 providers = [
@@ -164,21 +165,23 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(ctx: list[int], statex, newctx: list[int]):
-    statex = statex.numpy()
+def loadContext(ctx: list[int], state, newctx: list[int]):
+    state = state.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
         o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
 
+        state[0] = o[0]
+
         for l in layers:
 
-            o, statex = l.run(None,
-                              {l.get_inputs()[0].name: o[0], l.get_inputs()[1].name: statex})
+            state, = l.run(None,
+                           {l.get_inputs()[0].name: state})
 
-    return ctx+newctx, statex
+    return ctx+newctx, state
 
 
-tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState.to("cpu"))
+tokens = loadContext(ctx=[], newctx=ctx1, state=emptyState)
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -216,12 +219,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             statex = tokens[1]
             o, = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
-
+            statex[0] = o[0]
             for l in layers:
-                o, statex = l.run(None,
-                                  {l.get_inputs()[0].name: o[0], l.get_inputs()[1].name: statex})
+                statex, = l.run(None,
+                                {l.get_inputs()[0].name: statex})
 
-            myout = (post.run(None, {post.get_inputs()[0].name: o})[0], statex)
+            myout = (
+                post.run(None, {post.get_inputs()[0].name: statex})[0], statex)
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

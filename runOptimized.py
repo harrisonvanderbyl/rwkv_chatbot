@@ -126,7 +126,7 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
 tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
 
-origistate = (tokens[0], tokens[1].clone())
+origistate = (tokens[0], tokens[1])
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -159,7 +159,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         torch.cuda.empty_cache()
 
     record_time('preprocess')
-    tokens = (origistate[0], origistate[1].clone())
+    tokens = (origistate[0], origistate[1])
     xout = 0.0
     with torch.no_grad():
         for i in range(100):
