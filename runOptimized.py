@@ -118,8 +118,9 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
         x = ctx+newctx[:i+1]
         o = pre.preProcess[x[-1]]
+        statex[0] = o
         for s in self:
-            o, statex = s.forward(o, statex)
+            statex = s.forward(statex)
 
     return ctx+newctx, statex
 
@@ -164,19 +165,19 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     with torch.no_grad():
         for i in range(100):
             chars: List[int] = tokens[0]
-            myout = (pre.preProcess[chars[-1]], tokens[1])
-            # (
-            #     [chars[-1]]*5 + [chars[-2]]), tokens[1])
+            state = tokens[1]
+            state[0] = pre.preProcess[chars[-1]]
+
             for l in layers:
-                myout = l.forward(myout[0], myout[1])
-            rmout = myout[0]
-            xout = post.forward(rmout)
+                state = l.forward(state)
+
+            xout = post.forward(state)
             chars += [sample_logits(
                 xout, temp=TEMPERATURE, top_p_usual=top_p)]
 
             char = tokenizer.tokenizer.decode(chars[-1])
 
-            tokens = (chars, myout[1])
+            tokens = (chars, state)
 
             if '\ufffd' not in char:
                 fg.orange = Style(RgbFg(int((xout[chars[-1]])*255), 0, 0))

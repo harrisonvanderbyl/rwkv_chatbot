@@ -38,7 +38,7 @@ def sample(probs, temperature: float = 1.0, top_p_usual: float = 0.8) -> int:
     if temperature != 1.0:
         probs = probs.pow(1.0 / temperature)
 
-    out = torch.multinomial(probs.float(), 1, True)
+    out = torch.multinomial(probs.float(), 1, True)[0]
     # print(sorted_probs[:3])
     return out
 
@@ -320,39 +320,18 @@ class RWKV_RNN(nn.Module):
 
     @ torch.jit.ignore
     def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
-        options = []
-        for i in range(len(currstate)):
 
-            ctx = currstate[i]["ctx"]
-            if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
-                currstate[i]["score"] *= 1.1
-                options.append(currstate[i])
-                continue
+        ctx = currstate[0]["ctx"]
 
-            state = currstate[i]["state"]
-            score = currstate[i]["score"]
+        state = currstate[0]["state"]
 
-            out1, state = self.forward(ctx, state.clone())
+        out1, state = self.forward(ctx, state.clone())
 
-            ttt = self.sample_logits(
-                out1,
-                ctx,
-                temperature=0.8,
-                top_p_usual=0.9,
-            )
+        ttt = self.sample_logits(
+            out1,
+            ctx,
+            temperature=0.8,
+            top_p_usual=0.9,
+        )
 
-            for j in range(len(ttt)):
-                options.append(
-                    {"score": (score*-0.5+out1[ttt[j]]/100.0), "ctx": ctx+[ttt[j]], "state": state})
-
-        options.sort(key=lambda x: x["score"], reverse=True)
-        # remove duplicates using reduce
-
-        options = reduce(lambda x, y: x if isIn(x, y) else x+[y], options, [])
-        options = options[:4]
-        # scores = list(map(lambda x: x["score"], options))
-        # cumscore = sum(scores)
-        # options = list(map(lambda x: {
-        #                "score": x["score"]/cumscore, "ctx": x["ctx"], "state": x["state"]}, options))
-
-        return options
+        return [{"score": 1, "ctx": ctx+[ttt], "state": state}]

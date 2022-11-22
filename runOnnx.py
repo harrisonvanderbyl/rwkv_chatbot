@@ -18,6 +18,7 @@ import tqdm
 
 so = ort.SessionOptions()
 so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+so.log_severity_level = 3
 files = os.listdir("onnx")
 
 

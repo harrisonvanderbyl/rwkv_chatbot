@@ -7,7 +7,7 @@ import gc
 import torch
 from src.utils import TOKENIZER
 import inquirer
-from torch.nn import functional as F
+from scipy.special import softmax
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
@@ -50,7 +50,7 @@ class interOp:
     def __init__(self, sig) -> None:
         self.sig = sig
         self.model = tf.lite.Interpreter(
-            loadFile+f"/{sig}/model_float32.tflite", num_threads=10)
+            loadFile+f"/{sig}/model_float16.tflite")
 
     def run(self, *x):
         self.model.allocate_tensors()
@@ -202,18 +202,17 @@ def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    probs = F.softmax(ozut.float(), dim=-1)
+    probs = softmax(ozut, axis=-1)
 
-    sorted_probs = torch.sort(probs, descending=True)[0]
-    cumulative_probs = torch.cumsum(
-        sorted_probs.float(), dim=-1).cpu().numpy()
-    cutoff = float(sorted_probs[np.argmax(
-        cumulative_probs > top_p_usual)])
+    sorted_probs = np.sort(probs)[::-1]
+    cumulative_probs = np.cumsum(sorted_probs)
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
+    probs = probs / np.sum(probs)
+    out = np.random.choice(a=len(probs), p=probs)
 
-    out: int = torch.multinomial(probs.float(), 1, True)[0]
     return out
 
 
@@ -240,7 +239,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             myout = (post.run(state), state)
 
             chars += [sample_logits(
-                torch.Tensor(myout[0][0]), temp=TEMPERATURE, top_p_usual=top_p)]
+                myout[0][0], temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])
