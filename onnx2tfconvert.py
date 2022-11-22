@@ -55,14 +55,14 @@ outpath = f"tf/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptySta
 # tf_pre.export_graph(
 #     f"{outpath}/pre.pb")
 convert(f"{loadFile}/preprocess.onnx",
-        output_folder_path=f"{outpath}/pre", not_use_onnxsim=True)
+        output_folder_path=f"{outpath}/pre", output_signaturedefs=True, not_use_onnxsim=True)
 
 # post = onnx.load(f"{loadFile}/postprocess.onnx")  # load onnx model
 # tf_post = prepare(post)  # prepare tf representation
 # tf_post.export_graph(f"{outpath}/pre.pb")  # export the model
 
 convert(f"{loadFile}/postprocess.onnx",
-        output_folder_path=f"{outpath}/post", not_use_onnxsim=True)
+        output_folder_path=f"{outpath}/post", output_signaturedefs=True, not_use_onnxsim=True)
 
 layers = os.listdir(loadFile)
 layers = filter(lambda x: "layer" in x, layers)

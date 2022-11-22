@@ -94,7 +94,7 @@ class RWKV_PREPROCESS(nn.Module):
         self.preProcess = preProcess
 
     def forward(self, x: torch.LongTensor):
-        return self.preProcess[x[-1]]
+        return self.preProcess[x[0]]
 
 
 class RWKV_POSTPROCESS(nn.Module):
@@ -304,8 +304,8 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
         print(len(mm), "mm")
         modelLayer = RWKV_LAYER(
             list(map(setToProp(int(i/(18*groups))), mm)), int(i/18))
-        # modelLayer = torch.jit.trace(
-        #     modelLayer, (PreProcess.forward([127]), empty_state(PreProcess.preProcess.shape[1], int(len(w[1])/18), FloatMode, int(i/18))))
+        # modelLayer = torch.jit.script(
+        #     modelLayer, (PreProcess.forward([127])))
 
         # modelLayer = torch.jit.optimize_for_inference(modelLayer)
         # torch.jit.enable_onednn_fusion(modelLayer)

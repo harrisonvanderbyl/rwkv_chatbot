@@ -11,14 +11,12 @@ from torch.nn import functional as F
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
-import onnxruntime as ort
 import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
+import tensorflow as tf
 
-so = ort.SessionOptions()
-so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-files = os.listdir("onnx")
+files = os.listdir("tf")
 
 
 questions = [
@@ -27,7 +25,7 @@ questions = [
                   choices=files,
                   ),
 ]
-loadFile = "onnx/"+inquirer.prompt(questions)["file"]
+loadFile = "tf/"+inquirer.prompt(questions)["file"]
 
 
 embed = int(loadFile.split("-")[2])
@@ -41,44 +39,56 @@ elif floatmode == "torch.float32":
 elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
-emptyState = torch.load(loadFile+"/emptyState.pt")
+# emptyState = torch.load(loadFile+"/emptyState.pt")
 
 
-providers = [
-    ('CUDAExecutionProvider', {
-        'device_id': 0,
-        'arena_extend_strategy': 'kNextPowerOfTwo',
-        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
-        'cudnn_conv_algo_search': 'EXHAUSTIVE',
-        'do_copy_in_default_stream': True,
-    }),
-    'CPUExecutionProvider',
-]
-
-providers2 = [providers]*3 + 10*[[
-    ('CUDAExecutionProvider', {
-        'device_id': 1,
-        'arena_extend_strategy': 'kNextPowerOfTwo',
-        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
-        'cudnn_conv_algo_search': 'EXHAUSTIVE',
-        'do_copy_in_default_stream': True,
-    }),
-    'CPUExecutionProvider',
-]]
+# pre = ort.InferenceSession(
+#     f"{loadFile}/preprocess.onnx", providers=providers, sess_options=so)
 
 
-pre = ort.InferenceSession(
-    f"{loadFile}/preprocess.onnx", providers=providers, sess_options=so)
-post = ort.InferenceSession(
-    f"{loadFile}/postprocess.onnx", providers=providers, sess_options=so)
-layers = os.listdir(loadFile)
-layers = filter(lambda x: "layer" in x, layers)
-layers = list(layers)
-layers.sort()
-print(layers)
-layers = list(map(lambda x: ort.InferenceSession(
-    f"{loadFile}/{x[1]}", providers=providers2[x[0]], sess_options=so), enumerate(layers)))
-###### A good prompt for chatbot ######
+class interOp:
+    def __init__(self, sig) -> None:
+        self.sig = sig
+        self.model = tf.lite.Interpreter(
+            loadFile+f"/{sig}/model_float32.tflite", num_threads=10)
+
+    def run(self, *x):
+        self.model.allocate_tensors()
+        for i, inp in enumerate(x):
+            self.model.set_tensor(
+                self.model.get_input_details()[i]["index"], inp)
+
+        self.model.invoke()
+        outs = self.model.get_output_details()
+        # print(self.sig, len(outs), [outs[o]["shape"]
+        #       for o in range(len(outs))])
+        return [self.model.get_tensor(out["index"]) for out in outs]
+
+
+# my_signature is callable with input as arguments.
+pre = interOp("pre")
+post = interOp("post")
+layer = interOp("layer-0")
+
+prea = pre.run([192])
+print(prea[0])
+emptyState = tf.Variable(60*[768*[0.00001]], dtype=tf.float32)
+layera = layer.run(prea[0][0], emptyState)
+
+layers = [layer]
+print(layera)
+
+print(post.run(layera[0][0]))
+
+
+# layers = os.listdir(loadFile)
+# layers = filter(lambda x: "layer" in x, layers)
+# layers = list(layers)
+# layers.sort()
+# print(layers)
+# layers = list(map(lambda x: ort.InferenceSession(
+#     f"{loadFile}/{x[1]}", providers=providers2[x[0]], sess_options=so), enumerate(layers)))
+# ###### A good prompt for chatbot ######
 context = '''
 The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
 
@@ -165,20 +175,19 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 
 def loadContext(ctx: list[int], statex, newctx: list[int]):
-    statex = statex.numpy()
+    statex = statex
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
+        o, = pre.run([x[-1]])
+        o = o[0]
 
         for l in layers:
+            rmi, o = l.run(o, statex)
 
-            o, statex = l.run(None,
-                              {l.get_inputs()[0].name: o[0], l.get_inputs()[1].name: statex})
-
-    return ctx+newctx, statex
+    return ctx+newctx, rmi
 
 
-tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState.to("cpu"))
+tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -214,14 +223,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
 
-            statex = tokens[1]
-            o, = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
-
+            rtxx = tokens[1]
+            o, = pre.run([chars[-1]])
+            o = o[0]
             for l in layers:
-                o, statex = l.run(None,
-                                  {l.get_inputs()[0].name: o[0], l.get_inputs()[1].name: statex})
+                rtx, o = l.run(o, rtxx)
 
-            myout = (post.run(None, {post.get_inputs()[0].name: o})[0], statex)
+            myout = (post.run(o)[0], rtxx)
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

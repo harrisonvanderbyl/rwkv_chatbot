@@ -101,7 +101,7 @@ except:
 torch.save(
     emptyState, f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/emptyState.pt")
 
-torch.onnx.export(pre, (torch.LongTensor([187])), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/preprocess.onnx",
+torch.onnx.export(pre, ([187]), f"onnx/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}/preprocess.onnx",
                   input_names=input_names[0:1], output_names=output_names[0:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "17")))
 
 testOut = torch.Tensor([0.0]*emptyState.shape[1]
