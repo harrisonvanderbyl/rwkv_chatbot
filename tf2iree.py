@@ -61,6 +61,7 @@ iree_tflite_compile.compile_file(
     save_temp_tfl_input=loadFile+"/posttflite.mlir",
     save_temp_iree_input=loadFile+"/posttosa.mlir",
     target_backends=backends,
+
     import_only=False)
 
 # iree_tflite_compile.compile_file(
