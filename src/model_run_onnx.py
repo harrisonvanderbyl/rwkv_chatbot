@@ -152,6 +152,8 @@ class RWKV_LAYER(nn.Module):
         print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
+        self.m = torch.Tensor([0]).to(dtype=torch.int32)
+        self.f = torch.Tensor([5]).to(dtype=torch.int32)
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
         print(self.layerlist)
@@ -224,9 +226,11 @@ class RWKV_LAYER(nn.Module):
         return output, x,  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
     def forward(self, state: torch.Tensor):
-        i = 0
+        x, = state[self.m]
+        ox = torch.zeros(0)
+        d = self.m.clone()
         with torch.no_grad():
-            while (i < self.n_layer):
+            for i in self.layerlist:
 
                 ln1w = self.ln1w[i]
                 ln1b = self.ln1b[i]
@@ -253,28 +257,29 @@ class RWKV_LAYER(nn.Module):
                 tmkw = self.key_ffn[i]
                 tmrw = self.receptance_ffn[i]
                 tmvw = self.value_ffn[i]
-                s0 = state[1+i*5 + 0]
-                s1 = state[1+i*5 + 1]
-                s2 = state[1+i*5 + 2]
-                s3 = state[1+i*5 + 3]
-                s4 = state[1+i*5 + 4]
 
-                sx, o1, o2, o3, o4 = self.SA(state[0], ln1w, ln1b,
+                s0, = state[d + 1]
+                s1, = state[d + 2]
+                s2, = state[d + 3]
+                s3, = state[d + 4]
+                s4, = state[d + 5]
+
+                sx, o1, o2, o3, o4 = self.SA(x, ln1w, ln1b,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
                                              )
 
-                mx, o0 = self.FF(sx, ln2w, ln2b,
-                                 tmk, tmr, tmkw, tmvw, tmrw, s0)
-                state[0] = mx
-                state[1+i*5 + 0] = o0
-                state[1+i*5 + 1] = o1
-                state[1+i*5 + 2] = o2
-                state[1+i*5 + 3] = o3
-                state[1+i*5 + 4] = o4
+                x, o0 = self.FF(sx, ln2w, ln2b,
+                                tmk, tmr, tmkw, tmvw, tmrw, s0)
+                # state[self.m] = mx
+                # state[(d + 1)[0]] = o0
+                # state[(d + 2)[0]] = o1
+                # state[(d + 3)[0]] = o2
+                # state[(d + 4)[0]] = o3
+                # state[(d + 5)[0]] = o4
+                ox = torch.cat((ox, o0, o1, o2, o3, o4))
+                d = torch.add(d, self.f)
 
-                i += 1
-
-            return state
+            return torch.reshape(torch.cat((torch.flatten(x), ox)), state.shape)
 
 
 def empty_state(n_emb, layers, floatMode, device):

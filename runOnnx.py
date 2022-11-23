@@ -173,7 +173,6 @@ def loadContext(ctx: list[int], state, newctx: list[int]):
         o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
 
         state[0] = o[0]
-
         for l in layers:
 
             state, = l.run(None,
