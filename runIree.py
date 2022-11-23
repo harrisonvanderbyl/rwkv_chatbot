@@ -46,9 +46,20 @@ elif floatmode == "torch.bfloat16":
 # print(emptyState.shape)
 
 
+layers = os.listdir(loadFile)
+layers = filter(
+    lambda x: not "pre" in x and not 'post' in x and not "mlir" in x, layers)
+layers = list(layers)
+layers.sort()
+print(layers)
+dname = layers[0].split("_")[1]
+if (dname == "llvm-cpu"):
+    dname = "local-task"
+
+
 def loadModel(x):
 
-    config = iree_rt.Config("local-task")
+    config = iree_rt.Config(driver_name=dname)
     context = iree_rt.SystemContext(config=config)
     with open(loadFile+"/"+x+".vmfb", 'rb') as f:
         vm_module = iree_rt.VmModule.from_flatbuffer(
@@ -59,12 +70,7 @@ def loadModel(x):
 
 pre = loadModel("pre")
 post = loadModel("post")
-layers = os.listdir(loadFile)
-layers = filter(
-    lambda x: not "pre" in x and not 'post' in x and not "mlir" in x, layers)
-layers = list(layers)
-layers.sort()
-print(layers)
+
 layers = list(map(lambda x: loadModel(x[1][:-5]), enumerate(layers)))
 ###### A good prompt for chatbot ######
 context = '''

@@ -51,7 +51,17 @@ except:
 
 
 outpath = f"iree/"+p
-backends = ["llvm-cpu"]
+d = os.listdir(outpath)
+for f in d:
+    os.remove(outpath+"/"+f)
+
+questions = [
+    inquirer.List('file',
+                  message="What accelerator do you want to use?",
+                  choices=["cuda", "vulkan", "llvm-cpu"],
+                  ),
+]
+backends = [inquirer.prompt(questions)["file"]]
 config = "local-task"
 
 iree_tflite_compile.compile_file(
@@ -80,7 +90,7 @@ def saveLayer(i, layer):
     iree_tflite_compile.compile_file(
         inpath+"/model_float32.tflite",
         input_type="TOSA",
-        output_file=outpath+f"/{str(i)}.vmfb",
+        output_file=outpath+f"/{str(i)}_{backends[0]}_.vmfb",
         save_temp_tfl_input=outpath+f"/{str(i)}.mlir",
         save_temp_iree_input=outpath+f"/{str(i)}.mlir",
         target_backends=backends,
