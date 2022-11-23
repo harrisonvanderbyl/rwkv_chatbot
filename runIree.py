@@ -55,6 +55,8 @@ print(layers)
 dname = layers[0].split("_")[1]
 if (dname == "llvm-cpu"):
     dname = "local-task"
+if (dname == "vulkan-spirv"):
+    dname = "vulkan"
 
 
 def loadModel(x):

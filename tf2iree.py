@@ -58,7 +58,7 @@ for f in d:
 questions = [
     inquirer.List('file',
                   message="What accelerator do you want to use?",
-                  choices=["cuda", "vulkan", "llvm-cpu"],
+                  choices=["cuda", "vulkan-spirv", "llvm-cpu"],
                   ),
 ]
 backends = [inquirer.prompt(questions)["file"]]
@@ -66,7 +66,7 @@ config = "local-task"
 
 iree_tflite_compile.compile_file(
     loadFile+"/post/model_float32.tflite",
-    input_type="tosa",
+    input_type="TOSA",
     output_file=outpath+"/post.vmfb",
     save_temp_tfl_input=loadFile+"/posttflite.mlir",
     save_temp_iree_input=loadFile+"/posttosa.mlir",
@@ -76,7 +76,7 @@ iree_tflite_compile.compile_file(
 
 iree_tflite_compile.compile_file(
     loadFile+"/pre/model_float32.tflite",
-    input_type="tosa",
+    input_type="TOSA",
     output_file=outpath+"/pre.vmfb",
     save_temp_tfl_input=loadFile+"/pretflite.mlir",
     save_temp_iree_input=loadFile+"/pretosa.mlir",
