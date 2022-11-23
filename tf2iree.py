@@ -51,7 +51,7 @@ except:
 
 
 outpath = f"iree/"+p
-backends = ["vulkan"]
+backends = ["llvm-cpu"]
 config = "local-task"
 
 iree_tflite_compile.compile_file(
