@@ -171,7 +171,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             for l in layers:
                 state = l.forward(state)
 
-            xout = post.forward(state)
+            xout = post.forward(state[0])
             chars += [sample_logits(
                 xout, temp=TEMPERATURE, top_p_usual=top_p)]
 

@@ -54,24 +54,24 @@ outpath = f"iree/"+p
 backends = ["vulkan"]
 config = "local-task"
 
-# iree_tflite_compile.compile_file(
-#     loadFile+"/post/model_float32.tflite",
-#     input_type="tosa",
-#     output_file=outpath+"/post.vmfb",
-#     save_temp_tfl_input=loadFile+"/posttflite.mlir",
-#     save_temp_iree_input=loadFile+"/posttosa.mlir",
-#     target_backends=backends,
+iree_tflite_compile.compile_file(
+    loadFile+"/post/model_float32.tflite",
+    input_type="tosa",
+    output_file=outpath+"/post.vmfb",
+    save_temp_tfl_input=loadFile+"/posttflite.mlir",
+    save_temp_iree_input=loadFile+"/posttosa.mlir",
+    target_backends=backends,
 
-#     import_only=False)
+    import_only=False)
 
-# iree_tflite_compile.compile_file(
-#     loadFile+"/pre/model_float32.tflite",
-#     input_type="tosa",
-#     output_file=outpath+"/pre.vmfb",
-#     save_temp_tfl_input=loadFile+"/pretflite.mlir",
-#     save_temp_iree_input=loadFile+"/pretosa.mlir",
-#     target_backends=backends,
-#     import_only=False)
+iree_tflite_compile.compile_file(
+    loadFile+"/pre/model_float32.tflite",
+    input_type="tosa",
+    output_file=outpath+"/pre.vmfb",
+    save_temp_tfl_input=loadFile+"/pretflite.mlir",
+    save_temp_iree_input=loadFile+"/pretosa.mlir",
+    target_backends=backends,
+    import_only=False)
 
 
 def saveLayer(i, layer):

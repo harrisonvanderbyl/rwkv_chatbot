@@ -92,9 +92,13 @@ class RWKV_PREPROCESS(nn.Module):
     def __init__(self, preProcess):
         super().__init__()
         self.preProcess = preProcess
+        self.m = torch.Tensor([0]).to(dtype=torch.int32)
 
-    def forward(self, x: torch.LongTensor):
-        return self.preProcess[x[0]]
+    def forward(self, xx: torch.tensor):
+        # rm, = x[self.m]
+        x, *di = xx
+        out = self.preProcess[x]
+        return out
 
 
 class RWKV_POSTPROCESS(nn.Module):
@@ -104,10 +108,12 @@ class RWKV_POSTPROCESS(nn.Module):
         self.postProcess0 = postprocess[0]
         self.postProcess1 = postprocess[1]
         self.postProcess2 = postprocess[2]
+        self.m = torch.Tensor([0]).to(dtype=torch.int32)
 
     def forward(self, x: torch.Tensor):
+
         zz = torch.layer_norm(
-            x[0], self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
+            x, self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
         out = torch.einsum('ik,k->i', [self.postProcess2, zz])
         return out
 
