@@ -72,17 +72,17 @@ layer = interOp("layer-0")
 
 prea = pre.run(tf.Variable([192], dtype=tf.int32))
 print(prea[0])
-mm = 61*[768*[0]]
-mm[0] = prea[0]
+mm = 60*[768*[0]]
+
 
 emptyState = tf.Variable(mm, dtype=tf.float32)
 
-layera, = layer.run(emptyState)
+layera, x = layer.run(prea[0], emptyState)
 
 layers = [layer]
 print(layera)
 
-print(post.run(layera[0]))
+print(post.run(x))
 
 
 # layers = os.listdir(loadFile)
@@ -182,13 +182,10 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
     statex = statex.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, = pre.run(tf.Variable([x[-1]], tf.int32))
-
-        statex[0] = o
-        lmx = statex[2][5]
+        x, = pre.run(tf.Variable([x[-1]], tf.int32))
 
         for l in layers:
-            statex, = l.run(statex)
+            statex, x = l.run(x, statex)
 
         # print(o[0][0] - statex[0][0])
         # print(statex[2][5] - lmx)
@@ -233,11 +230,11 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = tokens[1]
 
-            o = pre.run(tf.Variable([chars[-1]], dtype=tf.int32))
-            state[0] = o[0]
+            x, = pre.run(tf.Variable([chars[-1]], dtype=tf.int32))
+
             for l in layers:
-                state, = l.run(state)
-            myout = (post.run(state[0]), state)
+                state, x = l.run(x, state)
+            myout = (post.run(x), state)
 
             chars += [sample_logits(
                 myout[0][0], temp=TEMPERATURE, top_p_usual=top_p)]

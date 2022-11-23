@@ -118,9 +118,9 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
         x = ctx+newctx[:i+1]
         o = pre.preProcess[x[-1]]
-        statex[0] = o
+        rx = o
         for s in self:
-            statex = s.forward(statex)
+            rx, statex = s.forward(rx, statex)
 
     return ctx+newctx, statex
 
@@ -166,12 +166,12 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             state = tokens[1]
-            state[0] = pre.preProcess[chars[-1]]
+            x = pre.preProcess[chars[-1]]
 
             for l in layers:
-                state = l.forward(state)
+                x, state = l.forward(x, state)
 
-            xout = post.forward(state[0])
+            xout = post.forward(x)
             chars += [sample_logits(
                 xout, temp=TEMPERATURE, top_p_usual=top_p)]
 

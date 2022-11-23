@@ -170,13 +170,13 @@ def loadContext(ctx: list[int], state, newctx: list[int]):
     state = state.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
+        o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
 
-        state[0] = o[0]
+        x = o
         for l in layers:
 
-            state, = l.run(None,
-                           {l.get_inputs()[0].name: state})
+            x, state = l.run(None,
+                             {l.get_inputs()[0].name: x, l.get_inputs()[1].name: state})
 
     return ctx+newctx, state
 
@@ -218,14 +218,14 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             chars: List[int] = tokens[0]
 
             statex = tokens[1]
-            o = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
-            statex[0] = o[0]
+            o, = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
+
             for l in layers:
-                statex, = l.run(None,
-                                {l.get_inputs()[0].name: statex})
+                o, statex = l.run(None,
+                                  {l.get_inputs()[0].name: o, l.get_inputs()[1].name: statex})
 
             myout = (
-                post.run(None, {post.get_inputs()[0].name: statex[0]})[0], statex)
+                post.run(None, {post.get_inputs()[0].name: o})[0], statex)
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

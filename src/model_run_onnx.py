@@ -231,9 +231,9 @@ class RWKV_LAYER(nn.Module):
 
         return output, x,  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
-    def forward(self, state: torch.Tensor):
-        x, = state[self.m]
-        ox = torch.zeros(0)
+    def forward(self, x, state: torch.Tensor):
+        dx = x.clone()
+        ox = []
         d = self.m.clone()
         with torch.no_grad():
             for i in self.layerlist:
@@ -264,35 +264,36 @@ class RWKV_LAYER(nn.Module):
                 tmrw = self.receptance_ffn[i]
                 tmvw = self.value_ffn[i]
 
-                s0, = state[d + 1]
-                s1, = state[d + 2]
-                s2, = state[d + 3]
-                s3, = state[d + 4]
-                s4, = state[d + 5]
+                s0, = state[d + 0]
+                s1, = state[d + 1]
+                s2, = state[d + 2]
+                s3, = state[d + 3]
+                s4, = state[d + 4]
 
-                sx, o1, o2, o3, o4 = self.SA(x, ln1w, ln1b,
+                sx, o1, o2, o3, o4 = self.SA(dx, ln1w, ln1b,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
                                              )
 
                 x, o0 = self.FF(sx, ln2w, ln2b,
                                 tmk, tmr, tmkw, tmvw, tmrw, s0)
+                dx = x
                 # state[self.m] = mx
                 # state[(d + 1)[0]] = o0
                 # state[(d + 2)[0]] = o1
                 # state[(d + 3)[0]] = o2
                 # state[(d + 4)[0]] = o3
                 # state[(d + 5)[0]] = o4
-                ox = torch.cat((ox, o0, o1, o2, o3, o4))
+                ox = ox + [o0, o1, o2, o3, o4]
                 d = torch.add(d, self.f)
 
-            return torch.reshape(torch.cat((torch.flatten(x), ox)), state.shape)
+            return x, torch.stack(torch.cat(ox).split(len(ox[0])))
 
 
 def empty_state(n_emb, layers, floatMode, device):
     state = torch.zeros(
-        layers * 5 + 1, n_emb, device=device[0], dtype=floatMode)
+        layers * 5, n_emb, device=device[0], dtype=floatMode)
     for i in range(layers):
-        state[1 + 5*i+4] -= 1e30
+        state[5*i+4] -= 1e30
 
     return state
 

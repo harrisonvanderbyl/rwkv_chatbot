@@ -166,16 +166,16 @@ def loadContext(ctx: list[int], state, newctx: list[int]):
         x = ctx+newctx[:i+1]
         o = pre(numpy.array([x[-1]], dtype=numpy.int32))
 
-        state[0] = o.to_host()
+        x = o.to_host()
 
         for l in layers:
 
-            state = l(state).to_host()
+            state, x = l(x, state)
 
-    return ctx+newctx, state
+    return ctx+newctx, state.to_host()
 
 
-tokens = loadContext(ctx=[], newctx=ctx1, state=((layernum*5+1)*[embed*[0]]))
+tokens = loadContext(ctx=[], newctx=ctx1, state=((layernum*5)*[embed*[0]]))
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -212,13 +212,12 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             chars: List[int] = tokens[0]
 
             statex = tokens[1]
-            o = pre(numpy.array([chars[-1]], dtype=numpy.int32)).to_host()
-            statex[0] = o
-            for l in layers:
-                statex = l(statex).to_host()
+            x = pre(numpy.array([chars[-1]], dtype=numpy.int32)).to_host()
 
-            myout = (
-                post(statex[0]).to_host(), statex)
+            for l in layers:
+                statex, x = l(x, statex)
+
+            myout = (post(x.to_host()).to_host(), statex)
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

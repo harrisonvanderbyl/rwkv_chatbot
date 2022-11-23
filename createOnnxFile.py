@@ -95,19 +95,19 @@ except:
 
 try:
     os.mkdir(
-        f"onnx/rwkv-{int((emptyState.shape[0]-1)/5)}-{emptyState.shape[1]}-{emptyState.dtype}")
+        f"onnx/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}")
 except:
     pass
 torch.save(
-    emptyState, f"onnx/rwkv-{int((emptyState.shape[0]-1)/5)}-{emptyState.shape[1]}-{emptyState.dtype}/emptyState.pt")
+    emptyState, f"onnx/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/emptyState.pt")
 
-torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32)), f"onnx/rwkv-{int((emptyState.shape[0]-1)/5)}-{emptyState.shape[1]}-{emptyState.dtype}/preprocess.onnx",
+torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32)), f"onnx/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/preprocess.onnx",
                   input_names=input_names[0:1], output_names=output_names[0:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "17")), do_constant_folding=False)
 
-
+rx = pre.preProcess[156]
 for m in range(len(layers)):
-    torch.onnx.export(layers[m], (emptyState), f"onnx/rwkv-{int((emptyState.shape[0]-1)/5)}-{emptyState.shape[1]}-{emptyState.dtype}/layer{m}.onnx",
-                      input_names=output_names[0:1], output_names=output_names[0:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
+    torch.onnx.export(layers[m], (rx, emptyState), f"onnx/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/layer{m}.onnx",
+                      input_names=output_names[0:2], output_names=output_names[0:2], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
 
-torch.onnx.export(post, (emptyState[0]), f"onnx/rwkv-{int((emptyState.shape[0]-1)/5)}-{emptyState.shape[1]}-{emptyState.dtype}/postprocess.onnx", input_names=output_names[:1],
+torch.onnx.export(post, (emptyState[0]), f"onnx/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/postprocess.onnx", input_names=output_names[:1],
                   output_names=output_names[:1], export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
