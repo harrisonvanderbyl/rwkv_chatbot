@@ -31,6 +31,8 @@ loadFile = "tf/"+inquirer.prompt(questions)["file"]
 embed = int(loadFile.split("-")[2])
 layers = int(loadFile.split("-")[1])
 floatmode = (loadFile.split("-")[3])
+mm = (layers*5)*[embed*[0]]
+
 
 if floatmode == "torch.float16":
     floatmode = torch.float16
@@ -68,21 +70,20 @@ class interOp:
 # my_signature is callable with input as arguments.
 pre = interOp("pre")
 post = interOp("post")
-layer = interOp("layer-0")
+
+layernames = os.listdir(loadFile)
+layernames = [l for l in layernames if l.startswith("layer")]
+layernames.sort()
+layers = []
+for l in layernames:
+    layers += [interOp(l)]
+
 
 prea = pre.run(tf.Variable([192], dtype=tf.int32))
 print(prea[0])
-mm = 60*[768*[0]]
 
 
 emptyState = tf.Variable(mm, dtype=tf.float32)
-
-layera, x = layer.run(prea[0], emptyState)
-
-layers = [layer]
-print(layera)
-
-print(post.run(x))
 
 
 # layers = os.listdir(loadFile)

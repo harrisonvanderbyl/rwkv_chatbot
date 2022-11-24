@@ -264,11 +264,11 @@ class RWKV_LAYER(nn.Module):
                 tmrw = self.receptance_ffn[i]
                 tmvw = self.value_ffn[i]
 
-                s0, = state[d + 0]
-                s1, = state[d + 1]
-                s2, = state[d + 2]
-                s3, = state[d + 3]
-                s4, = state[d + 4]
+                s0, = state[d + 0 + self.offset*5]
+                s1, = state[d + 1 + self.offset*5]
+                s2, = state[d + 2 + self.offset*5]
+                s3, = state[d + 3 + self.offset*5]
+                s4, = state[d + 4 + self.offset*5]
 
                 sx, o1, o2, o3, o4 = self.SA(dx, ln1w, ln1b,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
@@ -285,8 +285,7 @@ class RWKV_LAYER(nn.Module):
                 # state[(d + 5)[0]] = o4
                 ox = ox + [o0, o1, o2, o3, o4]
                 d = torch.add(d, self.f)
-
-            return x, torch.stack(torch.cat(ox).split(len(ox[0])))
+            return x, torch.stack((*state[0:self.offset*5], *torch.cat(ox).split(len(ox[0])), *state[self.offset*5+len(ox):]))
 
 
 def empty_state(n_emb, layers, floatMode, device):
