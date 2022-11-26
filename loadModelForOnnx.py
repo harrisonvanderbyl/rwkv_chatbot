@@ -60,14 +60,10 @@ def loadModel():
                                                         )])["RUN_DEVICE"]
 
     # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-    args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('FLOAT_MODE',
-                                                        message="What float mode do you want to use?",
-                                                        choices=[
-                                                            "fp32", "bf16", "fp16"],
-                                                        )])["FLOAT_MODE"]
+    args["FLOAT_MODE"] = "fp32"
 
     args["CHUNK_SIZE"] = inquirer.text(
-        message="What chunk size do you want to use?", default="128")
+        message="What chunk size do you want to use?", default="4")
 
     args["CHUNK_SIZE"] = int(args["CHUNK_SIZE"])
     # print config
@@ -92,7 +88,7 @@ def loadModel():
     argsnums["my_pos_emb"] = 0
     os.environ["RWKV_RUN_DEVICE"] = args["RUN_DEVICE"]
 
-    if (torch.cuda.device_count() > 1):
+    if (torch.cuda.device_count() > 1 and args["RUN_DEVICE"] == "cuda"):
         args["RUN_DEVICE"] = ["cuda:0"]*int(inquirer.text(
             message="Detected at least 2 Cuda Devices, how many chunks would you like to store on primary device, before offloading additional chunks?", default="20")) + ["cuda:1"]*20
     else:
