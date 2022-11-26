@@ -19,11 +19,11 @@ import loadModel
 # context = "\n東京は" # test Japanese
 model = loadModel.loadModel()
 ###### A good prompt for chatbot ######
-user = "User"
+user = "Mark"
 interface = ":"
-bot = "RWKV"
+bot = "Dave"
 context = f'''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant called {bot}, and a human user called {user}. In the following interactions, {user} and {bot} converse in natural language, and {bot} always answer {user}'s questions. {bot} is very smart, polite and humorous. {bot} knows a lot, and always tells the truth. The conversation begins.
+The following is a conversation online.
 
 {user}{interface} who is president of usa?
 
