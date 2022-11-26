@@ -119,7 +119,7 @@ class RWKV_POSTPROCESS(nn.Module):
 
 
 class RWKV_LAYER(nn.Module):
-    def __init__(self, w, offset):
+    def __init__(self, w, offset, dtypein=torch.int32):
         super().__init__()
 
         dtype = w[0].dtype
@@ -158,8 +158,9 @@ class RWKV_LAYER(nn.Module):
         print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
-        self.m = torch.Tensor([0]).to(dtype=torch.int32)
-        self.f = torch.Tensor([5]).to(dtype=torch.int32)
+        self.m = torch.LongTensor([0]).to(dtype=dtypein)
+        self.f = torch.LongTensor([5]).to(dtype=dtypein)
+        print(self.m.dtype)
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
         print(self.layerlist)
@@ -297,7 +298,7 @@ def empty_state(n_emb, layers, floatMode, device):
     return state
 
 
-def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
+def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64):
 
     def setToProp(i):
         return lambda x: x.to(dtype=FloatMode, device=RunDevice[i])
@@ -327,7 +328,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize):
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
         modelLayer = RWKV_LAYER(
-            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18))
+            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18), inttype)
         # modelLayer = torch.jit.script(
         #     modelLayer, (PreProcess.forward([127])))
 

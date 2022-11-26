@@ -97,8 +97,19 @@ def loadModel():
     ########################################################################################################
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
+
+    intmode = inquirer.prompt([inquirer.List('INTMODE',
+                                             message="What int mode do you want to use?",
+                                             choices=[
+                                                 "int32", "int64"],
+                                             )])["INTMODE"]
+    if (intmode == "int32"):
+        intmode = torch.int32
+    else:
+        intmode = torch.int64
+
     pre, layers, post, n_layer = createRWKVModules(
-        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"])
+        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode)
 
     emptyState = empty_state(pre.preProcess[1].shape[0], n_layer, torch.float32 if args["FLOAT_MODE"]
                              == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
