@@ -60,7 +60,11 @@ def loadModel():
                                                         )])["RUN_DEVICE"]
 
     # fp32 // bf16 (saves VRAM, slightly less accurate) // fp16 (saves VRAM, slightly less accurate, can only be used with cuda, sometimes faster)
-    args["FLOAT_MODE"] = "fp32"
+    args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
+                                                        message="What device do you want to use?",
+                                                        choices=[
+                                                            "fp16", "bf16", "fp32"],
+                                                        )])["RUN_DEVICE"]
 
     args["CHUNK_SIZE"] = inquirer.text(
         message="What chunk size do you want to use?", default="4")
@@ -128,11 +132,14 @@ def loadModel():
     # layers = list(map(torch.jit.optimize_for_inference, map(
     #     lambda x: torch.jit.script(x), layers)))
 
-    # layers = list(map(torch.jit.optimize_for_inference,
-    #                   map(lambda x: torch.jit.trace(x, (pre.forward([187]), emptyState)), layers)))
+    pre: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
+        torch.Tensor([187]).to(torch.int32),))
 
-    # post = torch.jit.trace(
-    #     torch.jit.script(post), (pre.forward([187]),))
+    layers: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
+        x, example_inputs=(pre.forward(torch.LongTensor([187])), emptyState)), layers))
+
+    post: torch.ScriptModule = torch.jit.trace(
+        post, example_inputs=(pre.forward(torch.LongTensor([187])),))
 
     return pre, layers, post, emptyState
 

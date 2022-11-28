@@ -106,13 +106,13 @@ except:
 torch.save(
     emptyState, f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/emptyState.pt")
 
-torch.jit.trace(pre, (torch.tensor([187]).to(torch.int32))).save(
+pre.save(
     f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/pre.pt")
 
 rx = pre.preProcess[156]
 for m in range(len(layers)):
-    torch.jit.trace(layers[m], (rx, emptyState)).save(
+    layers[m].save(
         f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/{m}.pt")
 
-torch.jit.trace(post, (emptyState[0])).save(
+post.save(
     f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/post.pt")
