@@ -109,7 +109,6 @@ torch.save(
 pre.save(
     f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/pre.pt")
 
-rx = pre.preProcess[156]
 for m in range(len(layers)):
     layers[m].save(
         f"pt/rwkv-{int((emptyState.shape[0])/5)}-{emptyState.shape[1]}-{emptyState.dtype}/{m}.pt")
