@@ -68,8 +68,8 @@ iree_tflite_compile.compile_file(
     loadFile+"/post/model_float32.tflite",
     input_type="TOSA",
     output_file=outpath+"/post.vmfb",
-    save_temp_tfl_input=loadFile+"/posttflite.mlir",
-    save_temp_iree_input=loadFile+"/posttosa.mlir",
+    save_temp_tfl_input=outpath+"/posttflite.mlir",
+    save_temp_iree_input=outpath+"/posttosa.mlir",
     target_backends=backends,
 
     import_only=False)
@@ -78,8 +78,8 @@ iree_tflite_compile.compile_file(
     loadFile+"/pre/model_float32.tflite",
     input_type="TOSA",
     output_file=outpath+"/pre.vmfb",
-    save_temp_tfl_input=loadFile+"/pretflite.mlir",
-    save_temp_iree_input=loadFile+"/pretosa.mlir",
+    save_temp_tfl_input=outpath+"/pretflite.mlir",
+    save_temp_iree_input=outpath+"/pretosa.mlir",
     target_backends=backends,
     import_only=False)
 
@@ -91,8 +91,8 @@ def saveLayer(i, layer):
         inpath+"/model_float32.tflite",
         input_type="TOSA",
         output_file=outpath+f"/{str(i)}_{backends[0]}_.vmfb",
-        save_temp_tfl_input=outpath+f"/{str(i)}.mlir",
-        save_temp_iree_input=outpath+f"/{str(i)}.mlir",
+        save_temp_tfl_input=outpath+f"/{str(i)}tflite.mlir",
+        save_temp_iree_input=outpath+f"/{str(i)}tosa.mlir",
         target_backends=backends,
         import_only=False)
 

@@ -47,24 +47,49 @@ elif floatmode == "torch.bfloat16":
 # pre = ort.InferenceSession(
 #     f"{loadFile}/preprocess.onnx", providers=providers, sess_options=so)
 
+options = inquirer.prompt([
+    inquirer.List('type',
+                  message="What model varient",
+                  choices=["litefp32", "litefp16", "full"],
+                  ),
+])["type"]
+
 
 class interOp:
     def __init__(self, sig) -> None:
         self.sig = sig
-        self.model = tf.lite.Interpreter(
-            loadFile+f"/{sig}/model_float16.tflite")
+        # print(tf.lite.experimental.load_delegate("delegate.so"))
+        if (options == "litefp32"):
+            self.model = tf.lite.Interpreter(
+                model_path=loadFile+f"/{sig}/model_float32.tflite")
+        elif (options == "litefp16"):
+            self.model = tf.lite.Interpreter(
+                model_path=loadFile+f"/{sig}/model_float16.tflite")
+        elif (options == "full"):
+            self.model = tf.saved_model.load(
+                loadFile+f"/{sig}")
 
     def run(self, *x):
-        self.model.allocate_tensors()
-        for i, inp in enumerate(x):
-            self.model.set_tensor(
-                self.model.get_input_details()[i]["index"], inp)
+        if (options != "full"):
+            self.model.allocate_tensors()
 
-        self.model.invoke()
-        outs = self.model.get_output_details()
-        # print(self.sig, len(outs), [outs[o]["shape"]
-        #       for o in range(len(outs))])
-        return [self.model.get_tensor(out["index"]) for out in outs]
+            for i, inp in enumerate(x):
+                self.model.set_tensor(
+                    self.model.get_input_details()[i]["index"], inp)
+
+            self.model.invoke()
+            outs = self.model.get_output_details()
+            # print(self.sig, len(outs), [outs[o]["shape"]
+            #       for o in range(len(outs))])
+            return [self.model.get_tensor(out["index"]) for out in outs]
+        else:
+            rx: tf.Module = self.model
+            if (len(x) == 1):
+                out = rx(x[0])
+                return [out]
+            elif (len(x) == 2):
+                out = rx([*x])
+                return out
 
 
 # my_signature is callable with input as arguments.
@@ -79,8 +104,8 @@ for l in layernames:
     layers += [interOp(l)]
 
 
-prea = pre.run(tf.Variable([192], dtype=tf.int32))
-print(prea[0])
+# prea = pre.run(tf.Variable([192], dtype=tf.int32))
+# print(prea[0])
 
 
 emptyState = tf.Variable(mm, dtype=tf.float32)

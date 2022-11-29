@@ -12,7 +12,7 @@ import torch
 from src.utils import TOKENIZER
 import inquirer
 from torch.nn import functional as F
-
+from torch.profiler import profile, record_function, ProfilerActivity
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
@@ -114,14 +114,14 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 def loadContext(self, ctx: list[int], statex, newctx: list[int]):
 
-    for i in tqdm.tqdm(range(len(newctx))):
+    with torch.jit.optimized_execution(True):
+        for i in tqdm.tqdm(range(len(newctx))):
 
-        x = ctx+newctx[:i+1]
-        o = pre.forward(torch.LongTensor([x[-1]]))
-        rx = o
-        for s in self:
-            rx, statex = s.forward(rx, statex)
-
+            x = ctx+newctx[:i+1]
+            o = pre.forward(torch.LongTensor([x[-1]]))
+            rx = o
+            for s in self:
+                rx, statex = s.forward(rx, statex)
     return ctx+newctx, statex
 
 
