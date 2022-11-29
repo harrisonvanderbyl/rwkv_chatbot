@@ -25,7 +25,7 @@ except:
 import inquirer
 
 
-def loadModel():
+def loadModel(trace=True):
     files = os.listdir()
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
@@ -131,17 +131,19 @@ def loadModel():
 
     # layers = list(map(torch.jit.optimize_for_inference, map(
     #     lambda x: torch.jit.script(x), layers)))
+    if (trace):
+        pret: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
+            torch.Tensor([187]).to(torch.int32),))
 
-    pre: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
-        torch.Tensor([187]).to(torch.int32),))
+        layerst: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
+            x, example_inputs=(pre.forward(torch.LongTensor([187])), emptyState)), layers))
 
-    layers: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
-        x, example_inputs=(pre.forward(torch.LongTensor([187])), emptyState)), layers))
+        postt: torch.ScriptModule = torch.jit.trace(
+            post, example_inputs=(pre.forward(torch.LongTensor([187])),))
 
-    post: torch.ScriptModule = torch.jit.trace(
-        post, example_inputs=(pre.forward(torch.LongTensor([187])),))
-
-    return pre, layers, post, emptyState
+        return pret, layerst, postt, emptyState
+    else:
+        return pre, layers, post, emptyState
 
 
 class Compat():

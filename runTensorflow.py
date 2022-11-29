@@ -79,8 +79,7 @@ class interOp:
 
             self.model.invoke()
             outs = self.model.get_output_details()
-            # print(self.sig, len(outs), [outs[o]["shape"]
-            #       for o in range(len(outs))])
+
             return [self.model.get_tensor(out["index"]) for out in outs]
         else:
             rx: tf.Module = self.model
@@ -89,6 +88,7 @@ class interOp:
                 return [out]
             elif (len(x) == 2):
                 out = rx([*x])
+                \
                 return out
 
 
@@ -211,7 +211,7 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
         x, = pre.run(tf.Variable([x[-1]], tf.int32))
 
         for l in layers:
-            statex, x = l.run(x, statex)
+            x, statex = l.run(x, statex)
 
         # print(o[0][0] - statex[0][0])
         # print(statex[2][5] - lmx)
@@ -259,7 +259,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             x, = pre.run(tf.Variable([chars[-1]], dtype=tf.int32))
 
             for l in layers:
-                state, x = l.run(x, state)
+                x, state = l.run(x, state)
             myout = (post.run(x), state)
 
             chars += [sample_logits(

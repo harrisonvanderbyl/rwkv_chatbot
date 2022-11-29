@@ -117,7 +117,8 @@ print(tokenizer.tokenizer.encode("\n\n"))
 #  see if save_state file exists
 if os.path.isfile(f"save_states_{model.n_emb}_{model.n_layer}.pt"):
     print("Loading save state...")
-    savestates = torch.load(f"save_states_{model.n_emb}_{model.n_layer}.pt")
+    savestates = torch.load(
+        f"save_states_{model.n_emb}_{model.n_layer}.pt", map_location=torch.device('cpu'))
     state = savestates["init"]
 
 else:

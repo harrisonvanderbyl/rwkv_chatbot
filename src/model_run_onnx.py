@@ -94,15 +94,15 @@ class RWKV_PREPROCESS(nn.Module):
         self.preProcess = preProcess
         self.m = torch.Tensor([0]).to(dtype=torch.int32)
 
-    def forward(self, xx: torch.tensor):
-        # rm, = x[self.m]
-        x, *di = xx
-        out = self.preProcess[x]
+    def forward(self, xx):
+        rm, = xx[self.m]
+
+        out = self.preProcess[rm]
         return out
 
 
 class RWKV_POSTPROCESS(nn.Module):
-    def __init__(self, postprocess: torch.Tensor):
+    def __init__(self, postprocess):
         super().__init__()
 
         self.postProcess0 = postprocess[0]
@@ -233,9 +233,10 @@ class RWKV_LAYER(nn.Module):
         return output, x,  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
     def forward(self, x, state: torch.Tensor):
-        dx = x.clone()
-        ox = []
-        d = self.m.clone()
+
+        bef = state[0:self.offset*5]
+        bet = state[self.offset*5:(self.offset+len(self.layerlist))*5]
+        aft = state[(self.offset+len(self.layerlist))*5:]
         with torch.no_grad():
             for i in self.layerlist:
 
@@ -265,28 +266,26 @@ class RWKV_LAYER(nn.Module):
                 tmrw = self.receptance_ffn[i]
                 tmvw = self.value_ffn[i]
 
-                s0, = state[d + 0 + self.offset*5]
-                s1, = state[d + 1 + self.offset*5]
-                s2, = state[d + 2 + self.offset*5]
-                s3, = state[d + 3 + self.offset*5]
-                s4, = state[d + 4 + self.offset*5]
+                s0 = bet[i*5]
+                s1 = bet[i*5+1]
+                s2 = bet[i*5+2]
+                s3 = bet[i*5+3]
+                s4 = bet[i*5+4]
 
-                sx, o1, o2, o3, o4 = self.SA(dx, ln1w, ln1b,
+                sx, o1, o2, o3, o4 = self.SA(x, ln1w, ln1b,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
                                              )
 
                 x, o0 = self.FF(sx, ln2w, ln2b,
                                 tmk, tmr, tmkw, tmvw, tmrw, s0)
-                dx = x
-                # state[self.m] = mx
-                # state[(d + 1)[0]] = o0
-                # state[(d + 2)[0]] = o1
-                # state[(d + 3)[0]] = o2
-                # state[(d + 4)[0]] = o3
-                # state[(d + 5)[0]] = o4
-                ox = ox + [o0, o1, o2, o3, o4]
-                d = torch.add(d, self.f)
-            return x, torch.stack((*state[0:self.offset*5], *torch.cat(ox).split(len(ox[0])), *state[self.offset*5+len(ox):]))
+
+                bet[i*5] = o0
+                bet[i*5+1] = o1
+                bet[i*5+2] = o2
+                bet[i*5+3] = o3
+                bet[i*5+4] = o4
+
+            return x, torch.stack((*bef, *bet, *aft))
 
 
 def empty_state(n_emb, layers, floatMode, device):

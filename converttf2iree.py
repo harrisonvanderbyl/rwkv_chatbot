@@ -55,17 +55,24 @@ d = os.listdir(outpath)
 for f in d:
     os.remove(outpath+"/"+f)
 
+
 questions = [
     inquirer.List('file',
                   message="What accelerator do you want to use?",
-                  choices=["cuda", "vulkan-spirv", "llvm-cpu"],
+                  choices=["vmvx", "cuda", "vulkan-spirv", "llvm-cpu"],
+                  ),
+    inquirer.List('fp',
+                  message="What fp doy ou want?",
+                  choices=["16", "32"],
                   ),
 ]
-backends = [inquirer.prompt(questions)["file"]]
+q = inquirer.prompt(questions)
+
+backends = [q["file"]]
 config = "local-task"
 
 iree_tflite_compile.compile_file(
-    loadFile+"/post/model_float32.tflite",
+    loadFile+f"/post/model_float{q['fp']}.tflite",
     input_type="TOSA",
     output_file=outpath+"/post.vmfb",
     save_temp_tfl_input=outpath+"/posttflite.mlir",
@@ -75,7 +82,7 @@ iree_tflite_compile.compile_file(
     import_only=False)
 
 iree_tflite_compile.compile_file(
-    loadFile+"/pre/model_float32.tflite",
+    loadFile+f"/pre/model_float{q['fp']}.tflite",
     input_type="TOSA",
     output_file=outpath+"/pre.vmfb",
     save_temp_tfl_input=outpath+"/pretflite.mlir",
@@ -88,7 +95,7 @@ def saveLayer(i, layer):
     print(f"Saving layer {i} {layer}")
     inpath = f"{loadFile}/layer-{str(i)}"
     iree_tflite_compile.compile_file(
-        inpath+"/model_float32.tflite",
+        inpath+f"/model_float{q['fp']}.tflite",
         input_type="TOSA",
         output_file=outpath+f"/{str(i)}_{backends[0]}_.vmfb",
         save_temp_tfl_input=outpath+f"/{str(i)}tflite.mlir",
