@@ -78,18 +78,15 @@ class interOp:
                     self.model.get_input_details()[i]["index"], inp)
 
             self.model.invoke()
-            outs = self.model.get_output_details()
+            outs = self.model.get_output_details()[::-1]
 
             return [self.model.get_tensor(out["index"]) for out in outs]
         else:
             rx: tf.Module = self.model
-            if (len(x) == 1):
-                out = rx(x[0])
-                return [out]
-            elif (len(x) == 2):
-                out = rx([*x])
-                \
-                return out
+
+            out = rx([*x])[::-1]
+
+            return out
 
 
 # my_signature is callable with input as arguments.
@@ -208,14 +205,13 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
     statex = statex.numpy()
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        x, = pre.run(tf.Variable([x[-1]], tf.int32))
+        dx = pre.run(tf.Variable([x[-1]], tf.int32), statex)
 
         for l in layers:
-            statex, x = l.run(x, statex)
-
+            dx = l.run(*dx)
         # print(o[0][0] - statex[0][0])
         # print(statex[2][5] - lmx)
-
+        statex = dx[1]
     return ctx+newctx, statex
 
 
@@ -256,14 +252,14 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = tokens[1]
 
-            x, = pre.run(tf.Variable([chars[-1]], dtype=tf.int32))
+            x = pre.run(tf.Variable([chars[-1]], dtype=tf.int32), state)
 
             for l in layers:
-                state, x = l.run(x, state)
-            myout = (post.run(x), state)
+                x = l.run(*x)
+            myout = post.run(*x)
 
             chars += [sample_logits(
-                myout[0][0], temp=TEMPERATURE, top_p_usual=top_p)]
+                myout[0], temp=TEMPERATURE, top_p_usual=top_p)]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])

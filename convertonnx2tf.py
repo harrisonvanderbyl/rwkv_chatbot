@@ -35,19 +35,22 @@ elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
 emptyState = torch.load(loadFile+"/emptyState.pt")
-
+outpath = f"tf/rwkv-{int(layers)}-{embed}-{floatmode}"
 try:
     os.mkdir("tf")
 except:
     pass
 
 try:
+    try:
+        os.rmdir(outpath)
+    except:
+        print("failed to delete path")
     os.mkdir(
-        f"tf/rwkv-{int(layers/5)}-{embed}-{floatmode}")
+        outpath)
 except:
     pass
 
-outpath = f"tf/rwkv-{int(layers/5)}-{embed}-{floatmode}"
 
 # pre = onnx.load(f"{loadFile}/preprocess.onnx")  # load onnx model
 # tf_pre = prepare(pre)  # prepare tf representation
