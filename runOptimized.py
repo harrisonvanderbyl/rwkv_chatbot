@@ -118,11 +118,12 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
         for i in tqdm.tqdm(range(len(newctx))):
 
             x = ctx+newctx[:i+1]
-            o = pre.forward(torch.LongTensor([x[-1]]))
-            rx = o
+            o = pre.forward(torch.LongTensor([x[-1]]), statex)
+
             for s in self:
-                rx, statex = s.forward(rx, statex)
-    return ctx+newctx, statex
+                o = s.forward(*o)
+            statex = o[1]
+    return ctx+newctx, o[1]
 
 
 tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
@@ -166,21 +167,21 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             state = tokens[1]
-            x = pre.forward(torch.LongTensor([chars[-1]]))
+            x = pre.forward(torch.LongTensor([chars[-1]]), state)
 
             for l in layers:
-                x, state = l.forward(x, state)
+                x = l.forward(*x)
 
-            xout = post.forward(x)
+            xout = post.forward(*x)
             chars += [sample_logits(
-                xout, temp=TEMPERATURE, top_p_usual=top_p)]
+                xout[0], temp=TEMPERATURE, top_p_usual=top_p)]
 
             char = tokenizer.tokenizer.decode(chars[-1])
 
-            tokens = (chars, state)
+            tokens = (chars, xout[1])
 
             if '\ufffd' not in char:
-                fg.orange = Style(RgbFg(int((xout[chars[-1]])*255), 0, 0))
+                fg.orange = Style(RgbFg(int((xout[0][chars[-1]])*255), 0, 0))
 
                 print(fg.orange+char, end="", flush=True)
 

@@ -94,11 +94,11 @@ class RWKV_PREPROCESS(nn.Module):
         self.preProcess = preProcess
         self.m = torch.Tensor([0]).to(dtype=torch.int32)
 
-    def forward(self, xx):
+    def forward(self, xx, state):
         rm, = xx[self.m]
 
         out = self.preProcess[rm]
-        return out
+        return out, state
 
 
 class RWKV_POSTPROCESS(nn.Module):
@@ -110,12 +110,12 @@ class RWKV_POSTPROCESS(nn.Module):
         self.postProcess2 = postprocess[2]
         self.m = torch.Tensor([0]).to(dtype=torch.int32)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, state):
 
         zz = torch.layer_norm(
             x, self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
         out = torch.einsum('ik,k->i', [self.postProcess2, zz])
-        return out
+        return out, state
 
 
 class RWKV_LAYER(nn.Module):
@@ -160,9 +160,12 @@ class RWKV_LAYER(nn.Module):
         self.n_layer = len(self.ln1w)
         self.m = torch.LongTensor([0]).to(dtype=dtypein)
         self.f = torch.LongTensor([5]).to(dtype=dtypein)
+
         print(self.m.dtype)
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
+        self.cint = (self.offset+len(self.layerlist))*5
+        self.uncint = (self.offset*5)
         print(self.layerlist)
         self.eval()
         gc.collect()
@@ -233,10 +236,13 @@ class RWKV_LAYER(nn.Module):
         return output, x,  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
     def forward(self, x, state: torch.Tensor):
+        bef = state[:self.uncint]
+        outbet = []
 
-        bef = state[0:self.offset*5]
-        bet = state[self.offset*5:(self.offset+len(self.layerlist))*5]
-        aft = state[(self.offset+len(self.layerlist))*5:]
+        for i in bef:
+            outbet.append(i)
+
+        aft = state[self.cint:]
         with torch.no_grad():
             for i in self.layerlist:
 
@@ -266,11 +272,11 @@ class RWKV_LAYER(nn.Module):
                 tmrw = self.receptance_ffn[i]
                 tmvw = self.value_ffn[i]
 
-                s0 = bet[i*5]
-                s1 = bet[i*5+1]
-                s2 = bet[i*5+2]
-                s3 = bet[i*5+3]
-                s4 = bet[i*5+4]
+                s0 = state[i*5+self.offset*5]
+                s1 = state[i*5+self.offset*5+1]
+                s2 = state[i*5+self.offset*5+2]
+                s3 = state[i*5+self.offset*5+3]
+                s4 = state[i*5+self.offset*5+4]
 
                 sx, o1, o2, o3, o4 = self.SA(x, ln1w, ln1b,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
@@ -278,22 +284,23 @@ class RWKV_LAYER(nn.Module):
 
                 x, o0 = self.FF(sx, ln2w, ln2b,
                                 tmk, tmr, tmkw, tmvw, tmrw, s0)
+                outbet.append(o0)
+                outbet.append(o1)
+                outbet.append(o2)
+                outbet.append(o3)
+                outbet.append(o4)
+            for i in aft:
+                outbet.append(i)
 
-                bet[i*5] = o0
-                bet[i*5+1] = o1
-                bet[i*5+2] = o2
-                bet[i*5+3] = o3
-                bet[i*5+4] = o4
-
-            return x, torch.stack((*bef, *bet, *aft))
+            return x, torch.cat(outbet).reshape([len(outbet), outbet[0].shape[0]])
 
 
 def empty_state(n_emb, layers, floatMode, device):
-    state = torch.zeros(
-        layers * 5, n_emb, device=device[0], dtype=floatMode)
-    for i in range(layers):
-        state[5*i+4] -= 1e30
-
+    state = torch.zeros(layers * 5,
+                        n_emb, device=device[0], dtype=floatMode)
+    # for i in range(layers):
+    #     state[5*i+4] -= 1e30
+    # state = (*state,)
     return state
 
 

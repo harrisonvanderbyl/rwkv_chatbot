@@ -211,7 +211,7 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
         x, = pre.run(tf.Variable([x[-1]], tf.int32))
 
         for l in layers:
-            x, statex = l.run(x, statex)
+            statex, x = l.run(x, statex)
 
         # print(o[0][0] - statex[0][0])
         # print(statex[2][5] - lmx)
@@ -259,7 +259,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             x, = pre.run(tf.Variable([chars[-1]], dtype=tf.int32))
 
             for l in layers:
-                x, state = l.run(x, state)
+                state, x = l.run(x, state)
             myout = (post.run(x), state)
 
             chars += [sample_logits(

@@ -42,9 +42,8 @@ elif floatmode == "torch.float32":
 elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
-emptyState = torch.load(loadFile+"/emptyState.pt")
-print(emptyState.shape)
-
+#emptyState = torch.load(loadFile+"/emptyState.pt")
+emptyState = (layers*5)*[embed*[0]]
 
 providers = [
     ('CUDAExecutionProvider', {
@@ -166,18 +165,25 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
+def createInput(inputNames, values):
+    inputs = {}
+    for i, name in enumerate(inputNames):
+        inputs[name.name] = values[i]
+    return inputs
+
+
 def loadContext(ctx: list[int], state, newctx: list[int]):
-    state = state.numpy()
+
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, = pre.run(None, {pre.get_inputs()[0].name: [x[-1]]})
+        o = pre.run(None, createInput(pre.get_inputs(), [[x[-1]], state]))
 
-        x = o
         for l in layers:
 
-            x, state = l.run(None,
-                             {l.get_inputs()[0].name: x, l.get_inputs()[1].name: state})
+            o = l.run(None,
+                      createInput(l.get_inputs(), o))
 
+        state = o[1]
     return ctx+newctx, state
 
 
@@ -218,14 +224,14 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             chars: List[int] = tokens[0]
 
             statex = tokens[1]
-            o, = pre.run(None, {pre.get_inputs()[0].name: [chars[-1]]})
+            o = pre.run(None, createInput(
+                pre.get_inputs(), [[chars[-1]], statex]))
 
             for l in layers:
-                o, statex = l.run(None,
-                                  {l.get_inputs()[0].name: o, l.get_inputs()[1].name: statex})
+                o = l.run(None,
+                          createInput(l.get_inputs(), o))
 
-            myout = (
-                post.run(None, {post.get_inputs()[0].name: o})[0], statex)
+            myout = post.run(None, createInput(post.get_inputs(), o))
 
             chars += [sample_logits(
                 torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]

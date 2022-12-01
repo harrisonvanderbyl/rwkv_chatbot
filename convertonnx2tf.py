@@ -43,11 +43,11 @@ except:
 
 try:
     os.mkdir(
-        f"tf/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}")
+        f"tf/rwkv-{int(layers/5)}-{embed}-{floatmode}")
 except:
     pass
 
-outpath = f"tf/rwkv-{int(emptyState.shape[0]/5)}-{emptyState.shape[1]}-{emptyState.dtype}"
+outpath = f"tf/rwkv-{int(layers/5)}-{embed}-{floatmode}"
 
 # pre = onnx.load(f"{loadFile}/preprocess.onnx")  # load onnx model
 # tf_pre = prepare(pre)  # prepare tf representation

@@ -133,13 +133,13 @@ def loadModel(trace=True):
     #     lambda x: torch.jit.script(x), layers)))
     if (trace):
         pret: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
-            torch.Tensor([187]).to(torch.int32),))
+            torch.Tensor([187]).to(torch.int32), emptyState))
 
         layerst: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
-            x, example_inputs=(pre.forward(torch.LongTensor([187])), emptyState)), layers))
+            x, example_inputs=pre.forward(torch.LongTensor([187]), emptyState)), layers))
 
         postt: torch.ScriptModule = torch.jit.trace(
-            post, example_inputs=(pre.forward(torch.LongTensor([187])),))
+            post, example_inputs=pre.forward(torch.LongTensor([187]), emptyState))
 
         return pret, layerst, postt, emptyState
     else:
