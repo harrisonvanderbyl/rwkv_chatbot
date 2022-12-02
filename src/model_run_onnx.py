@@ -85,7 +85,7 @@ def createTensors(model_name):
          [w["ln_out.weight"], w["ln_out.bias"],
           w["head.weight"]
           ]]
-    torch.save(w, model_name+"_converted.pth")
+    return w
 
 
 class RWKV_PREPROCESS(nn.Module):
@@ -314,9 +314,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
         return x
 
     if (not "_converted" in Path):
-        createTensors(Path[: -4])
-        w: List(List(torch.Tensor)) = torch.load(
-            Path[:-4]+"_converted.pth", map_location="cpu")
+        w = createTensors(Path[: -4])
     else:
         w: List(List(torch.Tensor)) = torch.load(
             Path, map_location="cpu")

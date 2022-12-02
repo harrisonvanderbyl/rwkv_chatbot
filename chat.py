@@ -136,11 +136,12 @@ def loadContext(self, ctx: list[int], newctx: list[int], statex):
     for i in tqdm(range(len(newctx))):
 
         x = ctx+newctx[:i+1]
-        o = pre.preProcess[x[-1]]
-        for s in self:
-            o, statex = s.forward(o, statex)
+        o = [[x[-1]], statex]
+        ss = [pre]+self
+        for s in ss:
+            o = s.forward(*o)
 
-    return ctx+newctx, statex
+    return ctx+newctx, o[1]
 
 
 def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -259,10 +260,11 @@ async def on_message(message):
 
                 ctx = state[0]
 
-                state = (pre.preProcess[state[0][-1]], state[1])
+                state = (state[0][-1], state[1])
+                lr = [pre] + layers + [post]
                 for r in layers:
-                    state = r.forward(state[0], state[1])
-                state = (ctx+[sample_logits(post.forward(state[0]))], state[1])
+                    state = r.forward(*state)
+                state = (ctx+[sample_logits(state[0])], state[1])
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
         print(f'### send ###\n[{send_msg}]')
