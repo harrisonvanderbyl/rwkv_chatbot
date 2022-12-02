@@ -262,7 +262,7 @@ async def on_message(message):
 
                 state = (state[0][-1], state[1])
                 lr = [pre] + layers + [post]
-                for r in layers:
+                for r in lr:
                     state = r.forward(*state)
                 state = (ctx+[sample_logits(state[0])], state[1])
 
