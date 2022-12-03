@@ -89,9 +89,9 @@ def createTensors(model_name):
 
 
 class RWKV_PREPROCESS(nn.Module):
-    def __init__(self, preProcess):
+    def __init__(self, preProcess, device):
         super().__init__()
-        self.preProcess = preProcess
+        self.preProcess = preProcess.to(device=device)
         self.m = torch.Tensor([0]).to(dtype=torch.int64)
 
     def forward(self, xx, state):
@@ -102,12 +102,12 @@ class RWKV_PREPROCESS(nn.Module):
 
 
 class RWKV_POSTPROCESS(nn.Module):
-    def __init__(self, postprocess):
+    def __init__(self, postprocess, device):
         super().__init__()
 
-        self.postProcess0 = postprocess[0]
-        self.postProcess1 = postprocess[1]
-        self.postProcess2 = postprocess[2]
+        self.postProcess0 = postprocess[0].to(device=device)
+        self.postProcess1 = postprocess[1].to(device=device)
+        self.postProcess2 = postprocess[2].to(device=device)
         self.m = torch.Tensor([0]).to(dtype=torch.int64)
 
     def forward(self, x: torch.Tensor, state):
@@ -119,42 +119,42 @@ class RWKV_POSTPROCESS(nn.Module):
 
 
 class RWKV_LAYER(nn.Module):
-    def __init__(self, w, offset, dtypein=torch.int64):
+    def __init__(self, w, offset, dtypein=torch.int64, isStreamed=False):
         super().__init__()
+        self.stream = lambda x: x
+        if (isStreamed):
+            self.stream = lambda x: x.to(device='cuda', non_blocking=True)
 
-        dtype = w[0].dtype
-        device = w[0].device
-
-        w = list(map(lambda x: x.float().cpu().numpy(), w))
+        def ispin(x):
+            print(x.device)
+            if (isStreamed):
+                print("pinning memory")
+                return x.pin_memory()
+            else:
+                return x
 
         # w = torch.Tensor(list(arr)).to(
         #     dtype=dtype, device=device)
 
         self.offset = offset
-        self.ln1w = torch.tensor(w[0::18]).to(
-            dtype=dtype, device=device)
-        self.ln1b = torch.tensor(w[1::18]).to(dtype=dtype, device=device)
-        self.ln2w = torch.tensor(w[2::18]).to(dtype=dtype, device=device)
-        self.ln2b = torch.tensor(w[3::18]).to(dtype=dtype, device=device)
-        self.time_decay = torch.tensor(w[4::18]).to(dtype=dtype, device=device)
-        self.time_first = torch.tensor(w[5::18]).to(dtype=dtype, device=device)
-        self.time_mix_k = torch.tensor(w[6::18]).to(dtype=dtype, device=device)
-        self.time_mix_v = torch.tensor(w[7::18]).to(dtype=dtype, device=device)
-        self.time_mix_r = torch.tensor(w[8::18]).to(dtype=dtype, device=device)
-        self.key = torch.tensor(w[9::18]).to(dtype=dtype, device=device)
-        self.value = torch.tensor(w[10::18]).to(dtype=dtype, device=device)
-        self.receptance = torch.tensor(
-            w[11::18]).to(dtype=dtype, device=device)
-        self.outputv = torch.tensor(w[12::18]).to(dtype=dtype, device=device)
-        self.time_mix_k_ffn = torch.tensor(
-            w[13::18]).to(dtype=dtype, device=device)
-        self.time_mix_r_ffn = torch.tensor(
-            w[14::18]).to(dtype=dtype, device=device)
-        self.key_ffn = torch.tensor(w[15::18]).to(dtype=dtype, device=device)
-        self.receptance_ffn = torch.tensor(
-            w[16::18]).to(dtype=dtype, device=device)
-        self.value_ffn = torch.tensor(w[17::18]).to(dtype=dtype, device=device)
-
+        self.ln1w = ispin(torch.stack(w[0::18]))
+        self.ln1b = ispin(torch.stack(w[1::18]))
+        self.ln2w = ispin(torch.stack(w[2::18]))
+        self.ln2b = ispin(torch.stack(w[3::18]))
+        self.time_decay = ispin(torch.stack(w[4::18]))
+        self.time_first = ispin(torch.stack(w[5::18]))
+        self.time_mix_k = ispin(torch.stack(w[6::18]))
+        self.time_mix_v = ispin(torch.stack(w[7::18]))
+        self.time_mix_r = ispin(torch.stack(w[8::18]))
+        self.key = ispin(torch.stack(w[9::18]))
+        self.value = ispin(torch.stack(w[10::18]))
+        self.receptance = ispin(torch.stack(w[11::18]))
+        self.outputv = ispin(torch.stack(w[12::18]))
+        self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
+        self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
+        self.key_ffn = ispin(torch.stack(w[15::18]))
+        self.receptance_ffn = ispin(torch.stack(w[16::18]))
+        self.value_ffn = ispin(torch.stack(w[17::18]))
         print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
@@ -191,7 +191,6 @@ class RWKV_LAYER(nn.Module):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
-
         xtk = torch.addcmul(x, s1, time_mix_k)
 
         k = torch.einsum('ik,k->i', [kw, xtk])
@@ -243,34 +242,54 @@ class RWKV_LAYER(nn.Module):
             outbet.append(i)
 
         aft = state[self.cint:]
+
+        ln1w = self.stream(self.ln1w)
+        ln1b = self.stream(self.ln1b)
+        ln2w = self.stream(self.ln2w)
+        ln2b = self.stream(self.ln2b)
+        time_decay = self.stream(self.time_decay)
+        time_first = self.stream(self.time_first)
+        time_mix_k = self.stream(self.time_mix_k)
+        time_mix_v = self.stream(self.time_mix_v)
+        time_mix_r = self.stream(self.time_mix_r)
+        key = self.stream(self.key)
+        value = self.stream(self.value)
+        receptance = self.stream(self.receptance)
+        outputv = self.stream(self.outputv)
+        time_mix_k_ffn = self.stream(self.time_mix_k_ffn)
+        time_mix_r_ffn = self.stream(self.time_mix_r_ffn)
+        key_ffn = self.stream(self.key_ffn)
+        receptance_ffn = self.stream(self.receptance_ffn)
+        value_ffn = self.stream(self.value_ffn)
+
         with torch.no_grad():
             for i in self.layerlist:
 
-                ln1w = self.ln1w[i]
-                ln1b = self.ln1b[i]
+                ln1wa = ln1w[i]
+                ln1ba = ln1b[i]
 
-                ln2w = self.ln2w[i]
-                ln2b = self.ln2b[i]
+                ln2wa = ln2w[i]
+                ln2ba = ln2b[i]
 
-                atc = self.time_decay[i]
-                atf = self.time_first[i]
+                atc = time_decay[i]
+                atf = time_first[i]
 
-                atmk = self.time_mix_k[i]
-                atmv = self.time_mix_v[i]
-                atmr = self.time_mix_r[i]
+                atmk = time_mix_k[i]
+                atmv = time_mix_v[i]
+                atmr = time_mix_r[i]
 
-                atd = self.key[i]
-                avw = self.value[i]
+                atd = key[i]
+                avw = value[i]
 
-                arw = self.receptance[i]
-                aow = self.outputv[i]
+                arw = receptance[i]
+                aow = outputv[i]
 
-                tmk = self.time_mix_k_ffn[i]
-                tmr = self.time_mix_r_ffn[i]
+                tmk = time_mix_k_ffn[i]
+                tmr = time_mix_r_ffn[i]
 
-                tmkw = self.key_ffn[i]
-                tmrw = self.receptance_ffn[i]
-                tmvw = self.value_ffn[i]
+                tmkw = key_ffn[i]
+                tmrw = receptance_ffn[i]
+                tmvw = value_ffn[i]
 
                 s0 = state[i*5+self.offset*5]
                 s1 = state[i*5+self.offset*5+1]
@@ -278,11 +297,11 @@ class RWKV_LAYER(nn.Module):
                 s3 = state[i*5+self.offset*5+3]
                 s4 = state[i*5+self.offset*5+4]
 
-                sx, o1, o2, o3, o4 = self.SA(x, ln1w, ln1b,
+                sx, o1, o2, o3, o4 = self.SA(x, ln1wa, ln1ba,
                                              atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
                                              )
 
-                x, o0 = self.FF(sx, ln2w, ln2b,
+                x, o0 = self.FF(sx, ln2wa, ln2ba,
                                 tmk, tmr, tmkw, tmvw, tmrw, s0)
                 outbet.append(o0)
                 outbet.append(o1)
@@ -307,7 +326,11 @@ def empty_state(n_emb, layers, floatMode, device):
 def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64):
 
     def setToProp(i):
-        return lambda x: x.to(dtype=FloatMode, device=RunDevice[i])
+        def fx(x): return x
+
+        cdev = RunDevice[i] if "cuda" in RunDevice[i] else "cpu"
+        print(cdev, RunDevice[i])
+        return lambda x: fx(x.to(dtype=FloatMode, device=cdev))
 
     def setToCpu(x):
         x = x.to(dtype=FloatMode, device="cpu")
@@ -320,10 +343,10 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
             Path, map_location="cpu")
 
     PreProcess = RWKV_PREPROCESS(
-        setToProp(0)(w[0]))
+        setToProp(0)(w[0]), "cpu" if "cpu" in RunDevice[0] else "cuda")
 
     PostProcess = RWKV_POSTPROCESS(
-        list(map(setToProp(-1), w[2])))
+        list(map(setToProp(0), w[2])), "cpu" if "cpu" in RunDevice[0] else "cuda")
     Layers: list(RWKV_LAYER) = []
     print(len(w[1]))
     groups = chunkSize
@@ -332,7 +355,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
         modelLayer = RWKV_LAYER(
-            list(map(setToProp(int(i/(18*groups))), mm)), int(i/18), inttype)
+            list(map(setToProp(int(i/(18))), mm)), int(i/18), inttype, "cuda" not in RunDevice[int(i/(18))] and "cpu" not in RunDevice[int(i/(18))])
         # modelLayer = torch.jit.script(
         #     modelLayer, (PreProcess.forward([127])))
 

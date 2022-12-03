@@ -94,10 +94,13 @@ def loadModel(trace=True):
 
     if (torch.cuda.device_count() > 1 and args["RUN_DEVICE"] == "cuda"):
         args["RUN_DEVICE"] = ["cuda:0"]*int(inquirer.text(
-            message="Detected at least 2 Cuda Devices, how many chunks would you like to store on primary device, before offloading additional chunks?", default="20")) + ["cuda:1"]*20
+            message="Detected at least 2 Cuda Devices, how many chunks would you like to store on primary device, before offloading additional chunks?", default="20")) + ["cuda:1"]*50
     else:
-        args["RUN_DEVICE"] = [args["RUN_DEVICE"]]*20
-
+        if args["RUN_DEVICE"] == "cuda":
+            args["RUN_DEVICE"] = ["cuda"]*int(inquirer.text(
+                message="how many chunks would you like to store on primary device, before streaming additional chunks?", default="20")) + ["stream"]*50
+        else:
+            args["RUN_DEVICE"] = ["cpu"]*50
     ########################################################################################################
     # Step 2: set prompt & sampling stuffs
     ########################################################################################################
@@ -131,9 +134,9 @@ def loadModel(trace=True):
 
     # layers = list(map(torch.jit.optimize_for_inference, map(
     #     lambda x: torch.jit.script(x), layers)))
-    if (trace):
+    if (trace and "cuda" not in args["RUN_DEVICE"][0]):
         pret: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
-            torch.Tensor([187]).to(torch.int32), emptyState))
+            torch.Tensor([187]).to(dtype=torch.int32, device=args["RUN_DEVICE"][0]), emptyState))
 
         layerst: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
             x, example_inputs=pre.forward(torch.LongTensor([187]), emptyState)), layers))
