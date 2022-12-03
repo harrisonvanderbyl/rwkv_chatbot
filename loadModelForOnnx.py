@@ -134,7 +134,7 @@ def loadModel(trace=True):
 
     # layers = list(map(torch.jit.optimize_for_inference, map(
     #     lambda x: torch.jit.script(x), layers)))
-    if (trace and "cuda" not in args["RUN_DEVICE"][0]):
+    if (trace and "cpu" in args["RUN_DEVICE"][0]):
         pret: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
             torch.Tensor([187]).to(dtype=torch.int32, device=args["RUN_DEVICE"][0]), emptyState))
 

@@ -316,7 +316,7 @@ class RWKV_LAYER(nn.Module):
 
 def empty_state(n_emb, layers, floatMode, device):
     state = torch.zeros(layers * 5,
-                        n_emb, device=device[0], dtype=floatMode)
+                        n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=floatMode)
     # for i in range(layers):
     #     state[5*i+4] -= 1e30
     # state = (*state,)
