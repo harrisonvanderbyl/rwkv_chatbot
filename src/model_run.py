@@ -199,8 +199,7 @@ class RWKV_RNN(nn.Module):
 
             w = self.w
 
-            x: torch.Tensor = (w["emb.weight"][ctx[-1]] *
-                               4 + w["emb.weight"][ctx[-2]])*0.2
+            x: torch.Tensor = w["emb.weight"][ctx[-1]]
 
             if ("pos_emb" in w.keys()):
                 pos_emb = w["pos_emb"][(len(ctx) % 1024)-1]
@@ -302,7 +301,7 @@ class RWKV_RNN(nn.Module):
         for i in m(range(len(newctx)-1)):
             x = ctx+newctx[:i+1]
             o, statex = self.forward(
-                x, statex, preprocess_only=True)
+                [x[-1]], statex, preprocess_only=True)
 
         return ctx+newctx, statex
 

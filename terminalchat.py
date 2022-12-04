@@ -146,7 +146,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
         continue
     state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
-        f"\n\nUser: {inp}\n\nRWKV:"))
+        f"\n\nUser: {inp}\n\nRWKV:"), silent=True)
 
     state = [{"score": 1, "state": state[1], "ctx": state[0]}]
 
@@ -160,6 +160,8 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = model.run(
                 state, temp=TEMPERATURE, top_p=top_p)
-            print(tokenizer.tokenizer.decode(state[0]["ctx"]))
+            outchar = tokenizer.tokenizer.decode(state[0]["ctx"][-1])
+            if (outchar == "\n" or outchar == "\n\n"):
+                break
+            print(outchar, end="")
     state = (state[0]["ctx"], state[0]["state"])
-    print(tokenizer.tokenizer.decode(state[0]))
