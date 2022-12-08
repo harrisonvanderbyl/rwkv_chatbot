@@ -129,7 +129,7 @@ class RWKV_LAYER(nn.Module):
             print(x.device)
             if (isStreamed):
                 print("pinning memory")
-                return x.pin_memory()
+                return x  # .pin_memory()
             else:
                 return x
 
@@ -143,12 +143,25 @@ class RWKV_LAYER(nn.Module):
         self.ln2b = ispin(torch.stack(w[3::18]))
         self.time_decay = ispin(torch.stack(w[4::18]))
         self.time_first = ispin(torch.stack(w[5::18]))
-        self.time_mix_k = ispin(torch.stack(w[6::18]))
-        self.time_mix_v = ispin(torch.stack(w[7::18]))
-        self.time_mix_r = ispin(torch.stack(w[8::18]))
-        self.key = ispin(torch.stack(w[9::18]))
-        self.value = ispin(torch.stack(w[10::18]))
-        self.receptance = ispin(torch.stack(w[11::18]))
+
+        tk = w[6::18]
+        tv = w[7::18]
+        tr = w[8::18]
+        kk = w[9::18]
+        vv = w[10::18]
+        rr = w[11::18]
+        mm = []
+        mn = []
+        for i in range(len(kk)):
+            mm = mm + [torch.stack(
+                [kk[i], vv[i], rr[i]])]
+            mn = mn + [torch.stack(
+                [tk[i], tv[i], tr[i]])]
+
+        self.key = ispin(torch.stack(mm))
+        self.keymul = ispin(torch.stack(mn).reshape(
+            (len(mn), 3, mn[0].shape[1])))
+
         self.outputv = ispin(torch.stack(w[12::18]))
         self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
         self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
@@ -165,7 +178,7 @@ class RWKV_LAYER(nn.Module):
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
         self.cint = (self.offset+len(self.layerlist))*5
-        self.uncint = (self.offset*5)
+        self.uncint = (self.offset*7)
         print(self.layerlist)
         self.eval()
         gc.collect()
@@ -187,21 +200,18 @@ class RWKV_LAYER(nn.Module):
 
         return output, x
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_mix_k: torch.Tensor, time_mix_v: torch.Tensor, time_mix_r: torch.Tensor, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor, ow: torch.Tensor, s1, s2, s3, s4):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, s1, rkmul, s2, s3, s4):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
-        xtk = torch.addcmul(x, s1, time_mix_k)
 
-        k = torch.einsum('ik,k->i', [kw, xtk])
+        rrk = (kw @ x)
+        # print(rrk.shape, rkmul.shape)
+        rrk2 = rrk+s1*rkmul
 
-        vtk = torch.addcmul(x, s1, time_mix_v)
-
-        v = torch.einsum('ik,k->i', [vw, vtk])
-
-        rtk = torch.addcmul(x, s1, time_mix_r)
-
-        rr = torch.einsum('ik,k->i', [rw, rtk])
+        k = rrk2[0]
+        v = rrk2[1]
+        rr = rrk2[2]
 
         rsig = torch.sigmoid(rr)
         r = torch.mul(ow, rsig)
@@ -232,7 +242,7 @@ class RWKV_LAYER(nn.Module):
         rwkv = torch.einsum('ik,k->i', [r, ab])
         output = torch.add(sx, rwkv)
 
-        return output, x,  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
+        return output, rrk[0], rrk[1], rrk[2],  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
     def forward(self, x, state: torch.Tensor):
         bef = state[:self.uncint]
@@ -249,12 +259,8 @@ class RWKV_LAYER(nn.Module):
         ln2b = self.stream(self.ln2b)
         time_decay = self.stream(self.time_decay)
         time_first = self.stream(self.time_first)
-        time_mix_k = self.stream(self.time_mix_k)
-        time_mix_v = self.stream(self.time_mix_v)
-        time_mix_r = self.stream(self.time_mix_r)
         key = self.stream(self.key)
-        value = self.stream(self.value)
-        receptance = self.stream(self.receptance)
+        keymul = self.stream(self.keymul)
         outputv = self.stream(self.outputv)
         time_mix_k_ffn = self.stream(self.time_mix_k_ffn)
         time_mix_r_ffn = self.stream(self.time_mix_r_ffn)
@@ -274,14 +280,8 @@ class RWKV_LAYER(nn.Module):
                 atc = time_decay[i]
                 atf = time_first[i]
 
-                atmk = time_mix_k[i]
-                atmv = time_mix_v[i]
-                atmr = time_mix_r[i]
-
                 atd = key[i]
-                avw = value[i]
 
-                arw = receptance[i]
                 aow = outputv[i]
 
                 tmk = time_mix_k_ffn[i]
@@ -290,24 +290,28 @@ class RWKV_LAYER(nn.Module):
                 tmkw = key_ffn[i]
                 tmrw = receptance_ffn[i]
                 tmvw = value_ffn[i]
+                rkmul = keymul[i]
 
-                s0 = state[i*5+self.offset*5]
-                s1 = state[i*5+self.offset*5+1]
-                s2 = state[i*5+self.offset*5+2]
-                s3 = state[i*5+self.offset*5+3]
-                s4 = state[i*5+self.offset*5+4]
+                s0 = state[i*7+self.offset*7]
+                s1 = state[i*7+self.offset*7+1]
+                s2 = state[i*7+self.offset*7+2]
+                s3 = state[i*7+self.offset*7+3]
+                s4 = state[i*7+self.offset*7+4]
+                s5 = state[i*7+self.offset*7+5]
+                s6 = state[i*7+self.offset*7+6]
 
-                sx, o1, o2, o3, o4 = self.SA(x, ln1wa, ln1ba,
-                                             atmk, atmv, atmr, atf, atc, atd, avw, arw, aow, s1, s2, s3, s4
-                                             )
+                sx, o0, o1, o2, o3, o4, o5 = self.SA(x, ln1wa, ln1ba, atf, atc, atd, aow, torch.stack([s0, s1, s2]), rkmul, s3, s4, s5
+                                                     )
 
-                x, o0 = self.FF(sx, ln2wa, ln2ba,
-                                tmk, tmr, tmkw, tmvw, tmrw, s0)
+                x, o6 = self.FF(sx, ln2wa, ln2ba,
+                                tmk, tmr, tmkw, tmvw, tmrw, s6)
                 outbet.append(o0)
                 outbet.append(o1)
                 outbet.append(o2)
                 outbet.append(o3)
                 outbet.append(o4)
+                outbet.append(o5)
+                outbet.append(o6)
             for i in aft:
                 outbet.append(i)
 
@@ -315,7 +319,7 @@ class RWKV_LAYER(nn.Module):
 
 
 def empty_state(n_emb, layers, floatMode, device):
-    state = torch.zeros(layers * 5,
+    state = torch.zeros(layers * 7,
                         n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=floatMode)
     # for i in range(layers):
     #     state[5*i+4] -= 1e30

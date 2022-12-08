@@ -25,7 +25,7 @@ except:
 import inquirer
 
 
-def loadModel(trace=True):
+def loadModel(trace=False):
     files = os.listdir()
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
@@ -146,6 +146,9 @@ def loadModel(trace=True):
 
         return pret, layerst, postt, emptyState
     else:
+        # layers = list(map(lambda x: torch.compile(x), layers))
+        # pre = torch.compile(pre)
+        # post = torch.compile(post)
         return pre, layers, post, emptyState
 
 
