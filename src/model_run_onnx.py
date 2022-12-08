@@ -161,7 +161,7 @@ class RWKV_LAYER(nn.Module):
         self.key = ispin(torch.stack(mm))
         self.keymul = ispin(torch.stack(mn)).reshape(
             len(mn), 3, mn[0].shape[1], mn[0].shape[1])
-        self.outputv = ispin(torch.stack(w[12::18]))
+        self.outputv = ispin(torch.stack(list(map(lambda x: x, w[12::18]))))
         self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
         self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
         self.key_ffn = ispin(torch.stack(w[15::18]))
@@ -210,24 +210,28 @@ class RWKV_LAYER(nn.Module):
 
         k = rrk2[0]
         v = rrk2[1]
-        rr = rrk2[2]
 
-        rsig = torch.sigmoid(rr)
-        r = torch.mul(ow, rsig)
         aa = s2
         bb = s3
         pp = s4
         ww = torch.add(time_first, k)
-        p = torch.maximum(pp, ww)
-        e1 = torch.exp(pp - p)
-        e2 = torch.exp(ww - p)
+        p = -torch.maximum(pp, ww)
+        e1 = torch.exp(pp + p)
+        e2 = torch.exp(ww + p)
 
-        e1aa = torch.mul(e1, aa)
-        e2v = torch.mul(e2, v)
-        e1bb = torch.mul(e1, bb)
+        a = torch.exp(pp + p) * aa + \
+            torch.exp(ww + p) * v
 
-        a = torch.add(e1aa, e2v)
-        b = torch.add(e1bb, e2)
+        rr = -rrk[2]
+        s12 = -s1[2]
+        rsig = torch.exp(pp + p) * bb/a +\
+            torch.exp(ww + p) * 1/a +\
+            torch.exp(pp + p+rr +
+                      s12) * bb/a +\
+            torch.exp(ww + p+rr+s12) * 1/a
+
+        rwkv = torch.einsum('ik,k->i', [ow, 1/rsig])
+        output = torch.add(sx, rwkv)
 
         ww = torch.add(pp, time_decay)
         p = torch.maximum(ww, k)
@@ -236,10 +240,6 @@ class RWKV_LAYER(nn.Module):
         e1bb = torch.mul(e1, bb)
         e1aa = torch.mul(e1, aa)
         e2v = torch.mul(e2, v)
-
-        ab = torch.div(a, b)
-        rwkv = torch.einsum('ik,k->i', [r, ab])
-        output = torch.add(sx, rwkv)
 
         return output, x, torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
