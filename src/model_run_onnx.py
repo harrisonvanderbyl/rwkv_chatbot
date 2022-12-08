@@ -156,12 +156,11 @@ class RWKV_LAYER(nn.Module):
             mm = mm + [torch.stack(
                 [kk[i], vv[i], rr[i]])]
             mn = mn + [torch.stack(
-                [tk[i], tv[i], tr[i]])]
+                [kk[i]@tk[i].diag(), vv[i]@tv[i].diag(), rr[i]@tr[i].diag()])]
 
         self.key = ispin(torch.stack(mm))
-        self.keymul = ispin(torch.stack(mn).reshape(
-            (len(mn), 3, mn[0].shape[1])))
-
+        self.keymul = ispin(torch.stack(mn)).reshape(
+            len(mn), 3, mn[0].shape[1], mn[0].shape[1])
         self.outputv = ispin(torch.stack(w[12::18]))
         self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
         self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
@@ -200,14 +199,14 @@ class RWKV_LAYER(nn.Module):
 
         return output, x
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, s1, rkmul, s2, s3, s4):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, s1, s2, s3, s4):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
         rrk = (kw @ x)
-        # print(rrk.shape, rkmul.shape)
-        rrk2 = rrk+s1*rkmul
+        # print(rrk.shape, rkmul.shape, s1.shape)
+        rrk2 = rrk+s1
 
         k = rrk2[0]
         v = rrk2[1]
@@ -242,7 +241,7 @@ class RWKV_LAYER(nn.Module):
         rwkv = torch.einsum('ik,k->i', [r, ab])
         output = torch.add(sx, rwkv)
 
-        return output, rrk[0], rrk[1], rrk[2],  torch.add(e1aa, e2v), torch.add(e1bb, e2), p
+        return output, x, torch.add(e1aa, e2v), torch.add(e1bb, e2), p
 
     def forward(self, x, state: torch.Tensor):
         bef = state[:self.uncint]
@@ -268,6 +267,15 @@ class RWKV_LAYER(nn.Module):
         receptance_ffn = self.stream(self.receptance_ffn)
         value_ffn = self.stream(self.value_ffn)
 
+        bstate = state[self.offset*5::5]
+
+        # print(bstate.shape)
+        # print(keymul.shape)
+        # matmul each layer on bstate and keymul, shape = (12,3,768,768), (12,768) -> (12,3,768)
+        bstate = torch.einsum('ijkv,iv->ijk', [keymul, bstate])
+
+        # print(bstate.shape)
+
         with torch.no_grad():
             for i in self.layerlist:
 
@@ -290,24 +298,20 @@ class RWKV_LAYER(nn.Module):
                 tmkw = key_ffn[i]
                 tmrw = receptance_ffn[i]
                 tmvw = value_ffn[i]
-                rkmul = keymul[i]
 
-                s0 = state[i*7+self.offset*7]
-                s1 = state[i*7+self.offset*7+1]
-                s2 = state[i*7+self.offset*7+2]
-                s3 = state[i*7+self.offset*7+3]
-                s4 = state[i*7+self.offset*7+4]
-                s5 = state[i*7+self.offset*7+5]
-                s6 = state[i*7+self.offset*7+6]
+                s0 = bstate[i]
 
-                sx, o0, o1, o2, o3, o4, o5 = self.SA(x, ln1wa, ln1ba, atf, atc, atd, aow, torch.stack([s0, s1, s2]), rkmul, s3, s4, s5
-                                                     )
+                s3 = state[i*5+self.offset*5+1]
+                s4 = state[i*5+self.offset*5+2]
+                s5 = state[i*5+self.offset*5+3]
+                s6 = state[i*5+self.offset*5+4]
+
+                sx, o0, o3, o4, o5 = self.SA(x, ln1wa, ln1ba, atf, atc, atd, aow, s0, s3, s4, s5
+                                             )
 
                 x, o6 = self.FF(sx, ln2wa, ln2ba,
                                 tmk, tmr, tmkw, tmvw, tmrw, s6)
                 outbet.append(o0)
-                outbet.append(o1)
-                outbet.append(o2)
                 outbet.append(o3)
                 outbet.append(o4)
                 outbet.append(o5)
@@ -319,7 +323,7 @@ class RWKV_LAYER(nn.Module):
 
 
 def empty_state(n_emb, layers, floatMode, device):
-    state = torch.zeros(layers * 7,
+    state = torch.zeros(layers * 5,
                         n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=floatMode)
     # for i in range(layers):
     #     state[5*i+4] -= 1e30
