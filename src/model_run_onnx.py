@@ -204,31 +204,29 @@ class RWKV_LAYER(nn.Module):
 
         return output, x
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, kmul0, kmul1, kmul2, s2, s3):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, kk, vv, rr, aa, bb):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = torch.exp(self.mv(kw[0], x+kmul0))
+        k = torch.exp(self.mv(kw[0], x + kk))
 
-        rr = torch.exp(self.mv(kw[2], x+kmul2))
+        v = self.mv(kw[1], x + vv) * k
 
-        v = self.mv(kw[1], x+kmul1)
+        rr = torch.exp(self.mv(kw[2], x + rr))
 
-        aa = s2
-        bb = s3
+        vsig = (aa + v*time_first)
+        rsig = (bb + k*time_first) * (rr + 1)
 
-        rsig = (aa + v*k*time_first)
-        rsigdiv = ((rr+1)*(k*time_first + bb))
+        rwkv = self.mv(ow, vsig/rsig)
 
-        # rwkv = ow@rsig
-        rwkv = self.mv(ow, rsig/rsigdiv)
         output = sx+rwkv
 
-        e1aae2v = aa*time_decay + k*v
-        e1bbe2 = bb*time_decay + k
+        outstateA = x
+        outstateB = aa*time_decay + v
+        outstateC = bb*time_decay + k
 
-        return output, x, e1aae2v, e1bbe2
+        return output, outstateA, outstateB, outstateC
 
     def forward(self, x, state: torch.Tensor):
         with torch.no_grad():
