@@ -95,20 +95,20 @@ except:
 
 try:
     os.mkdir(
-        f"onnx/rwkv-{int(len(emptyState)/5)}-{len(emptyState[0])}-{emptyState[0].dtype}")
+        f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}")
 except:
     pass
 torch.save(
-    emptyState, f"onnx/rwkv-{int(len(emptyState)/5)}-{len(emptyState[0])}-{emptyState[0].dtype}/emptyState.pt")
+    emptyState, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/emptyState.pt")
 
-torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32), emptyState), f"onnx/rwkv-{int(len(emptyState)/5)}-{len(emptyState[0])}-{emptyState[0].dtype}/preprocess.onnx",
+torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32), emptyState), f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/preprocess.onnx",
                   input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
 
 rx = pre.forward(torch.tensor([187]).to(torch.int32), emptyState)
 for m in range(len(layers)):
     # layers[m] = torch.jit.script(layers[m])
-    torch.onnx.export(layers[m], rx, f"onnx/rwkv-{int(len(emptyState)/5)}-{len(emptyState[0])}-{emptyState[0].dtype}/layer{m}.onnx",
+    torch.onnx.export(layers[m], rx, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/layer{m}.onnx",
                       input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
 
-torch.onnx.export(post, rx, f"onnx/rwkv-{int(len(emptyState)/5)}-{len(emptyState[0])}-{emptyState[0].dtype}/postprocess.onnx", input_names=output_names,
+torch.onnx.export(post, rx, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/postprocess.onnx", input_names=output_names,
                   output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)

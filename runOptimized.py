@@ -24,7 +24,7 @@ fg.orange = Style(RgbFg(255, 150, 50))
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-pre, layers, post, emptyState = loadModelForOnnx.loadModel()
+pre, layers, post, emptyState = loadModelForOnnx.loadModel(True)
 
 ###### A good prompt for chatbot ######
 context = '''
@@ -113,7 +113,8 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 
 def loadContext(self, ctx: list[int], statex, newctx: list[int]):
-
+    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
     with torch.jit.optimized_execution(True):
         for i in tqdm.tqdm(range(len(newctx))):
 
@@ -123,6 +124,9 @@ def loadContext(self, ctx: list[int], statex, newctx: list[int]):
             for s in self:
                 o = s.forward(*o)
             statex = o[1]
+            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     return ctx+newctx, o[1]
 
 

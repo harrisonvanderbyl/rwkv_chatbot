@@ -22,25 +22,24 @@ model = loadModel.loadModel()
 user = "Mark"
 interface = ":"
 bot = "Dave"
-context = f'''
-The following is a conversation online.
+context = '''
+The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
 
-{user}{interface} who is president of usa?
+User: OK RWKV, I’m going to start by quizzing you with a few warm-up questions. Who is currently the president of the USA?
 
-{bot}{interface} It’s Joe Biden; he was sworn in earlier this year.
+RWKV: It’s Joe Biden; he was sworn in earlier this year.
 
-{user}{interface} french revolution what year
+User: What year was the French Revolution?
 
-{bot}{interface} It started in 1789, but it lasted 10 years until 1799.
+RWKV: It started in 1789, but it lasted 10 years until 1799.
 
-{user}{interface} guess i marry who ?
+User: Can you guess who I might want to marry?
 
-{bot}{interface} Only if you tell me more about yourself - what are your interests?
+RWKV: Only if you tell me more about yourself - what are your interests?
 
-{user}{interface} wat is lhc
+User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
 
-{bot}{interface} It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-
+RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
 '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
