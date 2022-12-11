@@ -13,7 +13,8 @@ from torch.nn import functional as F
 import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-pre, layers, post, emptyState = loadModelForOnnx.loadModel(compat=True)
+pre, layers, post, emptyState = loadModelForOnnx.loadModel(
+    compat=(input("Use compatibility mode? (Y/n) ") != "n"))
 ###### A good prompt for chatbot ######
 context = '''
 The '''
@@ -88,6 +89,9 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 input_names = ["tokens", "state"]
 output_names = ["probs", "outstate"]
+
+path = f"rwkv-{int(len(emptyState[0]))}-{len(emptyState[0][0])}-{emptyState[0][0].dtype}"
+
 try:
     os.mkdir("onnx")
 except:
@@ -95,20 +99,22 @@ except:
 
 try:
     os.mkdir(
-        f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}")
+        f"onnx/{path}")
 except:
     pass
-torch.save(
-    emptyState, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/emptyState.pt")
 
-torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32), emptyState), f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/preprocess.onnx",
+
+torch.save(
+    emptyState, f"onnx/{path}/emptyState.pt")
+
+torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32), emptyState), f"onnx/{path}/preprocess.onnx",
                   input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
 
 rx = pre.forward(torch.tensor([187]).to(torch.int32), emptyState)
 for m in range(len(layers)):
     # layers[m] = torch.jit.script(layers[m])
-    torch.onnx.export(layers[m], rx, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/layer{m}.onnx",
+    torch.onnx.export(layers[m], rx, f"onnx/{path}/layer{m}.onnx",
                       input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
 
-torch.onnx.export(post, rx, f"onnx/rwkv-{int(len(emptyState)/4)}-{len(emptyState[0])}-{emptyState[0].dtype}/postprocess.onnx", input_names=output_names,
+torch.onnx.export(post, rx, f"onnx/{path}/postprocess.onnx", input_names=output_names,
                   output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)

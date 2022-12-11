@@ -116,7 +116,8 @@ def loadModel(trace=False, compat=False):
         intmode = torch.int64
 
     pre, layers, post, n_layer = createRWKVModules(
-        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode, compat=compat)
+        FloatMode=torch.float64 if args["FLOAT_MODE"]
+        == "fp64" else torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode, compat=compat)
 
     emptyState = empty_state(pre.preProcess[1].shape[0], n_layer,  torch.float64 if args["FLOAT_MODE"]
                              == "fp64" else torch.float32 if args["FLOAT_MODE"]

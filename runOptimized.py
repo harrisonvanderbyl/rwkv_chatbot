@@ -24,7 +24,10 @@ fg.orange = Style(RgbFg(255, 150, 50))
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-pre, layers, post, emptyState = loadModelForOnnx.loadModel(True)
+compat = input("Use compatibility mode? (y/N) ") == "y"
+trace = input("Use tracing mode? (y/N) ") == "y"
+pre, layers, post, emptyState = loadModelForOnnx.loadModel(compat=compat, trace=trace
+                                                           )
 
 ###### A good prompt for chatbot ######
 context = '''

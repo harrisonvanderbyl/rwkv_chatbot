@@ -173,16 +173,24 @@ class RWKV_LAYER(nn.Module):
         print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
-        self.m = torch.LongTensor([0]).to(dtype=dtypein)
-        self.f = torch.LongTensor([5]).to(dtype=dtypein)
+        self.m = torch.LongTensor([0]).to(
+            dtype=torch.int32 if compatibility else torch.int64)
+        self.f = torch.LongTensor([5]).to(
+            dtype=torch.int32 if compatibility else torch.int64)
 
         print(self.m.dtype)
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
-        self.cint = (self.offset+len(self.layerlist))*5
-        self.uncint = (self.offset*7)
+        self.cint = (self.offset+len(self.layerlist))*4
+        self.uncint = (self.offset*4)
         print(self.layerlist)
         self.eval()
+
+        self.outputfunc = lambda state, statea, stateb, statec, stated: state
+        if (compatibility):
+            self.outputfunc = lambda state, statea, stateb, statec, stated: torch.stack(
+                [statea, stateb, statec, stated])
+
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -215,7 +223,7 @@ class RWKV_LAYER(nn.Module):
         d = r * instateC + time_first * k * \
             r + instateC + time_first * k
 
-        rwkv = self.mv(ow, w/d)
+        rwkv = self.mv(ow, (w/d).to(dtype=ow.dtype))
         output = sx+rwkv
 
         outstateA = x
@@ -239,19 +247,21 @@ class RWKV_LAYER(nn.Module):
             key_ffn = self.stream(self.key_ffn)
             receptance_ffn = self.stream(self.receptance_ffn)
             value_ffn = self.stream(self.value_ffn)
-            rxstate = state[self.offset*4: (self.offset+len(self.layerlist))*4]
-            viewer = rxstate.view(4, len(self.layerlist), state.shape[1])
-            statea = viewer[0]
-            stateb = viewer[1]
-            statec = viewer[2]
-            stated = viewer[3]
 
-            vvtv = self.stream(self.vvtv)*statea
-            kktk = self.stream(self.kktk)*statea
-            rrtr = self.stream(self.rrtr)*statea
+            viewer = state.view(state.shape)
+            statea = viewer[0][self.uncint: self.cint]
+            stateb = viewer[1][self.uncint: self.cint]
+            statec = viewer[2][self.uncint: self.cint]
+            stated = viewer[3][self.uncint: self.cint]
 
-            time_mix_k_ffn = self.stream(self.time_mix_k_ffn)*stated
-            time_mix_r_ffn = self.stream(self.time_mix_r_ffn)*stated
+            vvtv = self.stream(self.vvtv)*statea.to(dtype=self.vvtv.dtype)
+            kktk = self.stream(self.kktk)*statea.to(dtype=self.vvtv.dtype)
+            rrtr = self.stream(self.rrtr)*statea.to(dtype=self.vvtv.dtype)
+
+            time_mix_k_ffn = self.stream(
+                self.time_mix_k_ffn)*stated.to(dtype=self.vvtv.dtype)
+            time_mix_r_ffn = self.stream(
+                self.time_mix_r_ffn)*stated.to(dtype=self.vvtv.dtype)
 
             for i in self.layerlist:
 
@@ -288,12 +298,12 @@ class RWKV_LAYER(nn.Module):
                 x, stated[i] = self.FF(sx, ln2wa, ln2ba,
                                        tmk, tmr, tmkw, tmvw, tmrw)
 
-            return x, state
+            return x, self.outputfunc(state, statea, stateb, statec, stated)
 
 
 def empty_state(n_emb, layers, floatMode, device):
-    state = torch.zeros(layers * 4,
-                        n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=floatMode)+0.01
+    state = torch.zeros(4, layers,
+                        n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=torch.float64)+0.01
     # for i in range(layers):
     #     state[5*i+4] -= 1e30
     # state = (*state,)

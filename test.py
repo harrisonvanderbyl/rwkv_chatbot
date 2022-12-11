@@ -54,7 +54,7 @@ testb = torch.sum(mat*vec, 1)
 # print(prof.key_averages().table(sort_by="cpu_time_total",
 #       top_level_events_only=True, row_limit=10))
 
-rounds = 10000
+rounds = 1000
 
 matb = mat.to(torch.bfloat16)
 vecb = vec.to(torch.bfloat16)
@@ -62,6 +62,8 @@ matp = mat.to(torch.float64)
 vecp = vec.to(torch.float64)
 matu = mat.to(torch.uint8)
 vecu = vec.to(torch.uint8)
+math = mat.to(torch.half)
+vech = vec.to(torch.half)
 
 # with cuda
 matbc = matb.cuda()
@@ -72,6 +74,8 @@ matuc = matu.cuda()
 vecuc = vecu.cuda()
 matc = mat.cuda()
 vecc = vec.cuda()
+mathc = math.cuda()
+vechc = vech.cuda()
 
 
 with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
@@ -84,9 +88,9 @@ with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_sh
     with record_function("fp64"):
         for x in range(rounds):
             testt = torch.mv(matp, vecp)
-    with record_function("uint8"):
-        for x in range(rounds):
-            testt = torch.mv(matu, vecu)
+    # with record_function("uint8"):
+    #     for x in range(rounds):
+    #         testt = torch.mv(matu, vecu)
     with record_function("fp32 cuda"):
         for x in range(rounds):
             testt = torch.mv(matc, vecc)
@@ -96,6 +100,9 @@ with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_sh
     with record_function("fp64 cuda"):
         for x in range(rounds):
             testt = torch.mv(matpc, vecpc)
+    with record_function("half cuda"):
+        for x in range(rounds):
+            testt = torch.mv(mathc, vechc)
 
-print(prof.key_averages().table(sort_by="cpu_time_total",
+print(prof.key_averages().table(sort_by="cuda_time_total",
       top_level_events_only=True, row_limit=10))
