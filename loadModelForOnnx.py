@@ -25,7 +25,7 @@ except:
 import inquirer
 
 
-def loadModel(trace=False):
+def loadModel(trace=False, compat=False):
     files = os.listdir()
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
@@ -63,7 +63,7 @@ def loadModel(trace=False):
     args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
                                                         message="What device do you want to use?",
                                                         choices=[
-                                                            "fp16", "bf16", "fp32"],
+                                                            "fp16", "bf16", "fp32", "fp64"],
                                                         )])["RUN_DEVICE"]
 
     args["CHUNK_SIZE"] = inquirer.text(
@@ -116,9 +116,10 @@ def loadModel(trace=False):
         intmode = torch.int64
 
     pre, layers, post, n_layer = createRWKVModules(
-        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode)
+        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode, compat=compat)
 
-    emptyState = empty_state(pre.preProcess[1].shape[0], n_layer, torch.float32 if args["FLOAT_MODE"]
+    emptyState = empty_state(pre.preProcess[1].shape[0], n_layer,  torch.float64 if args["FLOAT_MODE"]
+                             == "fp64" else torch.float32 if args["FLOAT_MODE"]
                              == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
 
     # if (opt == "script"):

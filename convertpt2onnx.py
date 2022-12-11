@@ -13,7 +13,7 @@ from torch.nn import functional as F
 import loadModelForOnnx
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-pre, layers, post, emptyState = loadModelForOnnx.loadModel()
+pre, layers, post, emptyState = loadModelForOnnx.loadModel(compat=True)
 ###### A good prompt for chatbot ######
 context = '''
 The '''

@@ -168,7 +168,7 @@ class RWKV_LAYER(nn.Module):
         self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
         self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
         self.key_ffn = ispin(torch.stack(w[15::18]))
-        self.receptance_ffn = ispin(torch.stack(w[16::18]))
+        self.receptance_ffn = ispin(-torch.stack(w[16::18]))
         self.value_ffn = ispin(torch.stack(w[17::18]))
         print(len(self.outputv), len(self.ln1w), offset)
 
@@ -189,42 +189,38 @@ class RWKV_LAYER(nn.Module):
     def FF(self, sx: torch.Tensor, ln2w, ln2b, time_mix_k: torch.Tensor, time_mix_r: torch.Tensor, kw: torch.Tensor, vw: torch.Tensor, rw: torch.Tensor):
 
         x = torch.layer_norm(sx, (ln2w.shape[0],), weight=ln2w, bias=ln2b)
-        dx = torch.add(x, time_mix_k)
-        # kwdx = kw@dx
-        kwdx = self.mv(kw, dx)
-        xr = torch.add(x, time_mix_r)
-        # rwxr = rw@xr
-        rwxr = self.mv(rw, xr)
-        r = torch.sigmoid(rwxr)
-        clamped = torch.relu(kwdx)
-        k = torch.square(clamped)
+
+        k = self.mv(kw, x + time_mix_k).relu().square()
+
+        r = self.mv(rw, x + time_mix_r).exp()
+
         kv = self.mv(vw, k)
-        rkv = torch.mul(r, kv)
+        rkv = kv/(1+r)
         output = torch.add(sx, rkv)
 
         return output, x
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, kk, vv, rr, aa, bb):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, instateAK, instateAV, instateAR, instateB, instateC):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = torch.exp(self.mv(kw[0], x + kk))
+        k = self.mv(kw[0], x + instateAK).exp()
 
-        v = self.mv(kw[1], x + vv) * k
+        v = self.mv(kw[1], x + instateAV)
 
-        rr = torch.exp(self.mv(kw[2], x + rr))
+        r = self.mv(kw[2], x + instateAR).exp()
 
-        vsig = (aa + v*time_first)
-        rsig = (bb + k*time_first) * (rr + 1)
+        w = instateB + v * time_first * k
+        d = r * instateC + time_first * k * \
+            r + instateC + time_first * k
 
-        rwkv = self.mv(ow, vsig/rsig)
-
+        rwkv = self.mv(ow, w/d)
         output = sx+rwkv
 
         outstateA = x
-        outstateB = aa*time_decay + v
-        outstateC = bb*time_decay + k
+        outstateB = instateB * time_decay + k * v
+        outstateC = instateC * time_decay + k
 
         return output, outstateA, outstateB, outstateC
 
@@ -256,23 +252,6 @@ class RWKV_LAYER(nn.Module):
 
             time_mix_k_ffn = self.stream(self.time_mix_k_ffn)*stated
             time_mix_r_ffn = self.stream(self.time_mix_r_ffn)*stated
-            # kmul11 = torch.einsum(
-            #     'ikv,iv->ik', [keymul.view(3, 12, 768, 768)[1], statea])
-
-            # print(kmul11.shape)
-            # tpow = torch.pow(keymul.view(3, 12, 768, 768),
-            #                  viewer[0:3].view(3, 12, 1, 768))
-
-            # kmull = torch.prod(tpow, -1).view(12, 3, 768)
-
-            # kmull.view(3, 12, 768, 768)[1] = keymul.view(3, 12, 768, 768)[1]
-
-            # torch.prod(torch.pow(kmul[0], s1), 1)
-            # print(bstate.shape)
-            # print(keymul.shape)
-            # matmul each layer on bstate and keymul, shape = (12,3,768,768), (12,768) -> (12,3,768)
-
-            # print(bstate.shape)
 
             for i in self.layerlist:
 
@@ -321,7 +300,7 @@ def empty_state(n_emb, layers, floatMode, device):
     return state
 
 
-def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64):
+def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64, compat=False):
 
     def setToProp(i):
         def fx(x): return x
@@ -344,7 +323,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
         setToProp(0)(w[0]), "cpu" if "cpu" in RunDevice[0] else "cuda")
 
     PostProcess = RWKV_POSTPROCESS(
-        list(map(setToProp(0), w[2])), "cpu" if "cpu" in RunDevice[0] else "cuda")
+        list(map(setToProp(0), w[2])), "cpu" if "cpu" in RunDevice[0] else "cuda", compatibility=compat)
     Layers: list(RWKV_LAYER) = []
     print(len(w[1]))
     groups = chunkSize
@@ -353,7 +332,7 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
         mm = w[1][i:i+18*groups]
         print(len(mm), "mm")
         modelLayer = RWKV_LAYER(
-            list(map(setToProp(int(i/(18))), mm)), int(i/18), inttype, "cuda" not in RunDevice[int(i/(18))] and "cpu" not in RunDevice[int(i/(18))])
+            list(map(setToProp(int(i/(18))), mm)), int(i/18), inttype, "cuda" not in RunDevice[int(i/(18))] and "cpu" not in RunDevice[int(i/(18))], compatibility=compat)
         # modelLayer = torch.jit.script(
         #     modelLayer, (PreProcess.forward([127])))
 
