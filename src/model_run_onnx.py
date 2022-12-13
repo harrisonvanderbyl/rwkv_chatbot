@@ -224,7 +224,7 @@ class RWKV_LAYER(nn.Module):
         v = self.mv(kw[1], x + instateAV)
         self.outputonce(v[0])
 
-        r = self.mv(kw[2], x + instateAR).to(torch.float64).exp() + 1.1
+        r = self.mv(kw[2], x + instateAR).to(torch.float64).exp() + 1
 
         w = instateB + time_first*k*v
         d = instateC*r+time_first*k*r
