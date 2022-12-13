@@ -187,8 +187,8 @@ class RWKV_LAYER(nn.Module):
         print(self.m.dtype)
         self.layerlist = list(
             map(lambda x: x, list(range(self.n_layer))))
-        self.cint = (self.offset+len(self.layerlist))*4
-        self.uncint = (self.offset*4)
+        self.cint = (self.offset+len(self.layerlist))
+        self.uncint = (self.offset)
         print(self.layerlist)
         self.eval()
 
