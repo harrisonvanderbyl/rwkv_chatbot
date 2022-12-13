@@ -115,7 +115,7 @@ class RWKV_POSTPROCESS(nn.Module):
     def forward(self, x: torch.Tensor, state):
 
         zz = torch.layer_norm(
-            x, self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
+            x.to(device=self.postProcess0.device), self.postProcess0.shape, weight=self.postProcess0, bias=self.postProcess1)
         out = self.mv(self.postProcess2, zz)
         return out, state
 
@@ -242,6 +242,8 @@ class RWKV_LAYER(nn.Module):
         with torch.no_grad():
 
             ln1w = self.stream(self.ln1w)
+            x = x.to(device=ln1w.device)
+            state = state.to(device=x.device)
             ln1b = self.stream(self.ln1b)
             ln2w = self.stream(self.ln2w)
             ln2b = self.stream(self.ln2b)
