@@ -188,27 +188,30 @@ class Compat():
 
         return sample(probs, temperature=temp, top_p_usual=top_p_usual)
 
-    def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
-        options = []
+    def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, charnums=100, endChars=[[187, 187], [535]]):
 
-        chars = currstate[0]["ctx"]
-        # if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
-        #     return options
+        for i in range(charnums):
+            chars = currstate[0]["ctx"]
+            # if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
+            #     return options
 
-        state = currstate[0]["state"]
+            state = currstate[0]["state"]
 
-        x = self.pre.forward(torch.LongTensor([chars[-1]]), state)
+            x = self.pre.forward(torch.LongTensor([chars[-1]]), state)
 
-        for l in self.layers:
-            x = l.forward(*x)
+            for l in self.layers:
+                x = l.forward(*x)
 
-        xout = self.post.forward(*x)
-        chars += [self.sample_logits(
-            xout[0], temp=0.9, top_p_usual=0.8)]
+            xout = self.post.forward(*x)
+            chars += [self.sample_logits(
+                xout[0], temp=0.9, top_p_usual=0.8)]
 
-        tokens = [{"ctx": chars, "state": xout[1], "score": 1.0}]
+            currstate = [{"ctx": chars, "state": xout[1], "score": 1.0}]
+            for e in endChars:
+                if chars[-len(e)] == e:
+                    return currstate
 
-        return tokens
+        return currstate
 
     def empty_state(self):
         return self.emptyState

@@ -228,7 +228,7 @@ async def on_message(message):
 
         with torch.no_grad():
             state = model.run(
-                currstate=[{"score": 0, "ctx": state[0], "state":state[1]}])
+                currstate=[{"score": 0, "ctx": state[0], "state":state[1]}], endChars=[])
 
         send_msg = tokenizer.tokenizer.decode(state[0]["ctx"][begin:]).strip()
         state = (state[0]["ctx"], state[0]["state"])
@@ -245,7 +245,7 @@ async def on_message(message):
 
         with torch.no_grad():
             state = model.run(
-                currstate=[{"score": 0, "ctx": state[0], "state":state[1]}])
+                currstate=[{"score": 0, "ctx": state[0], "state":state[1]}], endChars=[])
         state = (state[0]["ctx"], state[0]["state"])
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
