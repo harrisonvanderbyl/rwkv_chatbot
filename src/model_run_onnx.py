@@ -145,8 +145,8 @@ class RWKV_LAYER(nn.Module):
         self.ln1b = ispin(torch.stack(w[1::18]))
         self.ln2w = ispin(torch.stack(w[2::18]))
         self.ln2b = ispin(torch.stack(w[3::18]))
-        self.time_decay = ispin(torch.exp(torch.stack(w[4::18])))
-        self.time_first = ispin(torch.exp(torch.stack(w[5::18])))
+        self.time_decay = ispin((torch.stack(w[4::18]).exp()))
+        self.time_first = ispin((torch.stack(w[5::18]).exp()))
 
         tk = w[6::18]
         tv = w[7::18]
@@ -162,6 +162,12 @@ class RWKV_LAYER(nn.Module):
         self.vvtv = ispin(torch.stack(tv))
         self.kktk = ispin(torch.stack(tk))
         self.rrtr = ispin(torch.stack(tr))
+
+        def r(x):
+            print(x)
+            self.outputonce = lambda x: x
+
+        self.outputonce = r
 
         self.key = ispin(torch.stack(mm))
         self.outputv = ispin(torch.stack(w[12::18]))
@@ -213,21 +219,21 @@ class RWKV_LAYER(nn.Module):
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = self.mv(kw[0], x + instateAK).exp()
+        k = self.mv(kw[0], x + instateAK).to(torch.float64).exp()
 
         v = self.mv(kw[1], x + instateAV)
+        self.outputonce(v[0])
 
-        r = self.mv(kw[2], x + instateAR).exp()
+        r = self.mv(kw[2], x + instateAR).to(torch.float64).exp() + 1.1
 
-        w = instateB + v * time_first * k
-        d = r * instateC + time_first * k * \
-            r + instateC + time_first * k
+        w = instateB + time_first*k*v
+        d = instateC*r+time_first*k*r
 
         rwkv = self.mv(ow, (w/d).to(dtype=ow.dtype))
         output = sx+rwkv
 
         outstateA = x
-        outstateB = instateB * time_decay + k * v
+        outstateB = instateB * time_decay + k * v  # ne33nd
         outstateC = instateC * time_decay + k
 
         return output, outstateA, outstateB, outstateC
