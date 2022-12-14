@@ -145,7 +145,7 @@ class RWKV_LAYER(nn.Module):
         self.ln1b = ispin(torch.stack(w[1::18]))
         self.ln2w = ispin(torch.stack(w[2::18]))
         self.ln2b = ispin(torch.stack(w[3::18]))
-        self.time_decay = ispin((torch.stack(w[4::18]).exp()))
+        self.time_decay = ispin((torch.stack(w[4::18])))
         self.time_first = ispin((torch.stack(w[5::18])))
 
         tk = w[6::18]
@@ -237,26 +237,26 @@ class RWKV_LAYER(nn.Module):
         kwss1 = ((kw[1]*ss[1]).transpose(1, 0)*k.float())
 
         # owc = torch.complex(ow, torch.zeros_like(ow)).log()
-        rt = (kwss2+instateC.log().diag().float()).sum(1).exp()
+        rt = (kwss2.exp()*instateC.diag().float().exp()).prod(1)
 
-        rkt = (kwss2 + kwss0 + time_first.diag()).sum(1).exp()
+        rkt = (kwss2.exp()*kwss0.exp()*time_first.diag().exp()).prod(1)
 
-        kt = (kwss0+time_first.diag()).sum(1).exp()
+        kt = (kwss0.exp()*time_first.diag().exp()).prod(1)
 
-        d = 1/(rt + rkt + kt + instateC)
+        d = 1/(rt + rkt + kt + instateC.exp())
 
         w = ((instateB.diag().float()+time_first.exp()
              * kwss1)*d).float().sum(0)*ow
 
-        nzw = (w).to(dtype=ow.dtype)
-        rwkv = self.mv(nzw, self.ones)
+        rwkv = w.sum(1)
         output = sx+rwkv
 
         outstateA = x
-        outstateB = ((instateB * time_decay).diag() + kwss1).sum(0)  # ne33nd
-        outstateC = instateC * time_decay + k
+        outstateB = ((instateB * time_decay.exp()).diag() +
+                     kwss1).sum(0)  # ne33nd
+        outstateC = (instateC + time_decay).exp() + k
 
-        return output, outstateA, outstateB, outstateC
+        return output, outstateA, outstateB, outstateC.log()
 
     def forward(self, x, state: torch.Tensor):
         with torch.no_grad():
