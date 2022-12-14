@@ -154,6 +154,12 @@ def loadModel(trace=False, compat=False):
         return pre, layers, post, emptyState
 
 
+class PartialRwkv():
+    def __init__(self, layers, emptyState):
+        self.layers = layers
+        self.emptyState = emptyState
+
+
 class Compat():
     def __init__(self, pre, layers, post, emptyState):
         self.pre = pre
