@@ -43,7 +43,7 @@ elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
 #emptyState = torch.load(loadFile+"/emptyState.pt")
-emptyState = (layers*4)*[embed*[0.01]]
+emptyState = (4)*[layers*[embed*[0.01]]]
 
 providers = [
     ('CUDAExecutionProvider', {
