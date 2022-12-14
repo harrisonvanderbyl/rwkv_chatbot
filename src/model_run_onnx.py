@@ -146,7 +146,7 @@ class RWKV_LAYER(nn.Module):
         self.ln2w = ispin(torch.stack(w[2::18]))
         self.ln2b = ispin(torch.stack(w[3::18]))
         self.time_decay = ispin((torch.stack(w[4::18]).exp()))
-        self.time_first = ispin((torch.stack(w[5::18]).exp()))
+        self.time_first = ispin((torch.stack(w[5::18])))
 
         tk = w[6::18]
         tv = w[7::18]
@@ -155,13 +155,14 @@ class RWKV_LAYER(nn.Module):
         vv = w[10::18]
         rr = w[11::18]
         mm = []
+        mn = []
         for i in range(len(kk)):
             mm = mm + [torch.stack(
                 [(kk[i]), vv[i], (-rr[i])])]
+            mn = mn + [torch.stack(
+                [(tk[i]), tv[i], tr[i]])]
 
-        self.vvtv = ispin(torch.stack(tv))
-        self.kktk = ispin(torch.stack(tk))
-        self.rrtr = ispin(torch.stack(tr))
+        self.vvtv = ispin(torch.stack(mn))
 
         def r(x):
             print(x)
@@ -177,6 +178,9 @@ class RWKV_LAYER(nn.Module):
         self.receptance_ffn = ispin(-torch.stack(w[16::18]))
         self.value_ffn = ispin(torch.stack(w[17::18]))
         print(len(self.outputv), len(self.ln1w), offset)
+
+        self.ones = torch.ones(self.ln1w.shape[1]).to(
+            dtype=self.ln1w.dtype, device=self.ln1w.device)
 
         self.n_layer = len(self.ln1w)
         self.m = torch.LongTensor([0]).to(
@@ -214,26 +218,42 @@ class RWKV_LAYER(nn.Module):
 
         return output, x
 
-    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, instateAK, instateAV, instateAR, instateB, instateC):
+    def SA(self, sx: torch.Tensor, ln1w, ln1b, time_first: torch.Tensor, time_decay: torch.Tensor, kw: torch.Tensor, ow: torch.Tensor, instateAV, instateB, instateC):
 
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = self.mv(kw[0], x + instateAK).to(torch.float64).exp()
+        # kv =kw.bmm(instateAV)
 
-        v = self.mv(kw[1], x + instateAV)
-        self.outputonce(v[0])
+        ss = x + instateAV
 
-        r = self.mv(kw[2], x + instateAR).to(torch.float64).exp() + 1
+        ss = ss.to(x.dtype)
 
-        w = instateB + time_first*k*v
-        d = instateC*r+time_first*k*r
+        kwss0: torch.Tensor = kw[0]*ss[0]
+        kwss2 = kw[2]*ss[2]
 
-        rwkv = self.mv(ow, (w/d).to(dtype=ow.dtype))
+        k = kwss0.exp().prod(1).to(torch.float64)
+
+        kwss1 = ((kw[1]*ss[1]).transpose(1, 0)*k.float())
+
+        # owc = torch.complex(ow, torch.zeros_like(ow)).log()
+        rt = (kwss2+instateC.log().diag().float()).sum(1).exp()
+
+        rkt = (kwss2 + kwss0 + time_first.diag()).sum(1).exp()
+
+        kt = (kwss0+time_first.diag()).sum(1).exp()
+
+        d = 1/(rt + rkt + kt + instateC)
+
+        w = ((instateB.diag().float()+time_first.exp()
+             * kwss1)*d).float().sum(0)*ow
+
+        nzw = (w).to(dtype=ow.dtype)
+        rwkv = self.mv(nzw, self.ones)
         output = sx+rwkv
 
         outstateA = x
-        outstateB = instateB * time_decay + k * v  # ne33nd
+        outstateB = ((instateB * time_decay).diag() + kwss1).sum(0)  # ne33nd
         outstateC = instateC * time_decay + k
 
         return output, outstateA, outstateB, outstateC
@@ -262,9 +282,7 @@ class RWKV_LAYER(nn.Module):
             statec = viewer[2][self.uncint: self.cint]
             stated = viewer[3][self.uncint: self.cint]
 
-            vvtv = self.stream(self.vvtv)*statea.to(dtype=self.vvtv.dtype)
-            kktk = self.stream(self.kktk)*statea.to(dtype=self.vvtv.dtype)
-            rrtr = self.stream(self.rrtr)*statea.to(dtype=self.vvtv.dtype)
+            vvtv = self.stream(self.vvtv)
 
             time_mix_k_ffn = self.stream(
                 self.time_mix_k_ffn)*stated.to(dtype=self.vvtv.dtype)
@@ -294,13 +312,11 @@ class RWKV_LAYER(nn.Module):
                 tmvw = value_ffn[i]
 
                 # kmul = kmull[i]mul[1]@s1
-                kmul0i = kktk[i]
-                kmul1i = vvtv[i]
-                kmul2i = rrtr[i]
+                kmul1i = vvtv[i] * statea[i]
 
                 # kmul1 = kmul11[i]
 
-                sx, statea[i], stateb[i], statec[i] = self.SA(x, ln1wa, ln1ba, atf, atc, atd, aow, kmul0i, kmul1i, kmul2i, stateb[i], statec[i]
+                sx, statea[i], stateb[i], statec[i] = self.SA(x, ln1wa, ln1ba, atf, atc, atd, aow, kmul1i, stateb[i], statec[i]
                                                               )
 
                 x, stated[i] = self.FF(sx, ln2wa, ln2ba,

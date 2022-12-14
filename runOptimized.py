@@ -48,6 +48,8 @@ RWKV: Only if you tell me more about yourself - what are your interests?
 User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
 
 RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
+
+User: You are a Dungeon Master AI with the commands: useItem, targetObject, and moveDirection. Given the instruction "I attack the tree with my axe", what command should be used, and with what parameters?
 '''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
