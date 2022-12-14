@@ -1,19 +1,20 @@
+import time
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 mat = torch.rand(3, 3)
 # print(mat)
 vec = torch.rand(3)
-dvec = -torch.rand(3)
-# print(vec)
-print(dvec)
-print(dvec.log().exp())
-print(torch.complex(dvec, dvec*0).log().exp().float())
+# dvec = -torch.rand(3)
+# # print(vec)
+# print(dvec)
+# print(dvec.log().exp())
+# print(torch.complex(dvec, dvec*0).log().exp().float())
 
-avec = torch.rand(3)
+# avec = torch.rand(3)
 
-print(avec*dvec)
-print((avec.log()+dvec.log()).exp())
-print((torch.complex(dvec, dvec*0).log()+avec.log()).exp().float())
+# print(avec*dvec)
+# print((avec.log()+dvec.log()).exp())
+# print((torch.complex(dvec, dvec*0).log()+avec.log()).exp().float())
 
 # testt = mat@mat
 # testa = torch.einsum('ij,jk->ik', [mat, mat])
@@ -65,53 +66,106 @@ print((torch.complex(dvec, dvec*0).log()+avec.log()).exp().float())
 
 # rounds = 1000
 
-# matb = mat.to(torch.bfloat16)
-# vecb = vec.to(torch.bfloat16)
-# matp = mat.to(torch.float64)
-# vecp = vec.to(torch.float64)
-# matu = mat.to(torch.uint8)
-# vecu = vec.to(torch.uint8)
-# math = mat.to(torch.half)
-# vech = vec.to(torch.half)
+matb = mat.to(torch.bfloat16)
+vecb = vec.to(torch.bfloat16)
+matp = mat.to(torch.float64)
+vecp = vec.to(torch.float64)
+matu = mat.to(torch.uint8)
+vecu = vec.to(torch.uint8)
+math = mat.to(torch.half)
+vech = vec.to(torch.half)
 
-# # with cuda
-# matbc = matb.cuda()
-# vecbc = vecb.cuda()
-# matpc = matp.cuda()
-# vecpc = vecp.cuda()
-# matuc = matu.cuda()
-# vecuc = vecu.cuda()
-# matc = mat.cuda()
-# vecc = vec.cuda()
-# mathc = math.cuda()
-# vechc = vech.cuda()
+# with cuda
+matbc = matb.cuda()
+vecbc = vecb.cuda()
+matpc = matp.cuda()
+vecpc = vecp.cuda()
+matuc = matu.cuda()
+vecuc = vecu.cuda()
+matc = mat.cuda()
+vecc = vec.cuda()
+mathc = math.cuda()
+vechc = vech.cuda()
+rounds = 1000
 
+with torch.no_grad():
 
-# with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-#     with record_function("fp32"):
-#         for x in range(rounds):
-#             testt = torch.mv(mat, vec)
-#     with record_function("bf16"):
-#         for x in range(rounds):
-#             testt = torch.mv(matb, vecb)
-#     with record_function("fp64"):
-#         for x in range(rounds):
-#             testt = torch.mv(matp, vecp)
-#     # with record_function("uint8"):
-#     #     for x in range(rounds):
-#     #         testt = torch.mv(matu, vecu)
-#     with record_function("fp32 cuda"):
-#         for x in range(rounds):
-#             testt = torch.mv(matc, vecc)
-#     with record_function("bf16 cuda"):
-#         for x in range(rounds):
-#             testt = torch.mv(matbc, vecbc)
-#     with record_function("fp64 cuda"):
-#         for x in range(rounds):
-#             testt = torch.mv(matpc, vecpc)
-#     with record_function("half cuda"):
-#         for x in range(rounds):
-#             testt = torch.mv(mathc, vechc)
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+        with record_function("fp32"):
+            for x in range(rounds):
+                testt = torch.mv(mat, vec)
+        with record_function("bf16"):
+            for x in range(rounds):
+                testt = torch.mv(matb, vecb)
+        with record_function("fp64"):
+            for x in range(rounds):
+                testt = torch.mv(matp, vecp)
+        # # with record_function("uint8"):
+        # #     for x in range(rounds):
+        # #         testt = torch.mv(matu, vecu)
+        with record_function("fp32 cuda"):
+            for x in range(rounds):
+                testt = torch.mv(matc, vecc)
+        with record_function("bf16 cuda"):
+            for x in range(rounds):
+                testt = torch.mv(matbc, vecbc)
+        with record_function("fp64 cuda"):
+            for x in range(rounds):
+                testt = torch.mv(matpc, vecpc)
+        with record_function("half cuda"):
+            for x in range(rounds):
+                testt = torch.mv(mathc, vechc)
 
-# print(prof.key_averages().table(sort_by="cuda_time_total",
-#       top_level_events_only=True, row_limit=10))
+    print(prof.key_averages().table(sort_by="cuda_time_total",
+                                    top_level_events_only=True, row_limit=10))
+
+    # try with basic time
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(mat, vec)
+
+    print("fp32 time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(matb, vecb)
+
+    print("bf16 time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(matp, vecp)
+
+    print("fp64 time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(matc, vecc)
+
+    print("fp32 cuda time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(matbc, vecbc)
+
+    print("bf16 cuda time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(matpc, vecpc)
+
+    print("fp64 cuda time: ", time.time() - currentTime)
+
+    currentTime = time.time()
+
+    for x in range(rounds):
+        testt = torch.mv(mathc, vechc)
+
+    print("half cuda time: ", time.time() - currentTime)
