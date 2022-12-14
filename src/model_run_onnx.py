@@ -89,10 +89,10 @@ def createTensors(model_name):
 
 
 class RWKV_PREPROCESS(nn.Module):
-    def __init__(self, preProcess, device):
+    def __init__(self, preProcess, device, inttype=torch.int64):
         super().__init__()
         self.preProcess = preProcess.to(device=device)
-        self.m = torch.Tensor([0]).to(dtype=torch.int64)
+        self.m = torch.Tensor([0]).to(dtype=inttype)
 
     def forward(self, xx, state):
 
@@ -101,7 +101,7 @@ class RWKV_PREPROCESS(nn.Module):
 
 
 class RWKV_POSTPROCESS(nn.Module):
-    def __init__(self, postprocess, device, compatibility=False):
+    def __init__(self, postprocess, device, compatibility=False, inttype=torch.int64):
         super().__init__()
         self.mv = torch.mv
         if (compatibility):
@@ -110,7 +110,7 @@ class RWKV_POSTPROCESS(nn.Module):
         self.postProcess0 = postprocess[0].to(device=device)
         self.postProcess1 = postprocess[1].to(device=device)
         self.postProcess2 = postprocess[2].to(device=device)
-        self.m = torch.Tensor([0]).to(dtype=torch.int64)
+        self.m = torch.Tensor([0]).to(dtype=inttype)
 
     def forward(self, x: torch.Tensor, state):
 
@@ -180,9 +180,9 @@ class RWKV_LAYER(nn.Module):
 
         self.n_layer = len(self.ln1w)
         self.m = torch.LongTensor([0]).to(
-            dtype=torch.int32 if compatibility else torch.int64)
+            dtype=dtypein)
         self.f = torch.LongTensor([5]).to(
-            dtype=torch.int32 if compatibility else torch.int64)
+            dtype=dtypein)
 
         print(self.m.dtype)
         self.layerlist = list(
@@ -338,10 +338,10 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
             Path, map_location="cpu")
 
     PreProcess = RWKV_PREPROCESS(
-        setToProp(0)(w[0]), "cpu" if "cpu" in RunDevice[0] else "cuda")
+        setToProp(0)(w[0]), "cpu" if "cpu" in RunDevice[0] else "cuda", inttype=inttype)
 
     PostProcess = RWKV_POSTPROCESS(
-        list(map(setToProp(0), w[2])), "cpu" if "cpu" in RunDevice[0] else "cuda", compatibility=compat)
+        list(map(setToProp(0), w[2])), "cpu" if "cpu" in RunDevice[0] else "cuda", compatibility=compat, inttype=inttype)
     Layers: list(RWKV_LAYER) = []
     print(len(w[1]))
     groups = chunkSize
