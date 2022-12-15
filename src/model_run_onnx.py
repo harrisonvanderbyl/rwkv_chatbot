@@ -137,6 +137,7 @@ class RWKV_LAYER(nn.Module):
         self.mv = torch.mv
         if (compatibility):
             self.mv = lambda x, y: torch.einsum('ik,k->i', [x, y])
+            # self.mv = lambda x, y: (x*y).sum(1)
         # w = torch.Tensor(list(arr)).to(
         #     dtype=dtype, device=device)
 
@@ -145,8 +146,8 @@ class RWKV_LAYER(nn.Module):
         self.ln1b = ispin(torch.stack(w[1::18]))
         self.ln2w = ispin(torch.stack(w[2::18]))
         self.ln2b = ispin(torch.stack(w[3::18]))
-        self.time_decay = ispin((torch.stack(w[4::18]).exp()))
-        self.time_first = ispin((torch.stack(w[5::18]).exp()))
+        self.time_decay = ispin((torch.stack(w[4::18])))
+        self.time_first = ispin((torch.stack(w[5::18])))
 
         tk = w[6::18]
         tv = w[7::18]
@@ -219,22 +220,33 @@ class RWKV_LAYER(nn.Module):
         x = torch.layer_norm(
             sx, (ln1w.shape[0],), weight=ln1w, bias=ln1b)
 
-        k = self.mv(kw[0], x + instateAK).to(torch.float64).exp()
+        k = self.mv(kw[0], x + instateAK).to(torch.float64)
 
-        v = self.mv(kw[1], x + instateAV)
-        self.outputonce(v[0])
+        v = self.mv(kw[1], (x + instateAV)).to(torch.float64)
 
-        r = self.mv(kw[2], x + instateAR).to(torch.float64).exp() + 1
+        r = self.mv(kw[2], x + instateAR).to(torch.float64)
 
-        w = instateB + time_first*k*v
-        d = instateC*r+time_first*k*r
+        # log(ab) = log(a) + log(b)
+        # log(a/b) = log(a) - log(b)
+        # log(a^b) = b*log(a)
+        # log(a) = log(a^1) = 1*log(a)
+        # log(a^0) = 0*log(a) = 0
+        # exp(a)*exp(b) = exp(a+b)
+        # exp(a)/exp(b) = exp(a-b)
+        # exp(a^b) = exp(b*log(a))
+        # exp(log(a)) = a
+        # exp(0) = 1
 
-        rwkv = self.mv(ow, (w/d).to(dtype=ow.dtype))
+        w = instateB + time_first.add(k).exp()*v
+        d = instateC.mul(r.exp())+time_first.add(k).add(r).exp() + \
+            instateC+time_first.add(k).exp()
+
+        rwkv = self.mv(ow*w.to(dtype=ow.dtype), (1/d).to(dtype=ow.dtype))
         output = sx+rwkv
 
         outstateA = x
-        outstateB = instateB * time_decay + k * v  # ne33nd
-        outstateC = instateC * time_decay + k
+        outstateB = instateB.mul(time_decay.exp()).add(k.exp()*v)  # ne33nd
+        outstateC = instateC.mul(time_decay.exp()).add(k.exp())
 
         return output, outstateA, outstateB, outstateC
 
@@ -312,6 +324,8 @@ class RWKV_LAYER(nn.Module):
 def empty_state(n_emb, layers, floatMode, device):
     state = torch.zeros(4, layers,
                         n_emb, device=device[0] if device[0] == "cpu" else "cuda", dtype=torch.float64)+0.01
+
+    # state = torch.complex(state, torch.zeros_like(state))
     # for i in range(layers):
     #     state[5*i+4] -= 1e30
     # state = (*state,)

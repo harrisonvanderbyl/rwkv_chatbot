@@ -4,6 +4,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 mat = torch.rand(3, 3)
 # print(mat)
 vec = torch.rand(3)
+vec2 = torch.rand(3)
 # dvec = -torch.rand(3)
 # # print(vec)
 # print(dvec)
@@ -27,6 +28,18 @@ vec = torch.rand(3)
 # print(testt)
 # print(testa)
 # print(testb)
+
+print(vec.exp() + vec2.exp())
+print((vec+vec2).exp())
+print(vec * vec2)
+print(vec.exp() * vec2.exp())
+print((vec+vec2).log())
+print(vec.log() + vec2.log())
+print(vec.log() * vec2.log())
+print((vec.log() + vec2.log()).exp())
+
+
+exit()
 
 # avv = torch.exp(mat@(vec+dvec))
 # print(avv)
