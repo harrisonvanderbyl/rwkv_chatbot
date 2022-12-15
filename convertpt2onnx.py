@@ -108,13 +108,15 @@ torch.save(
     emptyState, f"onnx/{path}/emptyState.pt")
 
 torch.onnx.export(pre, (torch.tensor([187]).to(torch.int32), emptyState), f"onnx/{path}/preprocess.onnx",
-                  input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
+                  input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "14")), do_constant_folding=False)
 
 rx = pre.forward(torch.tensor([187]).to(torch.int32), emptyState)
 for m in range(len(layers)):
     # layers[m] = torch.jit.script(layers[m])
     torch.onnx.export(layers[m], rx, f"onnx/{path}/layer{m}.onnx",
-                      input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
+                      input_names=output_names, output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "13")), do_constant_folding=False)
+    os.system(
+        f"python3 ./helpers/fix-64.py ./onnx/{path}/layer{m}.onnx ./onnx/{path}/layer{m}.onnx")
 
 torch.onnx.export(post, rx, f"onnx/{path}/postprocess.onnx", input_names=output_names,
-                  output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "12")), do_constant_folding=False)
+                  output_names=output_names, export_params=True, verbose=False, opset_version=int(os.environ.get("OPSET", "14")), do_constant_folding=False)

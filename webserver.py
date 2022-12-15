@@ -117,5 +117,5 @@ class S(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(out)
 
 
-httpd = socketserver.TCPServer(('', 8087), S)
+httpd = socketserver.TCPServer(('', 8088), S)
 httpd.serve_forever()
