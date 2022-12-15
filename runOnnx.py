@@ -4,10 +4,11 @@ import numpy as np
 import os
 import time
 import gc
-import torch
 from src.utils import TOKENIZER
 import inquirer
+import torch
 from torch.nn import functional as F
+
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
@@ -36,15 +37,17 @@ layers = int(loadFile.split("-")[1])
 floatmode = (loadFile.split("-")[3])
 
 if floatmode == "torch.float16":
-    floatmode = torch.float16
+    floatmode = np.float16
 elif floatmode == "torch.float32":
-    floatmode = torch.float32
-elif floatmode == "torch.bfloat16":
-    floatmode = torch.bfloat16
+    floatmode = np.float32
+elif floatmode == "np.bfloat16":
+    floatmode = np.bfloat16
 
 #emptyState = torch.load(loadFile+"/emptyState.pt")
 emptyState = (4)*[layers*[embed*[0.01]]]
-
+so = ort.SessionOptions()
+so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+so.log_severity_level = 3
 providers = [
     ('CUDAExecutionProvider', {
         'device_id': 0,
@@ -115,7 +118,6 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 print(f'\nOptimizing speed...')
 
 gc.collect()
-torch.cuda.empty_cache()
 
 # input(0)
 
@@ -157,13 +159,6 @@ init_out = []
 
 out = []
 
-print("torch.cuda.memory_allocated: %fGB" %
-      (torch.cuda.memory_allocated(0)/1024/1024/1024))
-print("torch.cuda.memory_reserved: %fGB" %
-      (torch.cuda.memory_reserved(0)/1024/1024/1024))
-print("torch.cuda.max_memory_reserved: %fGB" %
-      (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
-
 
 def createInput(inputNames, values):
     inputs = {}
@@ -190,23 +185,39 @@ def loadContext(ctx: list[int], state, newctx: list[int]):
 tokens = loadContext(ctx=[], newctx=ctx1, state=emptyState)
 
 
-def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # turn to float if is half and cpu
-    probs = F.softmax(ozut.float(), dim=-1)
+def sample_logits(logits, top_k=5, top_p=0.9, filter_value=-float('Inf')):
+    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            logits: logits distribution shape (vocabulary size)
+            top_k >0: keep only top k tokens with highest probability (top-k filtering).
+            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+    """
+    assert logits.dim() == 1  # batch size 1 for now - could be updated for more but the code would be less clear
+    top_k = min(top_k, logits.size(-1))  # Safety check
+    if top_k > 0:
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k)[
+            0][..., -1, None]
+        logits[indices_to_remove] = filter_value
 
-    sorted_probs = torch.sort(probs, descending=True)[0]
-    cumulative_probs = torch.cumsum(
-        sorted_probs.float(), dim=-1).cpu().numpy()
-    cutoff = float(sorted_probs[np.argmax(
-        cumulative_probs > top_p_usual)])
-    probs[probs < cutoff] = 0
-    if temp != 1.0:
-        probs = probs.pow(1.0 / temp)
+    if top_p > 0.0:
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        cumulative_probs = torch.cumsum(
+            F.softmax(sorted_logits, dim=-1), dim=-1)
 
-    out: int = torch.multinomial(probs.float(), 1, True)[0]
-    return out
+        # Remove tokens with cumulative probability above the threshold
+        sorted_indices_to_remove = cumulative_probs > top_p
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[...,
+                                 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        indices_to_remove = sorted_indices[sorted_indices_to_remove]
+        logits[indices_to_remove] = filter_value
+    num = logits[logits > 0][0]
+
+    return logits
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
@@ -234,7 +245,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             myout = post.run(None, createInput(post.get_inputs(), o))
 
             chars += [sample_logits(
-                torch.Tensor(myout[0]), temp=TEMPERATURE, top_p_usual=top_p)]
+                torch.tensor(myout[0]))]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])
