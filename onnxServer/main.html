@@ -7,7 +7,13 @@
   </header>
   <body>
     <!-- import ONNXRuntime Web from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script> -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.14.0-dev.20221124-4ca62b9ee8/ort.min.js"
+      integrity="sha512-PANEkbiBMZ0EIRMtKm2M/NEtV2TbwXHhltLpqiNO57tpCeX0cseuaXKTdlAWFXsDxGwhX9AcHVYhLT/GEHfDBg=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
     <script>
       // use an async context to call onnxruntime functions.
       async function main() {
@@ -45,26 +51,26 @@
         const postProcess = await ort.InferenceSession.create(
           "postprocess.onnx",
           { executionProviders: ["webgl"] }
-          // sessionOption, cant get opengl rendering
+          // // sessionOption, cant get opengl rendering
         );
 
         const preProcess = await ort.InferenceSession.create(
-          "preprocess.onnx",
-          { executionProviders: ["webgl"] }
-          // sessionOption, cant get opengl rendering
+          "preprocess.onnx"
+          // { executionProviders: ["webgl"] }
+          // // sessionOption, cant get opengl rendering
         );
 
         // prepare inputs. a tensor need its corresponding TypedArray as data
 
         const empty_state = () => {
-          const dataB = new Float64Array(4 * 12 * 768);
+          const dataB = new Float32Array(4 * 12 * 768);
           // for i in range(layers):
           //     state[5*i+4] -= 1e30
           for (let i = 0; i < dataB.length; i++) {
             dataB[i] = 0;
           }
 
-          return new ort.Tensor("float64", dataB, [4, 12, 768]);
+          return new ort.Tensor("float32", dataB, [4, 12, 768]);
         };
 
         const tensorB = empty_state();
@@ -82,7 +88,7 @@
 
           const result = await postProcess.run({
             "probs.1": resultA.probs,
-            "outstate.1": resultA.outstate,
+            "outstate.1": tensorB,
           });
 
           console.log(result);
@@ -101,7 +107,7 @@
           pr["outstate.1"] = result["outstate"];
 
           feeds["probs.1"] = (await preProcess.run(pr))["probs"];
-          feeds["outstate.1"] = result.outstate;
+          feeds["outstate.1"] = tensorB;
         }
 
         // read from results
