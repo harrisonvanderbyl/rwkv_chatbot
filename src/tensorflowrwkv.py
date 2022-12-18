@@ -136,7 +136,7 @@ class RWKV(tf.Module):
 
             ot = ot + [aaa, bbb, ccc, ddd]
 
-        x = tf.linalg.matvec(self.layernorm(x, self.postprocess0,
-                                            self.postprocess1), self.postprocess2)
+        x = tf.linalg.matvec(self.postprocess2, self.layernorm(x, self.postprocess0,
+                                                               self.postprocess1))
 
         return x, tf.stack(ot, 0)
