@@ -49,7 +49,7 @@ class RWKV(tf.Module):
         return tf.add(tf.multiply(tf.divide(xee2,
                                             x2), w), b)
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(shape=[4*12, 768], dtype=tf.float32)])
+    @tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(shape=[None, None], dtype=tf.float32)])
     def forward(self, x, state):
 
         x = self.preprocess[x[0]]
@@ -136,7 +136,7 @@ class RWKV(tf.Module):
 
             ot = ot + [aaa, bbb, ccc, ddd]
 
-        x = tf.reduce_sum(self.layernorm(x, self.postprocess0,
-                          self.postprocess1) * self.postprocess2, 1)
+        x = tf.linalg.matvec(self.layernorm(x, self.postprocess0,
+                                            self.postprocess1), self.postprocess2)
 
         return x, tf.stack(ot, 0)
