@@ -14,6 +14,8 @@ from typing import List, Dict, Tuple, Union
 from torch import autocast
 import numpy as np
 from tqdm import tqdm
+import src.tensorflowrwkv as tensorflowrwkv
+import tensorflow as tf
 # Make sure to use nightly build of torchdynamo
 # import torchdynamo
 # MyFunction = torchdynamo.optimize(
@@ -176,8 +178,10 @@ class RWKV_LAYER(nn.Module):
         self.time_mix_k_ffn = ispin(torch.stack(w[13::18]))
         self.time_mix_r_ffn = ispin(torch.stack(w[14::18]))
         self.key_ffn = ispin(torch.stack(w[15::18]))
+        print("keyffn", self.key_ffn.shape)
         self.receptance_ffn = ispin(-torch.stack(w[16::18]))
         self.value_ffn = ispin(torch.stack(w[17::18]))
+        print("valueffn", self.value_ffn.shape)
         print(len(self.outputv), len(self.ln1w), offset)
 
         self.n_layer = len(self.ln1w)
@@ -203,6 +207,41 @@ class RWKV_LAYER(nn.Module):
 
         gc.collect()
         torch.cuda.empty_cache()
+
+    def toTensorFlowLayers(self) -> list[tensorflowrwkv.RWKVTFLayer]:
+        l: list[tensorflowrwkv.RWKVTFLayer] = []
+        for i in self.layerlist:
+            layer = tensorflowrwkv.RWKVTFLayer(
+                key=tf.convert_to_tensor(self.key[i][0].cpu().numpy()),
+                receptance=tf.convert_to_tensor(
+                    self.key[i][2].cpu().numpy()),
+                value=tf.convert_to_tensor(self.key[i][1].cpu().numpy()),
+                ln1w=tf.convert_to_tensor(self.ln1w[i].cpu().numpy()),
+                ln1b=tf.convert_to_tensor(self.ln1b[i].cpu().numpy()),
+                ln2w=tf.convert_to_tensor(self.ln2w[i].cpu().numpy()),
+                ln2b=tf.convert_to_tensor(self.ln2b[i].cpu().numpy()),
+                time_mix_r_ffn=tf.convert_to_tensor(
+                    self.time_mix_r_ffn[i].cpu().numpy()),
+                key_ffn=tf.convert_to_tensor(self.key_ffn[i].cpu().numpy()),
+                kktk=tf.convert_to_tensor(self.kktk[i].cpu().numpy()),
+                outputvv=tf.convert_to_tensor(self.outputv[i].cpu().numpy()),
+                receptance_ffn=tf.convert_to_tensor(
+                    self.receptance_ffn[i].cpu().numpy()),
+                rrtr=tf.convert_to_tensor(self.rrtr[i].cpu().numpy()),
+                time_decay=tf.convert_to_tensor(
+                    self.time_decay[i].cpu().numpy()),
+                time_first=tf.convert_to_tensor(
+                    self.time_first[i].cpu().numpy()),
+                time_mix_k_ffn=tf.convert_to_tensor(
+                    self.time_mix_k_ffn[i].cpu().numpy()),
+                value_ffn=tf.convert_to_tensor(
+                    self.value_ffn[i].cpu().numpy()),
+                vvtv=tf.convert_to_tensor(self.vvtv[i].cpu().numpy()),
+
+            )
+            l.append(layer)
+
+        return l
 
     def forward(self, x, state: torch.Tensor):
         with torch.no_grad():
@@ -301,6 +340,17 @@ def empty_state(n_emb, layers, floatMode, device):
     return state
 
 
+def empty_state_tf(n_emb, layers, floatMode, device):
+    state = tf.zeros((4, layers,
+                      n_emb))+0.01
+
+    # state = torch.complex(state, torch.zeros_like(state))
+    # for i in range(layers):
+    #     state[5*i+4] -= 1e30
+    # state = (*state,)
+    return state
+
+
 def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64, compat=False):
 
     def setToProp(i):
@@ -342,3 +392,16 @@ def createRWKVModules(Path, RunDevice, FloatMode, chunkSize, inttype=torch.int64
         Layers: List[RWKV_LAYER] = Layers+[modelLayer]
 
     return PreProcess, Layers, PostProcess, int(len(w[1])/18)
+
+
+def createRWKVTensorflowModel(Path, RunDevice=["cpu"], FloatMode=torch.float32, inttype=torch.int64, compat=False):
+    preprocess, layers, postprocess, layersize = createRWKVModules(
+        chunkSize=100, Path=Path, RunDevice=RunDevice, FloatMode=FloatMode, inttype=inttype, compat=compat)
+
+    preprocess = tf.convert_to_tensor(preprocess.preProcess.cpu().numpy())
+    layers = layers[0].toTensorFlowLayers()
+    postprocess0 = tf.convert_to_tensor(postprocess.postProcess0.cpu().numpy())
+    postprocess1 = tf.convert_to_tensor(postprocess.postProcess1.cpu().numpy())
+    postprocess2 = tf.convert_to_tensor(postprocess.postProcess2.cpu().numpy())
+
+    return tensorflowrwkv.RWKV(preprocess, [postprocess0, postprocess1, postprocess2], layers)
