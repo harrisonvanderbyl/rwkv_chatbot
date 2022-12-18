@@ -30,7 +30,7 @@ class RWKVTFLayer():
         self.outputvv: tf.Tensor = outputvv
 
 
-class RWKV(tf.keras.Model):
+class RWKV(tf.Module):
     def __init__(self: tf.Tensor, preprocess, postprocess, layers):
         super(RWKV, self).__init__()
         self.preprocess = preprocess
@@ -49,13 +49,15 @@ class RWKV(tf.keras.Model):
         return tf.add(tf.multiply(tf.divide(xee2,
                                             x2), w), b)
 
-    def call(self, x, state):
-        x = self.preprocess[x]
+    @tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(shape=[4*12, 768], dtype=tf.float32)])
+    def forward(self, x, state):
 
-        statea = state[0]
-        stateb = state[1]
-        statec = state[2]
-        stated = state[3]
+        x = self.preprocess[x[0]]
+
+        statea = state[0::4]
+        stateb = state[1::4]
+        statec = state[2::4]
+        stated = state[3::4]
 
         ot = []
 
@@ -95,16 +97,16 @@ class RWKV(tf.keras.Model):
             # print(kktk[i].squeeze().shape)
             # print(atd.shape)
 
-            k = tf.exp(tf.reduce_sum(atd*(xy+kktk*statea[i]), 1))
+            k = tf.exp(tf.linalg.matvec(atd, (xy+kktk*statea[i])))
 
-            v = tf.reduce_sum(vtd*(xy+vvtv*statea[i]), 1)
+            v = tf.linalg.matvec(vtd, (xy+vvtv*statea[i]))
 
-            r = tf.exp(tf.reduce_sum(rtd*(xy+rrtr*statea[i]), 1)) + 1
+            r = tf.exp(tf.linalg.matvec(rtd, (xy+rrtr*statea[i]))) + 1
 
             w = stateb[i] + tf.exp(time_first)*k*v
             d = statec[i]*r+tf.exp(time_first)*k*r
 
-            mvv = tf.reduce_sum(outputvv*w/(d+0.001), 1)
+            mvv = tf.linalg.matvec(outputvv, w/(d+0.001))
             sxx = x + mvv
 
             aaa = xy
@@ -119,15 +121,14 @@ class RWKV(tf.keras.Model):
             # xx = torch.layer_norm(sxx, (self.sshape,),
             #                       weight=ln2wa, bias=ln2ba)
 
-            kma = tf.reduce_sum(tmkw * (xx +
-                                        tmk), 1)
+            kma = tf.linalg.matvec(tmkw, (xx +
+                                          tmk))
             # kma[kma <= 0] = 0
             km = tf.square(tf.maximum(kma, tf.zeros_like(kma)))
 
-            rt = tf.exp(tf.reduce_sum(tmrw*(xx + tmr), 1)) + 1
+            rt = tf.exp(tf.linalg.matvec(tmrw, (xx + tmr))) + 1
 
-            x = sxx + tf.reduce_sum(tmvw*km, 1
-                                    )/rt
+            x = sxx + tf.linalg.matvec(tmvw, km)/rt
 
             ddd = xx
 
@@ -138,13 +139,4 @@ class RWKV(tf.keras.Model):
         x = tf.reduce_sum(self.layernorm(x, self.postprocess0,
                           self.postprocess1) * self.postprocess2, 1)
 
-        return x, [ot[::4], ot[1::4], ot[2::4], ot[3::4]]
-
-    def reset(self):
-        self.state.assign(tf.zeros((1, 1, self.embed), dtype=self.floatmode))
-
-    def save(self, path):
-        self.save_weights(path)
-
-    def load(self, path):
-        self.load_weights(path)
+        return x, tf.stack(ot, 0)

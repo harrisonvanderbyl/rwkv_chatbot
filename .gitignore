@@ -144,4 +144,5 @@ dmypy.json
 *.pt
 *.onnx
 /tf
+/tensorflow-models
 /iree

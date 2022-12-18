@@ -341,7 +341,7 @@ def empty_state(n_emb, layers, floatMode, device):
 
 
 def empty_state_tf(n_emb, layers, floatMode, device):
-    state = tf.zeros((4, layers,
+    state = tf.zeros((4 * layers,
                       n_emb))+0.01
 
     # state = torch.complex(state, torch.zeros_like(state))
