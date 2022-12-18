@@ -52,7 +52,10 @@ class RWKV(tf.keras.Model):
     def call(self, x, state):
         x = self.preprocess[x]
 
-        statea, stateb, statec, stated = state
+        statea = state[0]
+        stateb = state[1]
+        statec = state[2]
+        stated = state[3]
 
         ot = []
 

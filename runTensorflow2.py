@@ -5,7 +5,10 @@ import torch
 from scipy.special import softmax
 from src.utils import TOKENIZER
 from tqdm import tqdm
-tfl = mro.createRWKVTensorflowModel("./RWKV-3-Pile-20220720-10704.pth")
+tfl = mro.createRWKVTensorflowModel(
+    "./RWKV-3-Pile-20220720-10704.pth")
+tfl.compile()
+
 
 emptyState = mro.empty_state_tf(768, 12, tf.float32, "cpu")
 
