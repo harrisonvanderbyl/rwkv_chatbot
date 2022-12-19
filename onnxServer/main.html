@@ -8,12 +8,17 @@
   <body>
     <!-- import ONNXRuntime Web from CDN -->
     <!-- <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script> -->
-    <script
+    <!-- <script
       src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.14.0-dev.20221124-4ca62b9ee8/ort.min.js"
       integrity="sha512-PANEkbiBMZ0EIRMtKm2M/NEtV2TbwXHhltLpqiNO57tpCeX0cseuaXKTdlAWFXsDxGwhX9AcHVYhLT/GEHfDBg=="
       crossorigin="anonymous"
       referrerpolicy="no-referrer"
-    ></script>
+    ></script> -->
+    <!-- Import @tensorflow/tfjs-core -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+
+    <!-- Adds the WebGL backend to the global backend registry -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script>
       // use an async context to call onnxruntime functions.
       async function main() {

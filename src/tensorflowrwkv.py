@@ -1,142 +1,175 @@
 import tensorflow as tf
+import torch
 
 
-class RWKVTFLayer():
-    def __init__(self, key: tf.Tensor, receptance: tf.Tensor, value: tf.Tensor, ln1w: tf.Tensor, ln1b: tf.Tensor, ln2w: tf.Tensor, ln2b: tf.Tensor, time_mix_k_ffn: tf.Tensor, time_mix_r_ffn: tf.Tensor, key_ffn: tf.Tensor, receptance_ffn: tf.Tensor, value_ffn: tf.Tensor, kktk: tf.Tensor, vvtv: tf.Tensor, rrtr: tf.Tensor, time_first: tf.Tensor, time_decay: tf.Tensor, outputvv: tf.Tensor):
-        self.key: tf.Tensor = key
-        self.receptance: tf.Tensor = receptance
-        self.value: tf.Tensor = value
+def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
+    if mode == "tensorflow":
+        initTensor = tf.convert_to_tensor
+        sqrt = tf.sqrt
+        mean = tf.reduce_mean
+        def relu(x): return tf.maximum(x, tf.zeros_like(x))
+        exp = tf.exp
+        stack = tf.stack
+        matvec = tf.linalg.matvec
 
-        self.ln1w: tf.Tensor = ln1w
-        self.ln1b: tf.Tensor = ln1b
+        # module def
+        module = tf.Module
 
-        self.ln2w: tf.Tensor = ln2w
-        self.ln2b: tf.Tensor = ln2b
+        # tensorflow function defs
+        layerdef = tf.function(
+            input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)])
+        mainFunc = tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(
+            shape=[4*len(mlayers), len(mlayers[0]["time_decay"])], dtype=tf.float32)])
+        prefunc = tf.function(
+            input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)])
+        emptyState = tf.zeros(
+            [4*len(mlayers), len(mlayers[0]["time_decay"])], dtype=tf.float32)+0.01
 
-        self.time_mix_k_ffn: tf.Tensor = time_mix_k_ffn
-        self.time_mix_r_ffn: tf.Tensor = time_mix_r_ffn
+    if mode == "pytorch":
+        initTensor = torch.tensor
+        sqrt = torch.sqrt
+        mean = torch.mean
+        relu = torch.relu
+        exp = torch.exp
+        stack = torch.stack
+        matvec = torch.mv
 
-        self.key_ffn: tf.Tensor = key_ffn
-        self.receptance_ffn: tf.Tensor = receptance_ffn
-        self.value_ffn: tf.Tensor = value_ffn
+        # module def
+        module = torch.nn.Module
 
-        self.kktk: tf.Tensor = kktk
-        self.vvtv: tf.Tensor = vvtv
-        self.rrtr: tf.Tensor = rrtr
+        # pytorch function defs
+        def layerdef(x): return x
+        def mainFunc(x): return x
+        def prefunc(x): return x
+        emptyState = torch.zeros(12*4, 768
+                                 [4*len(mlayers), len(mlayers[0]["time_decay"])], dtype=torch.float32)+0.01
 
-        self.time_first: tf.Tensor = time_first
-        self.time_decay: tf.Tensor = time_decay
+    def layernorm(x, w, b):
+        xee2 = x - mean(x)
 
-        self.outputvv: tf.Tensor = outputvv
+        x2 = sqrt(mean(xee2*xee2) + 0.000009999999747378752)
 
+        return w*(xee2/x2) + b
 
-class RWKV(tf.Module):
-    def __init__(self: tf.Tensor, preprocess, postprocess, layers):
-        super(RWKV, self).__init__()
-        self.preprocess = preprocess
+    class RWKVTFLayer(module):
+        def __init__(self, dic):
+            self.key = initTensor(dic["key"])
+            self.receptance = initTensor(dic["receptance"])
+            self.value = initTensor(dic["value"])
 
-        self.mylayers: list[RWKVTFLayer] = layers
+            self.ln1w = initTensor(dic["ln1w"])
+            self.ln1b = initTensor(dic["ln1b"])
 
-        self.postprocess0 = postprocess[0]
-        self.postprocess1 = postprocess[1]
-        self.postprocess2 = postprocess[2]
+            self.ln2w = initTensor(dic["ln2w"])
+            self.ln2b = initTensor(dic["ln2b"])
 
-    def layernorm(self, x, w, b):
-        xee2 = x - tf.reduce_mean(x)
+            self.time_mix_k_ffn = initTensor(dic["time_mix_k_ffn"])
+            self.time_mix_r_ffn = initTensor(dic["time_mix_r_ffn"])
 
-        x2 = tf.sqrt(tf.reduce_mean(tf.square(xee2)) + 0.000009999999747378752)
+            self.key_ffn = initTensor(dic["key_ffn"])
+            self.receptance_ffn = initTensor(dic["receptance_ffn"])
+            self.value_ffn = initTensor(dic["value_ffn"])
 
-        return tf.add(tf.multiply(tf.divide(xee2,
-                                            x2), w), b)
+            self.kktk = initTensor(dic["kktk"])
+            self.vvtv = initTensor(dic["vvtv"])
+            self.rrtr = initTensor(dic["rrtr"])
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(shape=[None, None], dtype=tf.float32)])
-    def forward(self, x, state):
+            self.time_first = initTensor(dic["time_first"])
+            self.time_decay = initTensor(dic["time_decay"])
 
-        x = self.preprocess[x[0]]
+            self.outputvv = initTensor(dic["outputvv"])
 
-        statea = state[0::4]
-        stateb = state[1::4]
-        statec = state[2::4]
-        stated = state[3::4]
+        @layerdef
+        def forward(self, x, statea, stateb, statec, stated):
+            xy = layernorm(x, self.ln1w, self.ln1b)
 
-        ot = []
+            k = exp(matvec(self.key, (xy+self.kktk*statea)))
 
-        for i, ilayer in enumerate(self.mylayers):
-            ln1wa = ilayer.ln1w
-            ln1ba = ilayer.ln1b
+            v = matvec(self.value, (xy+self.vvtv*statea))
 
-            ln2wa = ilayer.ln2w
-            ln2ba = ilayer.ln2b
-            atd = ilayer.key
-            rtd = ilayer.receptance
-            vtd = ilayer.value
+            r = exp(matvec(
+                self.receptance, (xy+self.rrtr*statea))) + 1
 
-            tmk = ilayer.time_mix_k_ffn * stated[i]
-            tmr = ilayer.time_mix_r_ffn * stated[i]
+            w = stateb + exp(self.time_first)*k*v
+            d = statec*r+exp(self.time_first)*k*r
 
-            tmkw = ilayer.key_ffn
-            tmrw = ilayer.receptance_ffn
-            tmvw = ilayer.value_ffn
-
-            kktk = ilayer.kktk
-            vvtv = ilayer.vvtv
-            rrtr = ilayer.rrtr
-
-            time_first = ilayer.time_first
-            time_decay = ilayer.time_decay
-
-            outputvv = ilayer.outputvv
-
-            # print("x", x.shape, "states", statea[i].shape, stateb[i].shape, statec[i].shape, stated[i].shape, "stuff", ln1wa.shape, ln1ba.shape, ln2wa.shape, ln2ba.shape, atd.shape, rtd.shape,
-            #       vtd.shape, tmk.shape, tmr.shape, "tmkw", tmkw.shape, tmrw.shape, tmvw.shape, kktk.shape, vvtv.shape, rrtr.shape, time_first.shape, time_decay.shape, outputvv.shape)
-
-            xy = self.layernorm(x, ln1wa, ln1ba)
-
-            # print(statea[i].squeeze().shape)
-            # print(xy.squeeze().shape)
-            # print(kktk[i].squeeze().shape)
-            # print(atd.shape)
-
-            k = tf.exp(tf.linalg.matvec(atd, (xy+kktk*statea[i])))
-
-            v = tf.linalg.matvec(vtd, (xy+vvtv*statea[i]))
-
-            r = tf.exp(tf.linalg.matvec(rtd, (xy+rrtr*statea[i]))) + 1
-
-            w = stateb[i] + tf.exp(time_first)*k*v
-            d = statec[i]*r+tf.exp(time_first)*k*r
-
-            mvv = tf.linalg.matvec(outputvv, w/(d+0.001))
+            mvv = matvec(self.outputvv, w/(d+0.001))
             sxx = x + mvv
 
             aaa = xy
 
-            bbb = stateb[i] * tf.exp(time_decay) + k * v  # ne33nd
-            ccc = statec[i] * tf.exp(time_decay) + k
+            bbb = stateb * exp(self.time_decay) + k * v  # ne33nd
+            ccc = statec * exp(self.time_decay) + k
 
             # return output, outstateA, outstateB, outstateC
 
-            xx = self.layernorm(sxx, ln2wa, ln2ba)
+            xx = layernorm(sxx, self.ln2w, self.ln2b)
 
-            # xx = torch.layer_norm(sxx, (self.sshape,),
-            #                       weight=ln2wa, bias=ln2ba)
+            kma = matvec(self.key_ffn, (xx +
+                                        self.time_mix_k_ffn * stated))
+            km = relu(kma)
 
-            kma = tf.linalg.matvec(tmkw, (xx +
-                                          tmk))
-            # kma[kma <= 0] = 0
-            km = tf.square(tf.maximum(kma, tf.zeros_like(kma)))
+            rt = exp(matvec(self.receptance_ffn,
+                            (xx + self.time_mix_r_ffn * stated))) + 1
 
-            rt = tf.exp(tf.linalg.matvec(tmrw, (xx + tmr))) + 1
-
-            x = sxx + tf.linalg.matvec(tmvw, km)/rt
+            x = sxx + matvec(self.value_ffn, km*km)/rt
 
             ddd = xx
 
             # print(aaa.shape, bbb.shape, ccc.shape, ddd.shape)
 
-            ot = ot + [aaa, bbb, ccc, ddd]
+            return x, aaa, bbb, ccc, ddd
 
-        x = tf.linalg.matvec(self.postprocess2, self.layernorm(x, self.postprocess0,
-                                                               self.postprocess1))
+    class RWKVTFPre(module):
+        def __init__(self, preprocess):
+            self.preprocess = initTensor(preprocess)
 
-        return x, tf.stack(ot, 0)
+        @prefunc
+        def forward(self, x):
+            return self.preprocess[x[0]]
+
+    class RWKVTFPost(module):
+        def __init__(self, postprocess):
+            self.postprocess0 = initTensor(postprocess[0])
+            self.postprocess1 = initTensor(postprocess[1])
+            self.postprocess2 = initTensor(postprocess[2])
+
+        def forward(self, x):
+            return matvec(self.postprocess2, layernorm(x, self.postprocess0,
+                                                       self.postprocess1))
+
+    class myRWKV(module):
+
+        def __init__(self, preprocess, postprocess, layers):
+            super(myRWKV, self).__init__()
+            self.preprocess = RWKVTFPre(preprocess)
+
+            self.mylayers: list[RWKVTFLayer] = list(map(
+                RWKVTFLayer, layers))
+
+            self.postprocess = RWKVTFPost(postprocess)
+
+        @mainFunc
+        def forward(self, x, state):
+
+            x = self.preprocess.forward(x)
+
+            statea = state[0::4]
+            stateb = state[1::4]
+            statec = state[2::4]
+            stated = state[3::4]
+
+            ot = []
+
+            # print("start", len(self.mylayers))
+
+            for i, l in enumerate(self.mylayers):
+                x, aaa, bbb, ccc, ddd = l.forward(
+                    x, statea[i], stateb[i], statec[i], stated[i])
+                ot = ot + [aaa, bbb, ccc, ddd]
+
+            x = self.postprocess.forward(x)
+            # print(len(ot))
+            return x, stack(ot, 0)
+
+    return myRWKV(mpreprocess, mpostprocess, mlayers), emptyState
