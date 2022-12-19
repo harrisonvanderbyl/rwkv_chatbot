@@ -74,14 +74,17 @@ class interOp:
         if (options != "full"):
             self.model.allocate_tensors()
 
-            for i, inp in enumerate(x[::-1]):
+            for i, inp in enumerate(x):
+                # print(inp.shape)
+                # print(self.model.get_input_details()[i])
+
                 self.model.set_tensor(
                     self.model.get_input_details()[i]["index"], inp)
 
             self.model.invoke()
             outs = self.model.get_output_details()
 
-            return [self.model.get_tensor(out["index"]) for out in outs][::-1]
+            return [self.model.get_tensor(out["index"]) for out in outs]
         else:
             rx: tf.Module = self.model
 
@@ -206,7 +209,7 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
 tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
 
 
-def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
