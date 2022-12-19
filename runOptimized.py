@@ -138,10 +138,11 @@ origistate = (tokens[0], tokens[1])
 
 
 def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    probs = softmax(ozut, axis=-1)
+    probs = softmax(ozut.cpu(), axis=-1)
 
     sorted_probs = np.sort(probs)[::-1]
     cumulative_probs = np.cumsum(sorted_probs)
