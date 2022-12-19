@@ -104,7 +104,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
                                                            self.postprocess1))
 
     class myRWKV(ops.module):
-
+        @ops.initfunc
         def __init__(self, preprocess, postprocess, layers):
             super(myRWKV, self).__init__()
             self.preprocess = RWKVTFPre(preprocess)
@@ -114,7 +114,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
             self.postprocess = RWKVTFPost(postprocess)
 
-        @ops.mainFunc
+        @ops.mainfunc
         def forward(self, x, state):
 
             x = self.preprocess.forward(x)
@@ -128,7 +128,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
             # print("start", len(self.mylayers))
 
-            for i, l in enumerate(self.mylayers):
+            for i, l in list(enumerate(self.mylayers)):
                 x, aaa, bbb, ccc, ddd = l.forward(
                     x, statea[i], stateb[i], statec[i], stated[i])
                 ot = ot + [aaa, bbb, ccc, ddd]
