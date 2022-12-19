@@ -5,23 +5,8 @@ import src.rwkvops
 
 def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
-    if mode == "tensorflow":
-        ops = src.rwkvops.RWKVTFOps(
-            len(mlayers), len(mlayers[0]["time_first"]))
-
-    elif mode == "pytorch":
-        ops = src.rwkvops.RWKVPTOps(
-            len(mlayers), len(mlayers[0]["time_first"]))
-
-    elif mode == "pytorchcompat":
-        ops = src.rwkvops.RWKVPTCompatOps(
-            len(mlayers), len(mlayers[0]["time_first"]))
-
-    elif mode == "pytorchcuda":
-        ops = src.rwkvops.RWKVCudaOps(
-            len(mlayers), len(mlayers[0]["time_first"]))
-    else:
-        raise Exception("Invalid mode")
+    ops = src.rwkvops.RwkvOpList[mode](
+        len(mlayers), len(mlayers[0]["time_first"]))
 
     def layernorm(x, w, b):
         xee2 = x - ops.mean(x)
@@ -113,6 +98,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             self.postprocess1 = ops.initTensor(postprocess[1])
             self.postprocess2 = ops.initTensor(postprocess[2])
 
+        @ops.postfunc
         def forward(self, x):
             return ops.matvec(self.postprocess2, layernorm(x, self.postprocess0,
                                                            self.postprocess1))

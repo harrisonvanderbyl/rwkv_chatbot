@@ -10,6 +10,7 @@ import time
 import gc
 import torch
 from src.utils import TOKENIZER
+from src.rwkvops import RwkvOpList
 import inquirer
 from scipy.special import softmax
 from torch.nn import functional as F
@@ -26,9 +27,26 @@ fg.orange = Style(RgbFg(255, 150, 50))
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-mode = input("Use pytorch/tensorflow?")
+
+files = os.listdir()
+# filter by ending in .pth
+files = [f for f in files if f.endswith(".pth")]
+
+questions = [
+    inquirer.List('file',
+                  message="What model do you want to use?",
+                  choices=files,
+                  ),
+    inquirer.List(
+        'method',
+        message="What inference method?",
+        choices=RwkvOpList.keys()
+    )
+]
+q = inquirer.prompt(questions)
+
 model, emptyState = mro.createRWKVModel(
-    "./RWKV-3-Pile-20220720-10704.pth", mode=mode)
+    q["file"], mode=q["method"])
 
 ###### A good prompt for chatbot ######
 context = '''
