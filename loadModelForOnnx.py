@@ -6,7 +6,7 @@ from functools import reduce
 from genericpath import exists
 from typing import List
 from src.model_run import isIn, sample
-from src.model_run_onnx import createRWKVModules, empty_state
+
 import numpy as np
 import math
 from torch.nn import functional as F
