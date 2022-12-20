@@ -70,26 +70,17 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             sxx = x + mvv
 
             aaa = xy
-
             bbb = stateb * td + k * v
             ccc = statec * td + k
+            ddd = layernorm(sxx, self.ln2w, self.ln2b)
 
-            # return output, outstateA, outstateB, outstateC
-
-            xx = layernorm(sxx, self.ln2w, self.ln2b)
-
-            kma = ops.matvec(self.key_ffn, (xx +
-                                            self.time_mix_k_ffn * stated))
-            km = ops.relu(kma)
+            km = ops.relu(ops.matvec(self.key_ffn, (ddd +
+                                                    self.time_mix_k_ffn * stated)))
 
             rt = ops.exp(ops.matvec(self.receptance_ffn,
-                                    (xx + self.time_mix_r_ffn * stated))) + 1
+                                    (ddd + self.time_mix_r_ffn * stated))) + 1
 
             x = sxx + ops.matvec(self.value_ffn, km*km)/rt
-
-            ddd = xx
-
-            # print(aaa.shape, bbb.shape, ccc.shape, ddd.shape)
 
             return x, aaa, bbb, ccc, ddd
 
