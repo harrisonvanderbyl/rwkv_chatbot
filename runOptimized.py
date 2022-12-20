@@ -10,9 +10,12 @@ import time
 import gc
 import torch
 from src.utils import TOKENIZER
+from src.rwkvops import RwkvOpList
 import inquirer
+from scipy.special import softmax
 from torch.nn import functional as F
 from torch.profiler import profile, record_function, ProfilerActivity
+import src.model_run_onnx as mro
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
@@ -24,7 +27,26 @@ fg.orange = Style(RgbFg(255, 150, 50))
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-pre, layers, post, emptyState = loadModelForOnnx.loadModel()
+
+files = os.listdir()
+# filter by ending in .pth
+files = [f for f in files if f.endswith(".pth")]
+
+questions = [
+    inquirer.List('file',
+                  message="What model do you want to use?",
+                  choices=files,
+                  ),
+    inquirer.List(
+        'method',
+        message="What inference method?",
+        choices=RwkvOpList.keys()
+    )
+]
+q = inquirer.prompt(questions)
+
+model, emptyState = mro.createRWKVModel(
+    q["file"], mode=q["method"])
 
 ###### A good prompt for chatbot ######
 context = '''
@@ -112,42 +134,43 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(self, ctx: list[int], statex, newctx: list[int]):
-
+def loadContext(ctx: list[int], statex, newctx: list[int]):
+    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
     with torch.jit.optimized_execution(True):
         for i in tqdm.tqdm(range(len(newctx))):
 
             x = ctx+newctx[:i+1]
-            o = pre.forward(torch.LongTensor([x[-1]]), statex)
 
-            for s in self:
-                o = s.forward(*o)
+            o = model.forward([x[-1]], statex)
             statex = o[1]
+            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     return ctx+newctx, o[1]
 
 
-tokens = loadContext(layers, ctx=[], newctx=ctx1, statex=emptyState)
+tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
 
 origistate = (tokens[0], tokens[1])
 
 
-def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    out = ozut
-    probs = F.softmax(out, dim=-1)
+    probs = softmax(ozut.cpu(), axis=-1)
 
-    sorted_probs = torch.sort(probs, descending=True)[0]
-    cumulative_probs = torch.cumsum(
-        sorted_probs.float(), dim=-1).cpu().numpy()
-    cutoff = float(sorted_probs[np.argmax(
-        cumulative_probs > top_p_usual)])
+    sorted_probs = np.sort(probs)[::-1]
+    cumulative_probs = np.cumsum(sorted_probs)
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
+    probs = probs / np.sum(probs)
+    out = np.random.choice(a=len(probs), p=probs)
 
-    out: int = torch.multinomial(probs.float(), 1, True)[0]
     return out
 
 
@@ -167,12 +190,8 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
             chars: List[int] = tokens[0]
             state = tokens[1]
-            x = pre.forward(torch.LongTensor([chars[-1]]), state)
+            xout = model.forward([chars[-1]], state)
 
-            for l in layers:
-                x = l.forward(*x)
-
-            xout = post.forward(*x)
             chars += [sample_logits(
                 xout[0], temp=TEMPERATURE, top_p_usual=top_p)]
 

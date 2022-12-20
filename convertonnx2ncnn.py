@@ -35,9 +35,9 @@ elif floatmode == "torch.bfloat16":
     floatmode = torch.bfloat16
 
 emptyState = torch.load(loadFile+"/emptyState.pt")
-outpath = f"tf/rwkv-{int(layers)}-{embed}-{floatmode}"
+outpath = f"ncnn/rwkv-{int(layers)}-{embed}-{floatmode}"
 try:
-    os.mkdir("tf")
+    os.mkdir("ncnn")
 except:
     pass
 
@@ -53,19 +53,24 @@ except:
 
 
 # pre = onnx.load(f"{loadFile}/preprocess.onnx")  # load onnx model
-# tf_pre = prepare(pre)  # prepare tf representation
+# ncnn_pre = prepare(pre)  # prepare tf representation
 # # export the model
 # tf_pre.export_graph(
 #     f"{outpath}/pre.pb")
-convert(f"{loadFile}/preprocess.onnx",
-        output_folder_path=f"{outpath}/pre", output_signaturedefs=True, not_use_onnxsim=True)
+# os.system(
+#     f"./onnx2ncnn {loadFile}/preprocess.onnx {outpath}/pre.param {outpath}/pre.bin")
+# convert(f"{loadFile}/preprocess.onnx",
+#         output_folder_path=f"{outpath}/pre", output_signaturedefs=True, not_use_onnxsim=True)
 
 # post = onnx.load(f"{loadFile}/postprocess.onnx")  # load onnx model
 # tf_post = prepare(post)  # prepare tf representation
 # tf_post.export_graph(f"{outpath}/pre.pb")  # export the model
 
-convert(f"{loadFile}/postprocess.onnx",
-        output_folder_path=f"{outpath}/post", output_signaturedefs=True, not_use_onnxsim=True)
+# convert(f"{loadFile}/postprocess.onnx",
+#         output_folder_path=f"{outpath}/post", output_signaturedefs=True, not_use_onnxsim=True)
+
+os.system(
+    f"./onnx2ncnn {loadFile}/postprocess.onnx {outpath}/post.param {outpath}/post.bin")
 
 layers = os.listdir(loadFile)
 layers = filter(lambda x: "layer" in x, layers)
@@ -76,8 +81,10 @@ print(layers)
 
 def saveLayer(i, layer):
     print(f"Saving layer {i} {layer}")
-    layer = convert(f"{loadFile}/{layer}",
-                    output_folder_path=f"{outpath}/layer-{str(i)}", output_signaturedefs=True, not_use_onnxsim=True)
+    os.system(
+        f"./onnx2ncnn {loadFile}/{layer} {outpath}/layer-{str(i)}.param {outpath}/layer-{str(i)}.bin")
+    # layer = convert(f"{loadFile}/{layer}",
+    #                 output_folder_path=f"{outpath}/layer-{str(i)}", output_signaturedefs=True, not_use_onnxsim=True)
     # tf_layer = prepare(layer)  # prepare tf representation
     # tf_layer.export_graph(f"{outpath}/layer-{str(i)}.pb")  # export the model
 

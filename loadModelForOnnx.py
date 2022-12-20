@@ -6,7 +6,7 @@ from functools import reduce
 from genericpath import exists
 from typing import List
 from src.model_run import isIn, sample
-from src.model_run_onnx import createRWKVModules, empty_state
+
 import numpy as np
 import math
 from torch.nn import functional as F
@@ -25,7 +25,7 @@ except:
 import inquirer
 
 
-def loadModel(trace=True):
+def loadModel(trace=False, compat=False):
     files = os.listdir()
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
@@ -63,7 +63,7 @@ def loadModel(trace=True):
     args["FLOAT_MODE"] = inquirer.prompt([inquirer.List('RUN_DEVICE',
                                                         message="What device do you want to use?",
                                                         choices=[
-                                                            "fp16", "bf16", "fp32"],
+                                                            "fp16", "bf16", "fp32", "fp64"],
                                                         )])["RUN_DEVICE"]
 
     args["CHUNK_SIZE"] = inquirer.text(
@@ -116,9 +116,11 @@ def loadModel(trace=True):
         intmode = torch.int64
 
     pre, layers, post, n_layer = createRWKVModules(
-        FloatMode=torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode)
+        FloatMode=torch.float64 if args["FLOAT_MODE"]
+        == "fp64" else torch.float32 if args["FLOAT_MODE"] == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, Path=args["MODEL_NAME"], RunDevice=args["RUN_DEVICE"], chunkSize=args["CHUNK_SIZE"], inttype=intmode, compat=compat)
 
-    emptyState = empty_state(pre.preProcess[1].shape[0], n_layer, torch.float32 if args["FLOAT_MODE"]
+    emptyState = empty_state(pre.preProcess[1].shape[0], n_layer,  torch.float64 if args["FLOAT_MODE"]
+                             == "fp64" else torch.float32 if args["FLOAT_MODE"]
                              == "fp32" else torch.float16 if args["FLOAT_MODE"] == "fp16" else torch.bfloat16, args["RUN_DEVICE"])
 
     # if (opt == "script"):
@@ -134,19 +136,28 @@ def loadModel(trace=True):
 
     # layers = list(map(torch.jit.optimize_for_inference, map(
     #     lambda x: torch.jit.script(x), layers)))
-    if (trace and "cpu" in args["RUN_DEVICE"][0]):
+    if (trace and args["RUN_DEVICE"][0] != "stream"):
         pret: torch.ScriptModule = torch.jit.trace(pre, example_inputs=(
-            torch.Tensor([187]).to(dtype=torch.int32, device=args["RUN_DEVICE"][0]), emptyState))
+            torch.Tensor([187]).to(dtype=torch.int32, device=args["RUN_DEVICE"][0]), emptyState), check_trace=False)
 
         layerst: list[torch.ScriptModule] = list(map(lambda x: torch.jit.trace(
-            x, example_inputs=pre.forward(torch.LongTensor([187]), emptyState)), layers))
+            x, example_inputs=pre.forward(torch.LongTensor([187]), emptyState), check_trace=False), layers))
 
         postt: torch.ScriptModule = torch.jit.trace(
-            post, example_inputs=pre.forward(torch.LongTensor([187]), emptyState))
+            post, example_inputs=pre.forward(torch.LongTensor([187]), emptyState), check_trace=False)
 
         return pret, layerst, postt, emptyState
     else:
+        # layers = list(map(lambda x: torch.compile(x), layers))
+        # pre = torch.compile(pre)
+        # post = torch.compile(post)
         return pre, layers, post, emptyState
+
+
+class PartialRwkv():
+    def __init__(self, layers, emptyState):
+        self.layers = layers
+        self.emptyState = emptyState
 
 
 class Compat():
@@ -156,16 +167,24 @@ class Compat():
         self.post = post
         self.emptyState = emptyState
 
-    def loadContext(self, ctx: list[int], newctx: list[int], statex):
+    def loadContext(self, ctx: list[int] = [], newctx: list[int] = [], statex=None, silent=False):
+        if (statex == None):
+            statex = self.emptyState
+        # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+        #     with record_function("model_inference"):
+        with torch.jit.optimized_execution(True):
+            for i in tqdm(range(len(newctx))) if not silent else range(len(newctx)):
 
-        for i in tqdm(range(len(newctx))):
+                x = ctx+newctx[:i+1]
+                o = self.pre.forward(torch.LongTensor([x[-1]]), statex)
 
-            x = ctx+newctx[:i+1]
-            o = self.pre.preProcess[x[-1]]
-            for s in self.layers:
-                o, statex = s.forward(o, statex)
-
-        return ctx+newctx, statex
+                for s in self.layers:
+                    o = s.forward(*o)
+                statex = o[1]
+                # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+        #     with record_function("model_inference"):
+        # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        return ctx+newctx, o[1]
 
     def sample_logits(self, ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
         out = ozut
@@ -175,29 +194,30 @@ class Compat():
 
         return sample(probs, temperature=temp, top_p_usual=top_p_usual)
 
-    def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, endChars=[[187, 187], [535]]):
-        options = []
+    def run(self, currstate: list({"score": float, "ctx": list, "state": torch.Tensor}), temp: float = 1.5, top_p: float = 0.9, nla: float = 0, charnums=100, endChars=[[187, 187], [535]]):
 
-        ctx = currstate[0]
-        # if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
-        #     return options
+        for i in range(charnums):
+            chars = currstate[0]["ctx"]
+            # if any(list(map(lambda x: x == ctx[-len(x):], endChars))):
+            #     return options
 
-        state = currstate[1]
+            state = currstate[0]["state"]
 
-        out1 = self.pre.preProcess[ctx[-1]]
-        for l in self.layers:
-            out1, state = l.forward(out1, state)
+            x = self.pre.forward(torch.LongTensor([chars[-1]]), state)
 
-        ttt = self.sample_logits(
-            out1,
-            temp=0.8,
-            top_p_usual=0.9,
-        )
-        print(ttt[0])
+            for l in self.layers:
+                x = l.forward(*x)
 
-        options = (ctx+[ttt[0]], state)
+            xout = self.post.forward(*x)
+            chars += [self.sample_logits(
+                xout[0], temp=0.9, top_p_usual=0.8)]
 
-        return options
+            currstate = [{"ctx": chars, "state": xout[1], "score": 1.0}]
+            for e in endChars:
+                if chars[-len(e)] == e:
+                    return currstate
+
+        return currstate
 
     def empty_state(self):
         return self.emptyState

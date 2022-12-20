@@ -7,8 +7,9 @@ import gc
 from src.utils import TOKENIZER
 import inquirer
 import torch
+import ncnn
 from torch.nn import functional as F
-from scipy.special import softmax
+
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
@@ -20,7 +21,7 @@ import tqdm
 so = ort.SessionOptions()
 so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 so.log_severity_level = 3
-files = os.listdir("onnx")
+files = os.listdir("ncnn")
 
 
 questions = [
@@ -29,7 +30,7 @@ questions = [
                   choices=files,
                   ),
 ]
-loadFile = "onnx/"+inquirer.prompt(questions)["file"]
+loadFile = "ncnn/"+inquirer.prompt(questions)["file"]
 
 
 embed = int(loadFile.split("-")[2])
@@ -43,45 +44,24 @@ elif floatmode == "torch.float32":
 elif floatmode == "np.bfloat16":
     floatmode = np.bfloat16
 
-# emptyState = torch.load(loadFile+"/emptyState.pt")
-emptyState = 4*layers*[embed*[0.01]]
+#emptyState = torch.load(loadFile+"/emptyState.pt")
+emptyState = (4)*[layers*[embed*[0.01]]]
 so = ort.SessionOptions()
-so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-so.log_severity_level = 3
-providers = [
-    ('CUDAExecutionProvider', {
-        'device_id': 0,
-        'arena_extend_strategy': 'kNextPowerOfTwo',
-        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
-        'cudnn_conv_algo_search': 'EXHAUSTIVE',
-        'do_copy_in_default_stream': True,
-    }),
-    'CPUExecutionProvider',
-]
-
-providers2 = [providers]*3 + 10*[[
-    ('CUDAExecutionProvider', {
-        'device_id': 1,
-        'arena_extend_strategy': 'kNextPowerOfTwo',
-        'gpu_mem_limit': 2 * 1024 * 1024 * 1024,
-        'cudnn_conv_algo_search': 'EXHAUSTIVE',
-        'do_copy_in_default_stream': True,
-    }),
-    'CPUExecutionProvider',
-]]
 
 
-pre = ort.InferenceSession(
-    f"{loadFile}/pre.onnx", providers=providers, sess_options=so)
-post = ort.InferenceSession(
-    f"{loadFile}/post.onnx", providers=providers, sess_options=so)
+pre = torch.load(loadFile+"/pre.pt")
+post = ncnn.Net()
+post.load_param(f"{loadFile}/post.param")
+post.load_model(f"{loadFile}/post.bin")
 layers = os.listdir(loadFile)
-layers = filter(lambda x: x[0:2].isdigit(), layers)
+layers = filter(lambda x: "layer" in x and ".bin" in x, layers)
 layers = list(layers)
 layers.sort()
 print(layers)
-layers = list(map(lambda x: ort.InferenceSession(
-    f"{loadFile}/{x[1]}", providers=providers2[x[0]], sess_options=so), enumerate(layers)))
+layers = list(map(lambda x: ncnn.Net(), enumerate(layers)))
+for i, layer in enumerate(layers):
+    layer.load_param(f"{loadFile}/layer{i}.param")
+    layer.load_model(f"{loadFile}/layer{i}.bin")
 ###### A good prompt for chatbot ######
 context = '''
 The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
@@ -160,46 +140,52 @@ init_out = []
 out = []
 
 
-def createInput(inputNames, values):
-    inputs = {}
-    for i, name in enumerate(inputNames):
-        inputs[name.name] = values[i]
-    return inputs
+# def createInput(inputNames, values):
+#     inputs = {}
+#     for i, name in enumerate(inputNames):
+#         inputs[name.name] = values[i]
+#     return inputs
 
 
 def loadContext(ctx: list[int], state, newctx: list[int]):
 
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o, = pre.run(None, createInput(
-            pre.get_inputs(), [[x[-1]]]))
+        o = pre[x[-1]]
+        in_mat = ncnn.Mat(w=227, h=227, c=3)
+        out_mat = ncnn.Mat()
 
-        for ii, l in enumerate(layers):
+        for l in layers:
 
-            o, *state[ii*4:ii*4+4] = l.run(None,
-                                           createInput(l.get_inputs(), [o, *state[ii*4:ii*4+4]]))
+            ex = l.create_extractor()
+            ex.input("data", in_mat)
+            ex.extract("output", out_mat)
+            o = l
 
+        state = o[1]
     return ctx+newctx, state
 
 
 tokens = loadContext(ctx=[], newctx=ctx1, state=emptyState)
 
 
-def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
-    probs = softmax(ozut, axis=-1)
+    out = ozut
+    probs = F.softmax(out, dim=-1)
 
-    sorted_probs = np.sort(probs)[::-1]
-    cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+    sorted_probs = torch.sort(probs, descending=True)[0]
+    cumulative_probs = torch.cumsum(
+        sorted_probs.float(), dim=-1).cpu().numpy()
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
-    probs = probs / np.sum(probs)
-    out = np.random.choice(a=len(probs), p=probs)
 
+    out: int = torch.multinomial(probs.float(), 1, True)[0]
     return out
 
 
@@ -218,24 +204,23 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             chars: List[int] = tokens[0]
 
             statex = tokens[1]
-            o, = pre.run(None, createInput(
-                pre.get_inputs(), [[chars[-1]]]))
+            # o = pre.run(None, createInput(
+            #     pre.get_inputs(), [[chars[-1]], statex]))
 
-            for ii, l in enumerate(layers):
-                o, *statex[ii*4: ii*4+4] = l.run(None,
-                                                 createInput(l.get_inputs(), [o, *statex[ii*4:ii*4+4]]))
+            # for l in layers:
+            #     o = l.run(None,
+            #               createInput(l.get_inputs(), o))
 
-            myout = post.run(None, createInput(
-                post.get_inputs(), [o])), statex
+            # myout = post.run(None, createInput(post.get_inputs(), o))
 
-            chars += [sample_logits(
-                torch.tensor(myout[0][0]))]
-            char = tokenizer.tokenizer.decode(chars[-1])
+            # chars += [sample_logits(
+            #     torch.tensor(myout[0]))]
+            # char = tokenizer.tokenizer.decode(chars[-1])
 
-            tokens = (chars, myout[1])
+            # tokens = (chars, myout[1])
 
-            if '\ufffd' not in char:
-                print(char, end="", flush=True)
+            # if '\ufffd' not in char:
+            #     print(char, end="", flush=True)
 
     record_time('total')
     # print(f'\n\n{time_slot}\n\n')

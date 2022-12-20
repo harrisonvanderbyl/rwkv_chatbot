@@ -15,8 +15,10 @@ import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
 import tensorflow as tf
+print(tf.test.is_built_with_rocm())
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
-files = os.listdir("tf")
+files = os.listdir("tensorflow-models")
 
 
 questions = [
@@ -25,21 +27,21 @@ questions = [
                   choices=files,
                   ),
 ]
-loadFile = "tf/"+inquirer.prompt(questions)["file"]
+loadFile = "tensorflow-models/"+inquirer.prompt(questions)["file"]
 
 
-embed = int(loadFile.split("-")[2])
-layers = int(loadFile.split("-")[1])
-floatmode = (loadFile.split("-")[3])
-mm = (layers*5)*[embed*[0]]
+# embed = int(loadFile.split("-")[3])
+# layers = int(loadFile.split("-")[2])
+# floatmode = (loadFile.split("-")[4])
+# mm = (layers*4)*[embed*[0.01]]
 
 
-if floatmode == "torch.float16":
-    floatmode = torch.float16
-elif floatmode == "torch.float32":
-    floatmode = torch.float32
-elif floatmode == "torch.bfloat16":
-    floatmode = torch.bfloat16
+# if floatmode == "torch.float16":
+#     floatmode = torch.float16
+# elif floatmode == "torch.float32":
+#     floatmode = torch.float32
+# elif floatmode == "torch.bfloat16":
+#     floatmode = torch.bfloat16
 
 # emptyState = torch.load(loadFile+"/emptyState.pt")
 
@@ -56,56 +58,50 @@ options = inquirer.prompt([
 
 
 class interOp:
-    def __init__(self, sig) -> None:
-        self.sig = sig
+    def __init__(self) -> None:
         # print(tf.lite.experimental.load_delegate("delegate.so"))
         if (options == "litefp32"):
             self.model = tf.lite.Interpreter(
-                model_path=loadFile+f"/{sig}/model_float32.tflite")
+                model_path=loadFile+f"/lite32.tflite")
         elif (options == "litefp16"):
             self.model = tf.lite.Interpreter(
-                model_path=loadFile+f"/{sig}/model_float16.tflite")
+                model_path=loadFile+f"/lite16.tflite")
         elif (options == "full"):
             self.model = tf.saved_model.load(
-                loadFile+f"/{sig}")
+                loadFile)
 
     def run(self, *x):
         if (options != "full"):
             self.model.allocate_tensors()
 
             for i, inp in enumerate(x):
+                # print(inp.shape)
+                # print(self.model.get_input_details()[i])
+
                 self.model.set_tensor(
                     self.model.get_input_details()[i]["index"], inp)
 
             self.model.invoke()
-            outs = self.model.get_output_details()[::-1]
+            outs = self.model.get_output_details()
 
             return [self.model.get_tensor(out["index"]) for out in outs]
         else:
             rx: tf.Module = self.model
 
-            out = rx([*x])[::-1]
+            out = rx.forward(*x)
 
             return out
 
 
 # my_signature is callable with input as arguments.
-pre = interOp("pre")
-post = interOp("post")
-
-layernames = os.listdir(loadFile)
-layernames = [l for l in layernames if l.startswith("layer")]
-layernames.sort()
-layers = []
-for l in layernames:
-    layers += [interOp(l)]
+model = interOp()
 
 
 # prea = pre.run(tf.Variable([192], dtype=tf.int32))
 # print(prea[0])
 
 
-emptyState = tf.Variable(mm, dtype=tf.float32)
+emptyState = tf.zeros([12*4, 768], dtype=tf.float32)+0.01
 
 
 # layers = os.listdir(loadFile)
@@ -202,23 +198,18 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 
 def loadContext(ctx: list[int], statex, newctx: list[int]):
-    statex = statex.numpy()
+
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        dx = pre.run(tf.Variable([x[-1]], tf.int32), statex)
+        dx, statex = model.run((tf.zeros([1], tf.int32)+x[-1]), statex)
 
-        for l in layers:
-            dx = l.run(*dx)
-        # print(o[0][0] - statex[0][0])
-        # print(statex[2][5] - lmx)
-        statex = dx[1]
     return ctx+newctx, statex
 
 
 tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
 
 
-def sample_logits(ozut: torch.Tensor, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
@@ -252,11 +243,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
             state = tokens[1]
 
-            x = pre.run(tf.Variable([chars[-1]], dtype=tf.int32), state)
-
-            for l in layers:
-                x = l.run(*x)
-            myout = post.run(*x)
+            myout = model.run((tf.zeros([1], tf.int32)+chars[-1]), state)
 
             chars += [sample_logits(
                 myout[0], temp=TEMPERATURE, top_p_usual=top_p)]

@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import loadModel
+import loadModelForOnnx
 import os
 import sys
 import time
@@ -59,7 +59,7 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-model = loadModel.loadModel()
+model = loadModelForOnnx.loadModelCompat()
 
 
 print(f'\nOptimizing speed...')
@@ -115,10 +115,10 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 model_tokens = tokenizer.tokenizer.encode(context)
 print(tokenizer.tokenizer.encode("\n\n"))
 #  see if save_state file exists
-if os.path.isfile(f"save_states_{model.n_emb}_{model.n_layer}.pt"):
+if os.path.isfile(f"save_state.pt"):
     print("Loading save state...")
     savestates = torch.load(
-        f"save_states_{model.n_emb}_{model.n_layer}.pt", map_location=torch.device('cpu'))
+        f"save_state.pt", map_location=torch.device(model.emptyState.device))
     state = savestates["init"]
 
 else:
@@ -126,7 +126,7 @@ else:
     savestates = {
         "init": (state[0], state[1].clone())
     }
-    torch.save(savestates, f"save_states_{model.n_emb}_{model.n_layer}.pt")
+    torch.save(savestates, f"save_state.pt")
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
@@ -135,13 +135,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     if (inp.startswith("save ")):
         savestates[inp[5:]] = (state[0], state[1].clone())
         # Save to file
-        torch.save(savestates, f"save_states_{model.n_emb}_{model.n_layer}.pt")
+        torch.save(savestates, f"save_state.pt")
         print("Saved to file.")
         continue
     if (inp.startswith("load ")):
 
         savestates = torch.load(
-            f"save_states_{model.n_emb}_{model.n_layer}.pt")
+            f"save_state.pt")
         state = (savestates[inp[5:]][0], savestates[inp[5:]][1].clone())
 
         continue
