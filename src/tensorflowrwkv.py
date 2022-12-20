@@ -21,7 +21,35 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
             self.__dict__ = {k: ops.initTensor(v) for k, v in dic.items()}
 
-        @ops.layerdef
+            # for k, v in dic.items():
+            #     print(len(v.shape), v.shape)
+            # self.key = ops.initTensor(dic["key"])
+            # self.receptance = ops.initTensor(dic["receptance"]).inv()
+            # self.value = ops.initTensor(dic["value"])
+
+            # self.ln1w = ops.initTensor(dic["ln1w"])
+            # self.ln1b = ops.initTensor(dic["ln1b"])
+
+            # self.ln2w = ops.initTensor(dic["ln2w"])
+            # self.ln2b = ops.initTensor(dic["ln2b"])
+
+            # self.time_mix_k_ffn = ops.initTensor(dic["time_mix_k_ffn"])
+            # self.time_mix_r_ffn = ops.initTensor(dic["time_mix_r_ffn"])
+
+            # self.key_ffn = ops.initTensor(dic["key_ffn"])
+            # self.receptance_ffn = ops.initTensor(dic["receptance_ffn"])
+            # self.value_ffn = ops.initTensor(dic["value_ffn"])
+
+            # self.kktk = ops.initTensor(dic["kktk"])
+            # self.vvtv = ops.initTensor(dic["vvtv"])
+            # self.rrtr = ops.initTensor(dic["rrtr"])
+
+            # self.time_first = ops.initTensor(dic["time_first"])
+            # self.time_decay = ops.initTensor(dic["time_decay"])
+
+            # self.outputvv = ops.initTensor(dic["outputvv"])
+
+        @ ops.layerdef
         def forward(self, x, statea, stateb, statec, stated):
             xy = layernorm(x, self.ln1w, self.ln1b)
 
@@ -67,7 +95,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             super(RWKVTFPre, self).__init__()
             self.preprocess = ops.initTensor(preprocess)
 
-        @ops.prefunc
+        @ ops.prefunc
         def forward(self, x):
             return self.preprocess[x[0]]
 
@@ -78,13 +106,13 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             self.postprocess1 = ops.initTensor(postprocess[1])
             self.postprocess2 = ops.initTensor(postprocess[2])
 
-        @ops.postfunc
+        @ ops.postfunc
         def forward(self, x):
             return ops.matvec(self.postprocess2, layernorm(x, self.postprocess0,
                                                            self.postprocess1))
 
     class myRWKV(ops.module):
-        @ops.initfunc
+        @ ops.initfunc
         def __init__(self, preprocess, postprocess, layers):
             super(myRWKV, self).__init__()
             self.preprocess = RWKVTFPre(preprocess)
@@ -94,7 +122,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
             self.postprocess = RWKVTFPost(postprocess)
 
-        @ops.mainfunc
+        @ ops.mainfunc
         def forward(self, x, state):
 
             x = self.preprocess.forward(x)

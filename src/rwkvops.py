@@ -271,12 +271,52 @@ class RWKVStreamOps(RWKVPTOps):
             4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
 
+class RWKVStreamBigOps(RWKVPTOps):
+    def __init__(self, layers, embed):
+        super().__init__(layers, embed)
+
+        processDtype = torch.float64
+        storageDtype = torch.float16
+
+        target = float(
+            input("Designate the amount of memory to allocate (in GB):"))
+        self.initTensor = lambda x: torch.tensor(
+            x, device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype).pin_memory("cuda") if (torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else torch.tensor(x, dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
+
+        # for everything in self, if its a tensor, send to cuda
+        def sendToCuda(self, args, x):
+            # create a new modifiable empty object
+            class Empty:
+                def __init__(self):
+                    pass
+
+            newself = Empty()
+            for k, v in self.__dict__.items():
+                if isinstance(v, torch.Tensor):
+                    newself.__dict__[k] = v.cuda(non_blocking=True)
+
+            ret = x(newself, *args)
+
+            del newself
+            return ret
+
+        self.postfunc = lambda x: lambda self, * \
+            args: sendToCuda(self, args, x).float()
+        self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
+        self.prefunc = lambda x: lambda *args: x(*args).cuda()
+        self.matvec = lambda z, y: z.mv(y.to(storageDtype)).to(processDtype)
+        self.emptyState = torch.zeros(
+            4*layers, embed, dtype=processDtype, device="cuda")+0.01
+
+
 RwkvOpList: dict[str, type[RWKVOPS]] = {
     "tensorflow": RWKVTFOps,
     "pytorch": RWKVPTOps,
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
     "pytorch-stream": RWKVStreamOps,
+    "pytorch-stream-target": RWKVStreamBigOps,
     "export-onnx": RWKVExportOnnxOps,
+
     # "pytorch-p2p": RWKVP2POps,
 }
