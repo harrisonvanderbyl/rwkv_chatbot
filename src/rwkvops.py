@@ -276,7 +276,7 @@ class RWKVStreamBigOps(RWKVPTOps):
         super().__init__(layers, embed)
 
         processDtype = torch.float64
-        storageDtype = torch.float16
+        storageDtype = torch.bfloat16
 
         target = float(
             input("Designate the amount of memory to allocate (in GB):"))

@@ -58,18 +58,21 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             v = ops.matvec(self.value, (xy+self.vvtv*statea))
 
             r = ops.exp(ops.matvec(
-                self.receptance, (xy+self.rrtr*statea))) + 1
+                self.receptance, (xy+self.rrtr*statea)))
 
-            w = stateb + ops.exp(self.time_first)*k*v
-            d = statec*r+ops.exp(self.time_first)*k*r
+            td = ops.exp(self.time_decay)
+            tf = ops.exp(self.time_first)
 
-            mvv = ops.matvec(self.outputvv, w/(d+0.001))
+            w = stateb + k * v * tf
+            d = statec + k * tf
+
+            mvv = ops.matvec(self.outputvv, w/(r*d + d + 0.001))
             sxx = x + mvv
 
             aaa = xy
 
-            bbb = stateb * ops.exp(self.time_decay) + k * v  # ne33nd
-            ccc = statec * ops.exp(self.time_decay) + k
+            bbb = stateb * td + k * v
+            ccc = statec * td + k
 
             # return output, outstateA, outstateB, outstateC
 
