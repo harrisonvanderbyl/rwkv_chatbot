@@ -68,7 +68,7 @@ class RWKVPTOps(RWKVOPS):
         self.mean = torch.mean
         self.relu = torch.relu
         self.exp = torch.exp
-        self.stack = torch.stack
+        self.stack = lambda x: x
         self.matvec = torch.mv
 
         # module def
@@ -103,6 +103,7 @@ class RWKVExportOnnxOps(RWKVPTOps):
     def __init__(self, layers, embed):
         path = f"onnx/rwkv-{layers}-{embed}-{torch.float32}/"
         super().__init__(layers, embed)
+        self.stack = torch.stack
 
         def export(self, x, state):
             print("exporting")
