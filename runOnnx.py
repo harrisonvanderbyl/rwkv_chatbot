@@ -8,7 +8,7 @@ from src.utils import TOKENIZER
 import inquirer
 import torch
 from torch.nn import functional as F
-
+from scipy.special import softmax
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
@@ -43,8 +43,8 @@ elif floatmode == "torch.float32":
 elif floatmode == "np.bfloat16":
     floatmode = np.bfloat16
 
-#emptyState = torch.load(loadFile+"/emptyState.pt")
-emptyState = (4)*[layers*[embed*[0.01]]]
+# emptyState = torch.load(loadFile+"/emptyState.pt")
+emptyState = 4*layers*[embed*[0.01]]
 so = ort.SessionOptions()
 so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 so.log_severity_level = 3
@@ -72,11 +72,11 @@ providers2 = [providers]*3 + 10*[[
 
 
 pre = ort.InferenceSession(
-    f"{loadFile}/preprocess.onnx", providers=providers, sess_options=so)
+    f"{loadFile}/pre.onnx", providers=providers, sess_options=so)
 post = ort.InferenceSession(
-    f"{loadFile}/postprocess.onnx", providers=providers, sess_options=so)
+    f"{loadFile}/post.onnx", providers=providers, sess_options=so)
 layers = os.listdir(loadFile)
-layers = filter(lambda x: "layer" in x, layers)
+layers = filter(lambda x: x[0:2].isdigit(), layers)
 layers = list(layers)
 layers.sort()
 print(layers)
@@ -171,53 +171,36 @@ def loadContext(ctx: list[int], state, newctx: list[int]):
 
     for i in tqdm.tqdm(range(len(newctx))):
         x = ctx+newctx[:i+1]
-        o = pre.run(None, createInput(pre.get_inputs(), [[x[-1]], state]))
+        o, = pre.run(None, createInput(
+            pre.get_inputs(), [[x[-1]]]))
 
-        for l in layers:
+        for ii, l in enumerate(layers):
 
-            o = l.run(None,
-                      createInput(l.get_inputs(), o))
+            o, *state[ii*4:ii*4+4] = l.run(None,
+                                           createInput(l.get_inputs(), [o, *state[ii*4:ii*4+4]]))
 
-        state = o[1]
     return ctx+newctx, state
 
 
 tokens = loadContext(ctx=[], newctx=ctx1, state=emptyState)
 
 
-def sample_logits(logits, top_k=5, top_p=0.9, filter_value=-float('Inf')):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (vocabulary size)
-            top_k >0: keep only top k tokens with highest probability (top-k filtering).
-            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-    """
-    assert logits.dim() == 1  # batch size 1 for now - could be updated for more but the code would be less clear
-    top_k = min(top_k, logits.size(-1))  # Safety check
-    if top_k > 0:
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[
-            0][..., -1, None]
-        logits[indices_to_remove] = filter_value
+def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # turn to float if is half and cpu
+    probs = softmax(ozut, axis=-1)
 
-    if top_p > 0.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(
-            F.softmax(sorted_logits, dim=-1), dim=-1)
+    sorted_probs = np.sort(probs)[::-1]
+    cumulative_probs = np.cumsum(sorted_probs)
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = probs.pow(1.0 / temp)
+    probs = probs / np.sum(probs)
+    out = np.random.choice(a=len(probs), p=probs)
 
-        # Remove tokens with cumulative probability above the threshold
-        sorted_indices_to_remove = cumulative_probs > top_p
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[...,
-                                 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        indices_to_remove = sorted_indices[sorted_indices_to_remove]
-        logits[indices_to_remove] = filter_value
-    num = logits[logits > 0][0]
-
-    return logits
+    return out
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
@@ -235,17 +218,18 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             chars: List[int] = tokens[0]
 
             statex = tokens[1]
-            o = pre.run(None, createInput(
-                pre.get_inputs(), [[chars[-1]], statex]))
+            o, = pre.run(None, createInput(
+                pre.get_inputs(), [[chars[-1]]]))
 
-            for l in layers:
-                o = l.run(None,
-                          createInput(l.get_inputs(), o))
+            for ii, l in enumerate(layers):
+                o, *statex[ii*4: ii*4+4] = l.run(None,
+                                                 createInput(l.get_inputs(), [o, *statex[ii*4:ii*4+4]]))
 
-            myout = post.run(None, createInput(post.get_inputs(), o))
+            myout = post.run(None, createInput(
+                post.get_inputs(), [o])), statex
 
             chars += [sample_logits(
-                torch.tensor(myout[0]))]
+                torch.tensor(myout[0][0]))]
             char = tokenizer.tokenizer.decode(chars[-1])
 
             tokens = (chars, myout[1])

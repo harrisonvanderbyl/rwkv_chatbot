@@ -17,31 +17,9 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
     class RWKVTFLayer(ops.module):
         def __init__(self, dic):
-            self.key = ops.initTensor(dic["key"])
-            self.receptance = ops.initTensor(dic["receptance"])
-            self.value = ops.initTensor(dic["value"])
+            super(RWKVTFLayer, self).__init__()
 
-            self.ln1w = ops.initTensor(dic["ln1w"])
-            self.ln1b = ops.initTensor(dic["ln1b"])
-
-            self.ln2w = ops.initTensor(dic["ln2w"])
-            self.ln2b = ops.initTensor(dic["ln2b"])
-
-            self.time_mix_k_ffn = ops.initTensor(dic["time_mix_k_ffn"])
-            self.time_mix_r_ffn = ops.initTensor(dic["time_mix_r_ffn"])
-
-            self.key_ffn = ops.initTensor(dic["key_ffn"])
-            self.receptance_ffn = ops.initTensor(dic["receptance_ffn"])
-            self.value_ffn = ops.initTensor(dic["value_ffn"])
-
-            self.kktk = ops.initTensor(dic["kktk"])
-            self.vvtv = ops.initTensor(dic["vvtv"])
-            self.rrtr = ops.initTensor(dic["rrtr"])
-
-            self.time_first = ops.initTensor(dic["time_first"])
-            self.time_decay = ops.initTensor(dic["time_decay"])
-
-            self.outputvv = ops.initTensor(dic["outputvv"])
+            self.__dict__ = {k: ops.initTensor(v) for k, v in dic.items()}
 
         @ops.layerdef
         def forward(self, x, statea, stateb, statec, stated):
@@ -86,6 +64,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
     class RWKVTFPre(ops.module):
         def __init__(self, preprocess):
+            super(RWKVTFPre, self).__init__()
             self.preprocess = ops.initTensor(preprocess)
 
         @ops.prefunc
@@ -94,6 +73,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
     class RWKVTFPost(ops.module):
         def __init__(self, postprocess):
+            super(RWKVTFPost, self).__init__()
             self.postprocess0 = ops.initTensor(postprocess[0])
             self.postprocess1 = ops.initTensor(postprocess[1])
             self.postprocess2 = ops.initTensor(postprocess[2])
