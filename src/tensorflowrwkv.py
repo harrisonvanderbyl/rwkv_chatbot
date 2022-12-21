@@ -3,17 +3,10 @@ import torch
 import src.rwkvops
 
 
-def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
+def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow", *args):
 
     ops = src.rwkvops.RwkvOpList[mode](
-        len(mlayers), len(mlayers[0]["time_first"]))
-
-    def layernorm(x, w, b):
-        xee2 = x - ops.mean(x)
-
-        x2 = ops.sqrt(ops.mean(xee2*xee2) + 0.000009999999747378752)
-
-        return w*(xee2/x2) + b
+        len(mlayers), len(mlayers[0]["time_first"]), *args)
 
     class RWKVTFLayer(ops.module):
         def __init__(self, dic):
@@ -51,7 +44,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
         @ ops.layerdef
         def forward(self, x, statea, stateb, statec, stated):
-            xy = layernorm(x, self.ln1w, self.ln1b)
+            xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
             k = ops.exp(ops.matvec(self.key, (xy+self.kktk*statea)))
 
@@ -72,7 +65,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
             aaa = xy
             bbb = stateb * td + k * v
             ccc = statec * td + k
-            ddd = layernorm(sxx, self.ln2w, self.ln2b)
+            ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
             km = ops.relu(ops.matvec(self.key_ffn, (ddd +
                                                     self.time_mix_k_ffn * stated)))
@@ -102,8 +95,8 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow"):
 
         @ ops.postfunc
         def forward(self, x):
-            return ops.matvec(self.postprocess2, layernorm(x, self.postprocess0,
-                                                           self.postprocess1))
+            return ops.matvec(self.postprocess2, ops.layernorm(x, self.postprocess0,
+                                                               self.postprocess1))
 
     class myRWKV(ops.module):
         @ ops.initfunc

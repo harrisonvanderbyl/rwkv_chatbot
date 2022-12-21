@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import tensorflow as tf
 import torch
@@ -22,6 +23,7 @@ class RWKVOPS():
         self.exp: notimplemented
         self.stack: notimplemented
         self.matvec: notimplemented
+        self.layernorm: notimplemented
 
        # module def
         self.module: notimplemented
@@ -59,6 +61,45 @@ class RWKVTFOps(RWKVOPS):
         self.postfunc = lambda x: x
         self.emptyState = tf.zeros([4*layers, embed], dtype=tf.float32)+0.01
 
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+
+
+class RWKVNumpyOps(RWKVOPS):
+    def __init__(self, layers, embed):
+        self.initTensor = lambda x: x
+        self.sqrt = lambda x: np.sqrt(x)
+        self.mean = lambda x: np.mean(x)
+        self.relu = lambda x: np.maximum(x, 0)
+        self.exp = lambda x: np.exp(x)
+        self.stack = lambda x: x
+        self.matvec = np.matmul
+
+        # module def
+        self.module = object
+
+        # pytorch function defs
+        self.initfunc = lambda x: x
+        self.layerdef = lambda x: x
+        self.mainfunc = lambda x: x
+        self.postfunc = lambda x: x
+        self.prefunc = lambda x: x
+
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+        self.layernorm = ln
+        self.emptyState = [[0.01]*embed]*4*layers
+
 
 class RWKVPTOps(RWKVOPS):
     def __init__(self, layers, embed):
@@ -80,6 +121,7 @@ class RWKVPTOps(RWKVOPS):
         self.mainfunc = lambda x: x
         self.postfunc = lambda x: x
         self.prefunc = lambda x: x
+        self.layernorm = lambda x, w, b: torch.layer_norm(x, [embed], w, b)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=torch.float32)+0.01
 
@@ -90,11 +132,21 @@ class RWKVPTCompatOps(RWKVPTOps):
         self.relu = lambda x: torch.max(x, torch.zeros_like(x))
         self.matvec = lambda x, y: torch.sum(x*y, dim=1)
 
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+
 
 class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed):
         super().__init__(layers, embed)
         self.initTensor = lambda x: torch.tensor(x, device='cuda')
+        self.postfunc = lambda x: lambda self, y: x(self, y).cpu()
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
@@ -265,7 +317,8 @@ class RWKVStreamOps(RWKVPTOps):
             del newself
             return ret
 
-        self.postfunc = lambda x: lambda self, *args: sendToCuda(self, args, x)
+        self.postfunc = lambda x: lambda self, * \
+            args: sendToCuda(self, args, x).cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.emptyState = torch.zeros(
@@ -273,13 +326,10 @@ class RWKVStreamOps(RWKVPTOps):
 
 
 class RWKVStreamBigOps(RWKVPTOps):
-    def __init__(self, layers, embed):
+    def __init__(self, layers, embed, processDtype=torch.float64, storageDtype=torch.bfloat16, target=None):
         super().__init__(layers, embed)
 
-        processDtype = torch.float64
-        storageDtype = torch.bfloat16
-
-        target = float(
+        target = target if target is not None else float(
             input("Designate the amount of memory to allocate (in GB):"))
         self.initTensor = lambda x: torch.tensor(
             x, device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype).pin_memory("cuda") if (torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else torch.tensor(x, dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
@@ -302,7 +352,7 @@ class RWKVStreamBigOps(RWKVPTOps):
             return ret
 
         self.postfunc = lambda x: lambda self, * \
-            args: sendToCuda(self, args, x).float()
+            args: sendToCuda(self, args, x).float().cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.matvec = lambda z, y: z.mv(y.to(storageDtype)).to(processDtype)
@@ -313,6 +363,7 @@ class RWKVStreamBigOps(RWKVPTOps):
 RwkvOpList: dict[str, type[RWKVOPS]] = {
     "tensorflow": RWKVTFOps,
     "pytorch": RWKVPTOps,
+    "numpy": RWKVNumpyOps,
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
     "pytorch-stream": RWKVStreamOps,
