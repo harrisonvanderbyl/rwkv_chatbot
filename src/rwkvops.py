@@ -359,6 +359,15 @@ class RWKVStreamBigOps(RWKVPTOps):
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+
 
 RwkvOpList: dict[str, type[RWKVOPS]] = {
     "tensorflow": RWKVTFOps,

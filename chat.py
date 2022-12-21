@@ -251,7 +251,7 @@ async def on_message(message):
                 tok = sample_logits(o[0])
                 print(tokenizer.tokenizer.decode(tok), end='')
                 state = (state[0] + [tok], o[1])
-                if (tok == 187 and i > 10):
+                if (tok == 187):
                     break
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
