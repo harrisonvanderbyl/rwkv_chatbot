@@ -189,8 +189,15 @@ def s0(probs, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     cutoff = float(sorted_probs[np.argmax(
         cumulative_probs > top_p_usual)])
     probs[probs < cutoff] = 0
+
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
+
+    probs[probs < 0] = 0.00001
+    # remove nan and inf
+    probs[probs != probs] = 0.00001
+    probs.nan_to_num_(0.00001)
+    probs[probs == float('Inf')] = 0.00001
 
     out = torch.multinomial(probs.float(), 1, True)[0]
     # print(sorted_probs[:3])
