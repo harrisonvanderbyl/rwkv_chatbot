@@ -168,7 +168,7 @@ class RWKV_LAYER(nn.Module):
 
 
 def createRWKVModel(Path, mode="tensorflow", **kwargs):
-    w = createTensors(Path[: -4], "cpu" if mode != "cuda" else "cuda")
+    w = createTensors(Path[: -4], "cpu" if mode != "pytorch-cuda" else "cuda")
 
     preprocess = w[0]
 
