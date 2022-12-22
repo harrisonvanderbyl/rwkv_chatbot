@@ -42,6 +42,7 @@ questions = [
         message="What inference method?",
         choices=RwkvOpList.keys()
     )
+
 ]
 q = inquirer.prompt(questions)
 

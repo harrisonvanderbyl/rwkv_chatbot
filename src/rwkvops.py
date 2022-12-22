@@ -1,3 +1,4 @@
+import inquirer
 import numpy as np
 import os
 import tensorflow as tf
@@ -39,7 +40,8 @@ class RWKVOPS():
 
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
-        self.initTensor = tf.convert_to_tensor
+        self.initTensor = lambda x: tf.convert_to_tensor(
+            x.float().cpu().numpy())
         self.sqrt = tf.sqrt
         self.mean = tf.reduce_mean
         self.relu = lambda x: tf.maximum(x, tf.zeros_like(x))
@@ -73,7 +75,7 @@ class RWKVTFOps(RWKVOPS):
 
 class RWKVNumpyOps(RWKVOPS):
     def __init__(self, layers, embed):
-        self.initTensor = lambda x: x
+        self.initTensor = lambda x: x.float().cpu().numpy()
         self.sqrt = lambda x: np.sqrt(x)
         self.mean = lambda x: np.mean(x)
         self.relu = lambda x: np.maximum(x, 0)
@@ -102,15 +104,24 @@ class RWKVNumpyOps(RWKVOPS):
 
 
 class RWKVPTOps(RWKVOPS):
-    def __init__(self, layers, embed):
+    def __init__(self, layers, embed, dtype=None):
+        q = [inquirer.List(
+            'type',
+            message="What model varient",
+            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])]
 
-        self.initTensor = torch.tensor
+        if dtype is None:
+            a = inquirer.prompt(q)
+            dtype = a['type']
+        self.dtype = dtype
+
+        self.initTensor = lambda x: x.to(dtype=self.dtype)
         self.sqrt = torch.sqrt
         self.mean = torch.mean
         self.relu = torch.relu
         self.exp = torch.exp
         self.stack = lambda x: x
-        self.matvec = torch.mv
+        self.matvec = lambda x, y: x.mv(y)
 
         # module def
         self.module = torch.nn.Module
@@ -123,12 +134,12 @@ class RWKVPTOps(RWKVOPS):
         self.prefunc = lambda x: x
         self.layernorm = lambda x, w, b: torch.layer_norm(x, [embed], w, b)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float32)+0.01
+            4*layers, embed, dtype=self.dtype)+0.01
 
 
 class RWKVPTCompatOps(RWKVPTOps):
-    def __init__(self, layers, embed):
-        super().__init__(layers, embed)
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
         self.relu = lambda x: torch.max(x, torch.zeros_like(x))
         self.matvec = lambda x, y: torch.sum(x*y, dim=1)
 
@@ -143,16 +154,17 @@ class RWKVPTCompatOps(RWKVPTOps):
 
 
 class RWKVCudaOps(RWKVPTOps):
-    def __init__(self, layers, embed):
-        super().__init__(layers, embed)
-        self.initTensor = lambda x: torch.tensor(x, device='cuda')
-        self.postfunc = lambda x: lambda self, y: x(self, y).cpu()
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+
+        self.initTensor = lambda x: x.to(dtype=self.dtype, device='cuda')
+        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
+            4*layers, embed, dtype=self.dtype, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVPTOps):
-    def __init__(self, layers, embed):
+    def __init__(self, layers, embed, *args):
         path = f"onnx/rwkv-{layers}-{embed}-{torch.float32}/"
         super().__init__(layers, embed)
         self.stack = torch.stack
@@ -295,10 +307,9 @@ class RWKVExportOnnxOps(RWKVPTOps):
 
 
 class RWKVStreamOps(RWKVPTOps):
-    def __init__(self, layers, embed):
-        super().__init__(layers, embed)
-        self.initTensor = lambda x: torch.tensor(
-            x, device='cpu').pin_memory("cuda")
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+        self.initTensor = lambda x: x.to(self.dtype).pin_memory("cuda")
 
         # for everything in self, if its a tensor, send to cuda
         def sendToCuda(self, args, x):
@@ -322,17 +333,17 @@ class RWKVStreamOps(RWKVPTOps):
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
+            4*layers, embed, dtype=self.dtype, device="cuda")+0.01
 
 
 class RWKVStreamBigOps(RWKVPTOps):
     def __init__(self, layers, embed, processDtype=torch.float64, storageDtype=torch.bfloat16, target=None):
-        super().__init__(layers, embed)
+        super().__init__(layers, embed, dtype=storageDtype)
 
         target = target if target is not None else float(
             input("Designate the amount of memory to allocate (in GB):"))
-        self.initTensor = lambda x: torch.tensor(
-            x, device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype).pin_memory("cuda") if (torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else torch.tensor(x, dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
+        self.initTensor = lambda x: x.to(device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype).pin_memory("cuda") if (
+            torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else x.to(dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
 
         # for everything in self, if its a tensor, send to cuda
         def sendToCuda(self, args, x):

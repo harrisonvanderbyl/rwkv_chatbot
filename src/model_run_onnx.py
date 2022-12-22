@@ -38,8 +38,7 @@ def createTensors(model_name):
         for x in keys:
             if '.time_' in x:
                 w[x] = w[x].squeeze()
-                if DEBUG_TIME:
-                    print(x, w[x].numpy())
+
             if '.time_decay' in x:
                 w[x] = w[x].float()
                 w[x] = -torch.exp(w[x])
@@ -59,9 +58,9 @@ def createTensors(model_name):
     z = []
     for x in tqdm(range(len(w["emb.weight"]))):
         z = z + [torch.layer_norm(w["emb.weight"][x], (w["blocks.0.ln0.weight"].shape[0],),
-                                  weight=w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"]).float().numpy()]
+                                  weight=w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"])]
 
-    w = [torch.Tensor(z).to(dtype=torch.bfloat16),
+    w = [z,
          reduce(lambda y, x: y+[
              w[f"blocks.{x}.ln1.weight"],
              w[f"blocks.{x}.ln1.bias"],
@@ -90,7 +89,7 @@ def createTensors(model_name):
     return w
 
 
-def process(x): return x.cpu().float().numpy()
+def process(x): return x
 
 
 class RWKV_LAYER(nn.Module):
@@ -168,7 +167,7 @@ class RWKV_LAYER(nn.Module):
         return l
 
 
-def createRWKVModel(Path, mode="tensorflow"):
+def createRWKVModel(Path, mode="tensorflow", **kwargs):
     w = createTensors(Path[: -4])
 
     preprocess = w[0]
@@ -180,4 +179,4 @@ def createRWKVModel(Path, mode="tensorflow"):
     preprocess = process(preprocess)
     layers = modelLayers.toTensorFlowLayers()
 
-    return tensorflowrwkv.RWKV(preprocess, list(map(process, postprocess)), layers, mode=mode)
+    return tensorflowrwkv.RWKV(preprocess, list(map(process, postprocess)), layers, mode=mode, **kwargs)

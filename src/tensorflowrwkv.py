@@ -3,10 +3,10 @@ import torch
 import src.rwkvops
 
 
-def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow", *args):
+def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow", *args, **kwargs):
 
     ops = src.rwkvops.RwkvOpList[mode](
-        len(mlayers), len(mlayers[0]["time_first"]), *args)
+        len(mlayers), len(mlayers[0]["time_first"]), *args, **kwargs)
 
     class RWKVTFLayer(ops.module):
         def __init__(self, dic):
@@ -80,7 +80,7 @@ def RWKV(mpreprocess, mpostprocess, mlayers, mode="tensorflow", *args):
     class RWKVTFPre(ops.module):
         def __init__(self, preprocess):
             super(RWKVTFPre, self).__init__()
-            self.preprocess = ops.initTensor(preprocess)
+            self.preprocess = ops.stack(list(map(ops.initTensor, preprocess)))
 
         @ ops.prefunc
         def forward(self, x):
