@@ -27,12 +27,12 @@ print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM}\n')
 DEBUG_TIME = False   # True False - show trained time-coeffs
 
 
-def createTensors(model_name):
+def createTensors(model_name, dev="cpu"):
     n_layer = 0
 
     with torch.no_grad():
         w: Dict[str, torch.Tensor] = torch.load(
-            model_name+".pth", map_location='cpu')
+            model_name+".pth", map_location=dev)
         # refine weights and send to correct device
         keys = list(w.keys())
         for x in keys:
@@ -168,7 +168,7 @@ class RWKV_LAYER(nn.Module):
 
 
 def createRWKVModel(Path, mode="tensorflow", **kwargs):
-    w = createTensors(Path[: -4])
+    w = createTensors(Path[: -4], "cpu" if mode != "cuda" else "cuda")
 
     preprocess = w[0]
 
