@@ -181,7 +181,23 @@ currstate = init_state
 storys = []
 
 
-def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+def s0(probs, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+
+    sorted_probs = torch.sort(probs, descending=True)[0]
+    cumulative_probs = torch.cumsum(
+        sorted_probs.float(), dim=-1).cpu().numpy()
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = probs.pow(1.0 / temp)
+
+    out = torch.multinomial(probs.float(), 1, True)[0]
+    # print(sorted_probs[:3])
+    return out
+
+
+def s1(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     ozut = ozut.numpy()
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
@@ -198,6 +214,9 @@ def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     mout = np.random.choice(a=len(probs), p=probs)
 
     return mout
+
+
+sample_logits = [s0, s1][int(input("sample method: 0 for torch, 1 for numpy"))]
 
 
 @client.event
