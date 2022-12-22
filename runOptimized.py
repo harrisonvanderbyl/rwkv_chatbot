@@ -169,10 +169,10 @@ def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     probs[probs < cutoff] = 0
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
-    probs = probs / np.sum(probs)
-    out = np.random.choice(a=len(probs), p=probs)
+    probs = probs / np.sum(probs, axis=0)
+    mout = np.random.choice(a=len(probs), p=probs)
 
-    return out
+    return mout
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
