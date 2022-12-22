@@ -157,10 +157,12 @@ class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
 
-        self.initTensor = lambda x: x.to(dtype=self.dtype, device='cuda')
+        self.initTensor = lambda x: x.to(dtype=self.dtype if len(
+            x.shape) == 2 else torch.float32, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+        self.matvec = lambda x, y: x.to(dtype=torch.float32).mv(y)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype, device="cuda")+0.01
+            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVPTOps):
