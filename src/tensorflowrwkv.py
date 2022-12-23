@@ -205,4 +205,4 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             # print(len(ot))
             return x, ops.stack(ot)
 
-    return myRWKV(), ops.emptyState
+    return ops.postProcessModule(myRWKV()), ops.emptyState

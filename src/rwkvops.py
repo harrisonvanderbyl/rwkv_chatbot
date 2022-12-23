@@ -1,3 +1,5 @@
+import time
+from urllib import request
 import inquirer
 import numpy as np
 import os
@@ -17,6 +19,7 @@ def notimplemented(*args):
 
 class RWKVOPS():
     def __init__(self, layers, embed):
+        print("init RWKVOPS, from super")
         self.initTensor: notimplemented
         self.sqrt: notimplemented
         self.mean: notimplemented
@@ -36,10 +39,12 @@ class RWKVOPS():
         self.prefunc: notimplemented
         self.postfunc: notimplemented
         self.emptyState: notimplemented
+        self.postProcessModule = lambda x: x
 
 
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
+        super(RWKVTFOps, self).__init__(layers, embed)
         self.initTensor = lambda x: tf.convert_to_tensor(
             x.float().cpu().numpy())
         self.sqrt = tf.sqrt
@@ -75,6 +80,7 @@ class RWKVTFOps(RWKVOPS):
 
 class RWKVNumpyOps(RWKVOPS):
     def __init__(self, layers, embed):
+        super().__init__(layers, embed)
         self.initTensor = lambda x: x.float().cpu().numpy()
         self.sqrt = lambda x: np.sqrt(x)
         self.mean = lambda x: np.mean(x)
@@ -105,6 +111,7 @@ class RWKVNumpyOps(RWKVOPS):
 
 class RWKVPTOps(RWKVOPS):
     def __init__(self, layers, embed, dtype=None):
+        super(RWKVPTOps, self).__init__(layers, embed)
         q = [inquirer.List(
             'type',
             message="What model varient",
@@ -121,7 +128,7 @@ class RWKVPTOps(RWKVOPS):
         self.relu = torch.relu
         self.exp = torch.exp
         self.stack = lambda x: x
-        self.matvec = lambda x, y: x.mv(y)
+        self.matvec = torch.mv
 
         # module def
         self.module = torch.nn.Module
@@ -132,7 +139,11 @@ class RWKVPTOps(RWKVOPS):
         self.mainfunc = lambda x: x
         self.postfunc = lambda x: x
         self.prefunc = lambda x: x
-        self.layernorm = lambda x, w, b: torch.layer_norm(x, [embed], w, b)
+
+        def layernorm(x, w, b) -> torch.Tensor:
+
+            return torch.layer_norm(x, w.shape, w, b)
+        self.layernorm = layernorm
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=self.dtype)+0.01
 
@@ -167,6 +178,7 @@ class RWKVCudaOps(RWKVPTOps):
 
 class RWKVExportOnnxOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
         path = f"onnx/rwkv-{layers}-{embed}-{torch.float32}/"
         super().__init__(layers, embed)
         self.stack = torch.stack
@@ -193,119 +205,147 @@ class RWKVExportOnnxOps(RWKVPTOps):
         self.mainfunc = lambda x: export
 
 
-# class RWKVP2POps(RWKVCudaOps):
-#     def __init__(self, layers, embed):
-#         super().__init__(layers, embed)
+class RWKVP2POps(RWKVCudaOps):
+    def __init__(self, layers, embed):
+        super().__init__(layers, embed)
 
-#         def intFunc(self, pre, post, layers, x):
-#             self.start = int(input(f"StartLayer(0-{len(layers)}):"))
-#             self.end = min(
-#                 int(input(f"EndLayer({self.start}-{len(layers)}):")), len(layers))
+        server = "http://localhost:1922"
 
-#             x(self, pre, post, layers[self.start:self.end])
+        def intFunc(self):
+            self.start = int(input(f"StartLayer(0-{len(self.mylayers)}):"))
+            self.end = min(
+                int(input(f"EndLayer({self.start}-{len(self.mylayers)}):")), len(self.mylayers))
+            self.mylayers = self.mylayers[self.start:self.end]
+            return self
 
-#         def forward(self, x, state):
-#             print("forward test")
-#             return x
+        def forward(rs, x, state):
+            while 1:
 
-#         self.initfunc = lambda x: lambda self, pre, post, layers: intFunc(
-#             self, pre, post, layers, x)
+                data = request.urlopen(
+                    f"{server}/reqs/{rs.start}/{rs.end}").read()
+                data = json.loads(data)
+                # print(data)
+                x = self.initTensor(torch.tensor(data[0]))
 
-#         self.mainfunc = lambda rx: lambda self, x, state: forward(
-#             self, x, state)
+                for i, j in enumerate(self.myLayers):
+                    state1: torch.Tensor = self.initTensor(
+                        torch.tensor(data[1][rs.start+i]))
+                    state2 = self.initTensor(torch.tensor(data[2][rs.start+i]))
+                    state3 = self.initTensor(torch.tensor(data[3][rs.start+i]))
+                    state4 = self.initTensor(torch.tensor(data[4][rs.start+i]))
+                    x, state1, state2, state3, state4 = j.forward(
+                        x, state1, state2, state3, state4)
+                    data[1][rs.start+i] = state1.cpu().tolist()
+                    data[2][rs.start+i] = state2.cpu().tolist()
+                    data[3][rs.start+i] = state3.cpu().tolist()
+                    data[4][rs.start+i] = state4.cpu().tolist()
+
+                request.urlopen(
+                    f"{server}/resps/{rs.start}/{rs.end}", json.dumps(data).encode("utf-8"))
+                print(x.shape, state1.shape, state2.shape,
+                      state3.shape, state4.shape)
+                # wait 2 seconds
+
+        self.postProcessModule = intFunc
+
+        self.mainfunc = lambda rx: lambda self, x, state: forward(
+            self, x, state)
 
 
-# class RWKVP2PServerOps(RWKVCudaOps):
-#     def __init__(self, layers, embed):
-#         super().__init__(layers, embed)
+class RWKVP2PServerOps(RWKVCudaOps):
+    def __init__(self, layers, embed):
+        super().__init__(layers, embed, torch.float32)
 
-#         class S(http.server.SimpleHTTPRequestHandler):
-#             def do_GET(self):
-#                 self.send_response(200)
-#                 self.send_header('Content-type', 'text/html')
-#                 self.end_headers()
-#                 # self._set_response()
-#                 print(self.path)
-#                 if (self.path.startswith("/files")):
-#                     file = self.path.split("/")[2]
+        class S(http.server.SimpleHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                # self._set_response()
+                print(self.path)
+                if self.path.startswith("/reqs/"):
+                    print(self.path)
+                    tokens = self.path.split("/")
+                    start = int(tokens[2])
+                    end = int(tokens[3])
+                    print(start, end)
+                    self.wfile.write(json.dumps(
+                        [torch.randn(embed).tolist() for x in range(5)]).encode('utf-8'))
+                else:
+                    self.wfile.write("RWKV SERVER".encode('utf-8'))
 
-#                     self.wfile.write(
-#                         open("/".join(__file__.split("/")[:-1])+"/onnxServer/"+file, "rb").read())
-#                 else:
-#                     self.wfile.write("RWKV SERVER".encode('utf-8'))
+            # def do_POST(self):
+            #     self.send_response(200)
+            #     # Get body
+            #     content_length = int(self.headers['Content-Length'])
+            #     body = self.rfile.read(content_length)
+            #     body = body.decode('utf-8')
+            #     body = body.strip()
 
-#             def do_POST(self):
-#                 self.send_response(200)
-#                 # Get body
-#                 content_length = int(self.headers['Content-Length'])
-#                 body = self.rfile.read(content_length)
-#                 body = body.decode('utf-8')
-#                 body = body.strip()
+            #     print(body)
 
-#                 print(body)
+            #     tokens = tokenizer.encode(body)
 
-#                 tokens = tokenizer.encode(body)
+            #     tokens = [preProcess.run(None, createInput(
+            #         preProcess.get_inputs(), [[x], emptyState]))[0].tolist() for x in tokens]
 
-#                 tokens = [preProcess.run(None, createInput(
-#                     preProcess.get_inputs(), [[x], emptyState]))[0].tolist() for x in tokens]
+            #     # flatten
+            #     print(tokens)
 
-#                 # flatten
-#                 print(tokens)
+            #     # convert to json
+            #     tokens = json.dumps(tokens).encode("utf8")
 
-#                 # convert to json
-#                 tokens = json.dumps(tokens).encode("utf8")
+            #     # set content length
+            #     out = tokens
+            #     self.send_header('Content-Length', len(out))
+            #     self.send_header('Content-Type', 'text/json')
 
-#                 # set content length
-#                 out = tokens
-#                 self.send_header('Content-Length', len(out))
-#                 self.send_header('Content-Type', 'text/json')
+            #     self.send_response(HTTPStatus.OK)
+            #     self.end_headers()
+            #     self.wfile.write(out)
 
-#                 self.send_response(HTTPStatus.OK)
-#                 self.end_headers()
-#                 self.wfile.write(out)
+            # def do_PUT(self):
+            #     self.send_response(200)
+            #     # Get body
+            #     content_length = int(self.headers['Content-Length'])
+            #     body = self.rfile.read(content_length)
+            #     body = body.decode('utf-8')
+            #     body = json.loads(body)
 
-#             def do_PUT(self):
-#                 self.send_response(200)
-#                 # Get body
-#                 content_length = int(self.headers['Content-Length'])
-#                 body = self.rfile.read(content_length)
-#                 body = body.decode('utf-8')
-#                 body = json.loads(body)
+            #     # array is a list of integers like "1,2,3,4" turn into array
+            #     print(body)
 
-#                 # array is a list of integers like "1,2,3,4" turn into array
-#                 print(body)
+            #     tokens = tokenizer.decode(body)
 
-#                 tokens = tokenizer.decode(body)
+            #     self.send_response(HTTPStatus.OK)
 
-#                 self.send_response(HTTPStatus.OK)
+            #     out = tokens.encode('utf-8')
 
-#                 out = tokens.encode('utf-8')
+            #     # set content length
+            #     self.send_header('Content-Length', len(out))
+            #     self.send_header('Content-Type', 'text/json')
 
-#                 # set content length
-#                 self.send_header('Content-Length', len(out))
-#                 self.send_header('Content-Type', 'text/json')
+            #     self.end_headers()
 
-#                 self.end_headers()
+            #     print(out)
+            #     self.wfile.write(out)
 
-#                 print(out)
-#                 self.wfile.write(out)
+        httpd = socketserver.TCPServer(('', 1922), S)
 
-#         httpd = socketserver.TCPServer(('', 8088), S)
+        def intFunc(self):
+            pass
 
-#         def intFunc(self, pre, post, layers, x):
-#             x(self, pre, post, [])
+        def forward(self, x, state):
 
-#         def forward(self, x, state):
+            httpd.serve_forever()
+            print("forward test")
+            return x
 
-#             httpd.serve_forever()
-#             print("forward test")
-#             return x
+        self.initfunc = lambda x: lambda self: intFunc(
+            self)
 
-#         self.initfunc = lambda x: lambda self, pre, post, layers: intFunc(
-#             self, pre, post, layers, x)
-
-#         self.mainfunc = lambda rx: lambda self, x, state: forward(
-#             self, x, state)
+        self.mainfunc = lambda rx: lambda self, x, state: forward(
+            self, x, state)
 
 
 class RWKVStreamOps(RWKVPTOps):
@@ -382,6 +422,57 @@ class RWKVStreamBigOps(RWKVPTOps):
         self.layernorm = ln
 
 
+class RWKVMobileOps(RWKVPTOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+        path = f"PTMobile/rwkv-{layers}-{embed}-{self.dtype}/"
+        self.stack = torch.stack
+
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+        self.layernorm = ln
+        dtype = self.dtype
+
+        def export(self):
+            print("exporting")
+            try:
+                try:
+                    os.mkdir("PTMobile")
+                except:
+                    pass
+                os.mkdir(path)
+            except:
+                pass
+            self.preprocess = torch.jit.trace(
+                self.preprocess, (torch.zeros(1, dtype=torch.int32),))
+            # torch.onnx.export(
+            #     self.preprocess, (torch.zeros(1, dtype=torch.int32),), f"{path}pre.onnx")
+            self.postprocess = torch.jit.trace(
+                self.postprocess, (torch.zeros(embed, dtype=dtype),))
+            # torch.onnx.export(
+            #     self.postprocess, (torch.zeros(embed, dtype=dtype),), f"{path}post.onnx")
+            for i, layer in enumerate(self.mylayers):
+                self.mylayers[i] = torch.jit.trace(
+                    layer, (torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=dtype)+0.01))
+
+                # torch.onnx.export(
+                #     layer, (torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=dtype)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01), f"{path}{i}.onnx")
+            self.preprocess._save_for_lite_interpreter(f"{path}pre.ptl")
+            self.postprocess._save_for_lite_interpreter(f"{path}post.ptl")
+            for i, layer in enumerate(self.mylayers):
+                layer._save_for_lite_interpreter(f"{path}{i}.ptl")
+
+            return self
+        self.postProcessModule = export
+
+        self.mainfunc = lambda x: lambda self, r, * \
+            args: x(self, torch.tensor(r).to(torch.int32), *args)
+
+
 RwkvOpList: dict[str, type[RWKVOPS]] = {
     "tensorflow": RWKVTFOps,
     "pytorch": RWKVPTOps,
@@ -391,6 +482,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "pytorch-stream": RWKVStreamOps,
     "pytorch-stream-target": RWKVStreamBigOps,
     "export-onnx": RWKVExportOnnxOps,
-
-    # "pytorch-p2p": RWKVP2POps,
+    "export-pytorch-mobile": RWKVMobileOps,
+    "pytorch-p2p": RWKVP2POps,
+    "pytorch-p2p-target": RWKVP2PServerOps
 }
