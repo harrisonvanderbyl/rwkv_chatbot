@@ -35,7 +35,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
                 w[x] = torch.exp(-torch.exp(w[x]))
                 print(w[x].max(), w[x].min())
-                w[x] = w[x].clamp(0, 1)
+                w[x] = w[x].clamp(0.01, 0.99)
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -127,8 +127,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             td = self.time_decay
             tf = ops.exp(self.time_first)
 
-            w = stateb/td + k * v * tf
-            d = statec/td + k * tf
+            w = stateb + k * v * tf
+            d = statec + k * tf
 
             r = ops.exp(ops.matvec(
                 self.receptance, (xy+self.rrtr*statea))) + 1
@@ -149,8 +149,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             sxx = x + mvv
 
             aaa = xy
-            bbb = stateb * td + k * v * td
-            ccc = statec * td + k * td
+            bbb = stateb * td + k * v
+            ccc = statec * td + k
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
