@@ -33,12 +33,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             if '.time_decay' in x:
                 w[x] = w[x].double()
                 w[x] = w[x].clamp(-5, 5)
-                w[x] = 1/(1+torch.exp(w[x]*2))
-                # checkifisnan
-                if torch.isnan(w[x]).any() or torch.isinf(w[x]).any():
-                    print(f"Found nan or inf in {x}")
-                    w[x][torch.isnan(w[x])] = 0.001
-                    w[x][torch.isinf(w[x])] = 1
+                w[x] = torch.exp(-torch.exp(w[x]))
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
