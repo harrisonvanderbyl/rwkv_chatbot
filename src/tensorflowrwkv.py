@@ -120,11 +120,13 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
-            k = ops.exp(self.key * (xy+self.kktk*statea)).prod(1)
+            k = ops.exp(ops.matvec(self.key, (self.kktk*statea)))
+            kk = ops.exp(ops.matvec(self.key, (xy)))
 
-            if (k.isnan().any() or k.isinf().any()):
+            if (k.isnan().any() or k.isinf().any() or kk.isnan().any() or kk.isinf().any()):
                 print("k is nan or inf")
-                print([k.isnan().any(), k.isinf().any()])
+                print([k.isnan().any(), k.isinf().any(),
+                      kk.isnan().any(), kk.isinf().any()])
                 exit()
 
             v = ops.matvec(self.value, (xy+self.vvtv*statea))
@@ -132,8 +134,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             td = self.time_decay
             tf = ops.exp(self.time_first)
 
-            w = stateb + k * v * tf
-            d = statec + k * tf
+            w = stateb + k * v * tf * kk
+            d = statec + k * tf * kk
 
             r = ops.exp(ops.matvec(
                 self.receptance, (xy+self.rrtr*statea))) + 1
@@ -154,8 +156,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             sxx = x + mvv
 
             aaa = xy
-            bbb = stateb * td + k * v
-            ccc = statec * td + k
+            bbb = stateb * td + k * v * kk
+            ccc = statec * td + k * kk
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
