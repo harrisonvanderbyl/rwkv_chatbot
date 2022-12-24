@@ -31,7 +31,7 @@ class RWKVOPS():
 
        # module def
         self.module: notimplemented
-
+        self.log: notimplemented
        # tensorflow function defs
         self.initfunc: notimplemented
         self.layerdef: notimplemented
@@ -53,6 +53,7 @@ class RWKVTFOps(RWKVOPS):
         self.exp = tf.exp
         self.stack = tf.stack
         self.matvec = tf.linalg.matvec
+        self.log = tf.math.log
 
        # module def
         self.module = tf.Module
@@ -189,6 +190,7 @@ class RWKVNumpyOps(RWKVOPS):
 
         # module def
         self.module = object
+        self.log = np.log
 
         # pytorch function defs
         self.initfunc = lambda x: x
@@ -227,6 +229,7 @@ class RWKVPTOps(RWKVOPS):
         self.exp = torch.exp
         self.stack = lambda x: x
         self.matvec = torch.mv
+        self.log = torch.log
 
         # module def
         self.module = torch.nn.Module
@@ -265,13 +268,16 @@ class RWKVPTCompatOps(RWKVPTOps):
 class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
-        matvecscale = 1
 
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else torch.float32, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
-        self.matvec = lambda x, y: x.to(dtype=torch.float32).mv(
-            y/matvecscale).to(dtype=torch.float32)*matvecscale
+
+        self.matvec = lambda x, y: x.to(torch.float32).mv(
+            y)
+
+        self.log = lambda x: torch.log(x.to(torch.complex64))
+        self.exp = lambda x: torch.exp(x).to(torch.float32)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 

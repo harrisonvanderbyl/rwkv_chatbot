@@ -32,8 +32,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             if '.time_decay' in x:
                 w[x] = w[x].double()
-                w[x] = w[x].clamp(-5, 5)
-                w[x] = torch.exp(-torch.exp(w[x]))
+                w[x] = (-torch.exp(w[x]))
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -118,20 +117,21 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
-            k = ops.exp(ops.matvec(self.key, (xy+self.kktk*statea)))
+            k = ops.matvec(self.key, (xy+self.kktk*statea))
 
-            v = ops.matvec(self.value, (xy+self.vvtv*statea))
+            v = ops.log(ops.matvec(self.value, (xy+self.vvtv*statea)))
 
             td = self.time_decay
-            tf = ops.exp(self.time_first)
+            tf = self.time_first
 
-            w = stateb + k * v * tf
-            d = statec + k * tf
+            r = ops.matvec(
+                self.receptance, (xy+self.rrtr*statea))
 
-            r = ops.exp(ops.matvec(
-                self.receptance, (xy+self.rrtr*statea))) + 1
+            w = ops.exp(stateb) + ops.exp(k+tf+v)
+            d = ops.exp(statec+r) + ops.exp(statec) + \
+                ops.exp(r + k + tf) + ops.exp(k + tf)
 
-            wrd = (w/(r*d + 0.001))
+            wrd = (w/(d + 0.001))
 
             if (wrd.isnan().any()):
                 print("wrd is nan")
@@ -148,8 +148,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             sxx = x + mvv
 
             aaa = xy
-            bbb = stateb * td + k * v
-            ccc = statec * td + k
+            bbb = ops.log(ops.exp(stateb + td) + ops.exp(k + v))
+            ccc = ops.log(ops.exp(statec + td) + ops.exp(k))
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
