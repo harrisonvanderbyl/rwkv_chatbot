@@ -477,7 +477,7 @@ class RWKVStreamOps(RWKVPTOps):
 
 
 class RWKVStreamBigOps(RWKVPTOps):
-    def __init__(self, layers, embed, processDtype=torch.bfloat16, storageDtype=torch.bfloat16, target=None):
+    def __init__(self, layers, embed, processDtype=torch.float32, storageDtype=torch.bfloat16, target=None):
         super().__init__(layers, embed, dtype=storageDtype)
 
         target = target if target is not None else float(
