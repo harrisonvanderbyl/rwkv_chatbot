@@ -126,7 +126,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             tf = ops.exp(self.time_first)
 
             w = stateb + k * v * tf
-            d = (statec + k * tf)
+            d = statec + k * tf
 
             r = ops.exp(ops.matvec(
                 self.receptance, (xy+self.rrtr*statea))) + 1
