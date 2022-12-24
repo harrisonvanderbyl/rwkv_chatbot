@@ -65,7 +65,8 @@ class RWKVTFOps(RWKVOPS):
             shape=[4*layers, embed], dtype=tf.float32)])
         self.prefunc = tf.function(
             input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)])
-        self.postfunc = lambda x: x
+        self.postfunc = tf.function(
+            input_signature=[tf.TensorSpec(shape=[embed], dtype=tf.float32)])
         self.emptyState = tf.zeros([4*layers, embed], dtype=tf.float32)+0.01
 
         def ln(x, w, b):
@@ -76,6 +77,103 @@ class RWKVTFOps(RWKVOPS):
             return w*(xee2/x2) + b
 
         self.layernorm = ln
+
+
+class RWKVTFExport(RWKVTFOps):
+    def __init__(self, layers, embed):
+        super(RWKVTFExport, self).__init__(layers, embed)
+        path = f"tfdist/rwkv-{layers}-{embed}/"
+
+        def save(x):
+            try:
+                try:
+                    os.mkdir("tfdist")
+                except:
+                    pass
+                os.mkdir(path)
+            except:
+                pass
+            splitmodel = inquirer.prompt([inquirer.Confirm(
+                'splitmodel', message="Split model?", default=False)])
+            q = inquirer.checkbox(message="What to export?", choices=[
+                                  "savedmodel32", "tflite32", "tflite16"])
+
+            if "savedmodel32" in q:
+                try:
+                    os.mkdir(path+"sm")
+                except:
+                    pass
+                if splitmodel["splitmodel"]:
+                    tf.saved_model.save(x.preprocess, path+"sm/pre")
+                    tf.saved_model.save(x.postprocess, path+"sm/post")
+                    for i, l in enumerate(x.mylayers):
+                        tf.saved_model.save(l, path+f"sm/layer{i}")
+                else:
+                    tf.saved_model.save(x, path+"sm/whole")
+
+            if "tflite32" in q:
+                try:
+                    os.mkdir(path+"tflite32")
+                except:
+                    pass
+                if splitmodel["splitmodel"]:
+                    for i, l in enumerate(x.mylayers):
+                        converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                            [l.forward.get_concrete_function()])
+                        tflite_model = converter.convert()
+                        open(path+f"tflite32/layer{i}.tflite",
+                             "wb").write(tflite_model)
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.preprocess.forward.get_concrete_function()])
+                    tflite_model = converter.convert()
+                    open(path+f"tflite32/pre.tflite", "wb").write(tflite_model)
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.postprocess.forward.get_concrete_function()])
+                    tflite_model = converter.convert()
+                    open(path+f"tflite32/post.tflite", "wb").write(tflite_model)
+                else:
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.forward.get_concrete_function()])
+                    tflite_model = converter.convert()
+                    open(path+f"tflite32/whole.tflite",
+                         "wb").write(tflite_model)
+
+            if "tflite16" in q:
+                try:
+                    os.mkdir(path+"tflite16")
+                except:
+                    pass
+                if splitmodel["splitmodel"]:
+                    for i, l in enumerate(x.mylayers):
+                        converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                            [l.forward.get_concrete_function()])
+                        converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                        converter.target_spec.supported_types = [tf.float16]
+                        tflite_model = converter.convert()
+                        open(path+f"tflite16/layer{i}.tflite",
+                             "wb").write(tflite_model)
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.preprocess.forward.get_concrete_function()])
+                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                    converter.target_spec.supported_types = [tf.float16]
+                    tflite_model = converter.convert()
+                    open(path+f"tflite16/pre.tflite", "wb").write(tflite_model)
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.postprocess.forward.get_concrete_function()])
+                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                    converter.target_spec.supported_types = [tf.float16]
+                    tflite_model = converter.convert()
+                    open(path+f"tflite16/post.tflite", "wb").write(tflite_model)
+                else:
+                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                        [x.forward.get_concrete_function()])
+                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                    converter.target_spec.supported_types = [tf.float16]
+                    tflite_model = converter.convert()
+                    open(path+f"tflite16/whole.tflite",
+                         "wb").write(tflite_model)
+            exit()
+        self.postProcessModule = save
 
 
 class RWKVNumpyOps(RWKVOPS):
@@ -481,8 +579,10 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "pytorch-cuda": RWKVCudaOps,
     "pytorch-stream": RWKVStreamOps,
     "pytorch-stream-target": RWKVStreamBigOps,
-    "export-onnx": RWKVExportOnnxOps,
-    "export-pytorch-mobile": RWKVMobileOps,
     "pytorch-p2p": RWKVP2POps,
-    "pytorch-p2p-target": RWKVP2PServerOps
+    "pytorch-p2p-target": RWKVP2PServerOps,
+
+    "export-pytorch-mobile": RWKVMobileOps,
+    "export-onnx": RWKVExportOnnxOps,
+    "export-tensorflow": RWKVTFExport,
 }
