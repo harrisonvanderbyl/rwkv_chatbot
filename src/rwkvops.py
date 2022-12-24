@@ -28,7 +28,7 @@ class RWKVOPS():
         self.stack: notimplemented
         self.matvec: notimplemented
         self.layernorm: notimplemented
-
+        self.lerp: notimplemented
        # module def
         self.module: notimplemented
         self.log: notimplemented
@@ -54,7 +54,7 @@ class RWKVTFOps(RWKVOPS):
         self.stack = tf.stack
         self.matvec = tf.linalg.matvec
         self.log = tf.math.log
-
+        self.lerp = tf.math.lerp
        # module def
         self.module = tf.Module
 
@@ -187,7 +187,7 @@ class RWKVNumpyOps(RWKVOPS):
         self.exp = lambda x: np.exp(x)
         self.stack = lambda x: x
         self.matvec = np.matmul
-
+        self.lerp = lambda x, y, z: x*z + y*(1-z)
         # module def
         self.module = object
         self.log = np.log
@@ -230,6 +230,7 @@ class RWKVPTOps(RWKVOPS):
         self.stack = lambda x: x
         self.matvec = torch.mv
         self.log = torch.log
+        self.lerp = torch.lerp
 
         # module def
         self.module = torch.nn.Module

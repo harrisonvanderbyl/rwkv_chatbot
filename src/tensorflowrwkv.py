@@ -57,27 +57,27 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             preprocess = preprocess + [torch.layer_norm(w["emb.weight"][x], (w["blocks.0.ln0.weight"].shape[0],),
                                                         weight=w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"])]
 
-        for x in range(n_layer):
-            w[f"blocks.{x}.att.key.weight"] *= w[f"blocks.{x}.att.time_mix_k"]
-            w[f"blocks.{x}.att.value.weight"] *= w[f"blocks.{x}.att.time_mix_v"]
-            w[f"blocks.{x}.att.receptance.weight"] *= w[f"blocks.{x}.att.time_mix_r"]
+        # for x in range(n_layer):
+            # w[f"blocks.{x}.att.key.weight"] = w[f"blocks.{x}.att.time_mix_k"]
+            # w[f"blocks.{x}.att.value.weight"] *= w[f"blocks.{x}.att.time_mix_v"]
+            # w[f"blocks.{x}.att.receptance.weight"] *= w[f"blocks.{x}.att.time_mix_r"]
 
-            w[f"blocks.{x}.ffn.key.weight"] *= w[f"blocks.{x}.ffn.time_mix_k"]
-            w[f"blocks.{x}.ffn.receptance.weight"] *= w[f"blocks.{x}.ffn.time_mix_r"]
+            # w[f"blocks.{x}.ffn.key.weight"] *= w[f"blocks.{x}.ffn.time_mix_k"]
+            # w[f"blocks.{x}.ffn.receptance.weight"] *= w[f"blocks.{x}.ffn.time_mix_r"]
 
-            w[f"blocks.{x}.att.time_mix_k"] = 1 / \
-                w[f"blocks.{x}.att.time_mix_k"] - 1
-            w[f"blocks.{x}.att.time_mix_v"] = 1 / \
-                w[f"blocks.{x}.att.time_mix_v"] - 1
-            w[f"blocks.{x}.att.time_mix_r"] = 1 / \
-                w[f"blocks.{x}.att.time_mix_r"] - 1
+            # w[f"blocks.{x}.att.time_mix_k"] = 1 / \
+            #     w[f"blocks.{x}.att.time_mix_k"] - 1
+            # w[f"blocks.{x}.att.time_mix_v"] = 1 / \
+            #     w[f"blocks.{x}.att.time_mix_v"] - 1
+            # w[f"blocks.{x}.att.time_mix_r"] = 1 / \
+            #     w[f"blocks.{x}.att.time_mix_r"] - 1
 
-            w[f"blocks.{x}.ffn.time_mix_k"] = 1 / \
-                w[f"blocks.{x}.ffn.time_mix_k"] - 1
-            w[f"blocks.{x}.ffn.time_mix_r"] = 1 / \
-                w[f"blocks.{x}.ffn.time_mix_r"] - 1
+            # w[f"blocks.{x}.ffn.time_mix_k"] = 1 / \
+            #     w[f"blocks.{x}.ffn.time_mix_k"] - 1
+            # w[f"blocks.{x}.ffn.time_mix_r"] = 1 / \
+            #     w[f"blocks.{x}.ffn.time_mix_r"] - 1
 
-    # garbage collect
+            # garbage collect
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -125,25 +125,24 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 print([xy.isnan().any(), xy.isinf().any()])
                 exit()
 
-            k = ops.exp(ops.matvec(self.key, (self.kktk*statea)))
-            kk = ops.exp(ops.exp((ops.log(self.key) + ops.log(xy)))).prod(1)
+            k = ops.exp(ops.matvec(
+                self.key, ops.lerp(xy, statea, 1-self.kktk)))
 
-            if (k.isnan().any() or k.isinf().any() or kk.isnan().any() or kk.isinf().any()):
+            if (k.isnan().any() or k.isinf().any()):
                 print("k is nan or inf")
-                print([k.isnan().any(), k.isinf().any(),
-                      kk.isnan().any(), kk.isinf().any()])
+                print([k.isnan().any(), k.isinf().any()])
                 exit()
 
-            v = ops.matvec(self.value, (xy+self.vvtv*statea))
+            v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
 
             td = self.time_decay
             tf = ops.exp(self.time_first)
 
-            w = stateb + k * v * tf * kk
-            d = statec + k * tf * kk
+            w = stateb + k * v * tf
+            d = statec + k * tf
 
             r = ops.exp(ops.matvec(
-                self.receptance, (xy+self.rrtr*statea))) + 1
+                self.receptance, ops.lerp(xy, statea, 1-self.rrtr))) + 1
 
             wrd = (w/(r*d))
 
@@ -161,16 +160,16 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             sxx = x + mvv
 
             aaa = xy
-            bbb = stateb * td + k * v * kk
-            ccc = statec * td + k * kk
+            bbb = stateb * td + k * v
+            ccc = statec * td + k
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
-            km = ops.relu(ops.matvec(self.key_ffn, (ddd +
-                                                    self.time_mix_k_ffn * stated)))
+            km = ops.relu(ops.matvec(self.key_ffn, ops.lerp(
+                ddd, stated, 1-self.time_mix_k_ffn)))
 
-            rt = ops.exp(ops.matvec(self.receptance_ffn,
-                                    (ddd + self.time_mix_r_ffn * stated))) + 1
+            rt = ops.exp(ops.matvec(self.receptance_ffn, ops.lerp(
+                ddd, stated, 1-self.time_mix_r_ffn))) + 1
 
             x = sxx + ops.matvec(self.value_ffn, km*km)/rt
 
