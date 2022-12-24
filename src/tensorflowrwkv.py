@@ -32,7 +32,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             if '.time_decay' in x:
                 w[x] = w[x].float()
-                w[x] = 1/(1+torch.exp(w[x]))
+                w[x] = 1/(1+torch.exp(w[x])+0.0001)
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
