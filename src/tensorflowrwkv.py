@@ -168,7 +168,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             d[d == 0] = 0.001  # avoid nan
 
-            mvv = ops.matvec(self.outputvv*r, w/d)
+            mvv = ops.matvec(self.outputvv, r*w/d)
 
             isnan = torch.isnan(mvv).any()
             if isnan:
