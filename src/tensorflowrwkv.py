@@ -131,7 +131,17 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             r = ops.exp(ops.matvec(
                 self.receptance, (xy+self.rrtr*statea))) + 1
 
-            mvv = ops.matvec(self.outputvv, (w/(r*d)))
+            wrd = (w/(r*d))
+
+            if (wrd.isnan().any()):
+                print("wrd is nan")
+                exit()
+
+            mvv = ops.matvec(self.outputvv, wrd)
+
+            if (mvv.isnan().any()):
+                print("mvv is nan")
+                exit()
 
             sxx = x + mvv
 

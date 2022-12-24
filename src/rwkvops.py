@@ -265,12 +265,16 @@ class RWKVPTCompatOps(RWKVPTOps):
 class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
+        try:
+            matvecscale = int(input("Matvec scale(1): "))
+        except:
+            matvecscale = 1
 
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else torch.float32, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
         self.matvec = lambda x, y: x.to(dtype=torch.float32).mv(
-            y)
+            y/matvecscale).to(dtype=torch.float32)*matvecscale
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
