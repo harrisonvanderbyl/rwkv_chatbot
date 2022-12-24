@@ -119,6 +119,11 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         @ ops.layerdef
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
+            print("lcheck")
+            if (xy.isnan().any() or xy.isinf().any()):
+                print("xy is nan or inf")
+                print([xy.isnan().any(), xy.isinf().any()])
+                exit()
 
             k = ops.exp(ops.matvec(self.key, (self.kktk*statea)))
             kk = ops.exp(ops.matvec(self.key, (xy)))

@@ -243,7 +243,7 @@ class RWKVPTOps(RWKVOPS):
 
         def layernorm(x, w, b) -> torch.Tensor:
 
-            return torch.layer_norm(x, w.shape, w.to(x.dtype), b.to(x.dtype))
+            return torch.layer_norm(x, w.shape, w, b)
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=self.dtype)+0.01
@@ -273,13 +273,13 @@ class RWKVCudaOps(RWKVPTOps):
             x.shape) == 2 else torch.float32, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
 
-        self.matvec = lambda x, y: x.to(torch.float64).mv(
-            y.to(torch.float64))
+        self.matvec = lambda x, y: x.to(torch.float32).mv(
+            y)
 
         self.log = lambda x: torch.log(x.to(torch.complex64))
-        self.exp = lambda x: torch.exp(x).to(torch.float64)
+        self.exp = lambda x: torch.exp(x).to(torch.float32)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float64, device="cuda")+0.01
+            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVPTOps):
