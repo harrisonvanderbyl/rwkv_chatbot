@@ -32,7 +32,10 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             if '.time_decay' in x:
                 w[x] = w[x].double()
-                w[x] = (-torch.exp(w[x]))
+
+                w[x] = torch.exp(-torch.exp(w[x]))
+                print(w[x].max(), w[x].min())
+                w[x] = w[x].clamp(0, 1)
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -117,26 +120,24 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
-            k = ops.matvec(self.key, (xy+self.kktk*statea))
+            k = ops.exp(ops.matvec(self.key, (xy+self.kktk*statea)))
 
-            v = ops.log(ops.matvec(self.value, (xy+self.vvtv*statea)))
+            v = ops.matvec(self.value, (xy+self.vvtv*statea))
 
             td = self.time_decay
-            tf = self.time_first
+            tf = ops.exp(self.time_first)
 
-            r = ops.matvec(
-                self.receptance, (xy+self.rrtr*statea))
+            w = stateb + k * v * tf
+            d = statec + k * tf
 
-            w = ops.exp(stateb) + ops.exp(k+tf+v)
-            d = ops.exp(statec+r) + ops.exp(statec) + \
-                ops.exp(r + k + tf) + ops.exp(k + tf)
+            r = ops.exp(ops.matvec(
+                self.receptance, (xy+self.rrtr*statea))) + 1
 
-            wrd = (w/(d + 0.001))
+            wrd = (w/(r*d))
 
             if (wrd.isnan().any()):
                 print("wrd is nan")
-                print([w.isnan().any(), r.isnan().any(), d.isnan().any(),
-                      w.isinf().any(), r.isinf().any(), d.isinf().any()])
+                print([w.isnan().any(), r.isnan().any(), d.isnan().any()])
                 exit()
 
             mvv = ops.matvec(self.outputvv, wrd)
@@ -148,8 +149,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             sxx = x + mvv
 
             aaa = xy
-            bbb = ops.log(ops.exp(stateb + td) + ops.exp(k + v))
-            ccc = ops.log(ops.exp(statec + td) + ops.exp(k))
+            bbb = stateb * td + k * v
+            ccc = statec * td + k
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
