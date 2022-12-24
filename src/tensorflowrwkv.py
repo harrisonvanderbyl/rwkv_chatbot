@@ -118,34 +118,105 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
+            isnan = torch.isnan(xy).any()
+            if isnan:
+                print("xy is nan")
+                exit()
+
             k = ops.exp(ops.matvec(self.key, (xy+self.kktk*statea)))
 
+            isnan = torch.isnan(k).any()
+            if isnan:
+                print("k is nan")
+                exit()
+
             v = ops.matvec(self.value, (xy+self.vvtv*statea))
+
+            isnan = torch.isnan(v).any()
+            if isnan:
+                print("v is nan")
+                exit()
 
             r = ops.exp(ops.matvec(
                 self.receptance, (xy+self.rrtr*statea)))
 
-            td = (self.time_decay)
+            isnan = torch.isnan(r).any()
+            if isnan:
+                print("r is nan")
+                exit()
+
+            td = self.time_decay
             tf = ops.exp(self.time_first)
+
+            isnan = torch.isnan(tf).any()
+            if isnan:
+                print("tf is nan")
+                exit()
 
             w = stateb + k * v * tf
             d = statec + k * tf
 
+            isnan = torch.isnan(w).any()
+            if isnan:
+                print("w is nan")
+                exit()
+
+            isnan = torch.isnan(d).any()
+            if isnan:
+                print("d is nan")
+                exit()
+
             mvv = ops.matvec(self.outputvv, w/(r*d + d + 0.001))
+
+            isnan = torch.isnan(mvv).any()
+            if isnan:
+                print("mvv is nan")
+                exit()
             sxx = x + mvv
 
             aaa = xy
             bbb = stateb * td + k * v
             ccc = statec * td + k
+
+            isnan = torch.isnan(bbb).any()
+            if isnan:
+                print("bbb is nan")
+                exit()
+
+            isnan = torch.isnan(ccc).any()
+            if isnan:
+                print("ccc is nan")
+                exit()
+
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
+
+            isnan = torch.isnan(ddd).any()
+            if isnan:
+                print("ddd is nan")
+                exit()
 
             km = ops.relu(ops.matvec(self.key_ffn, (ddd +
                                                     self.time_mix_k_ffn * stated)))
 
+            isnan = torch.isnan(km).any()
+            if isnan:
+                print("km is nan")
+                exit()
+
             rt = ops.exp(ops.matvec(self.receptance_ffn,
                                     (ddd + self.time_mix_r_ffn * stated))) + 1
 
+            isnan = torch.isnan(rt).any()
+            if isnan:
+                print("rt is nan")
+                exit()
+
             x = sxx + ops.matvec(self.value_ffn, km*km)/rt
+
+            isnan = torch.isnan(x).any()
+            if isnan:
+                print("x is nan")
+                exit()
 
             return x, aaa, bbb, ccc, ddd
 
