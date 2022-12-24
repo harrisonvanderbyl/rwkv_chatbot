@@ -137,8 +137,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 print("v is nan")
                 exit()
 
-            r = ops.exp(ops.matvec(
-                self.receptance, (xy+self.rrtr*statea)))
+            r = 1/(ops.exp(ops.matvec(
+                self.receptance, (xy+self.rrtr*statea))) + 1)
 
             isnan = torch.isnan(r).any()
             if isnan:
@@ -154,7 +154,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 exit()
 
             w = stateb + k * v * tf
-            d = statec + k * tf
+            d = (statec + k * tf)
 
             isnan = torch.isnan(w).any()
             if isnan:
@@ -166,7 +166,9 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 print("d is nan")
                 exit()
 
-            mvv = ops.matvec(self.outputvv, w/(r*d + d + 0.001))
+            d[d == 0] = 0.001  # avoid nan
+
+            mvv = ops.matvec(self.outputvv*r, w/d)
 
             isnan = torch.isnan(mvv).any()
             if isnan:
