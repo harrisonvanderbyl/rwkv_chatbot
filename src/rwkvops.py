@@ -297,6 +297,48 @@ class RWKVCudaOps(RWKVPTOps):
             4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
+class RWKVCudaQuantOps(RWKVPTOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, torch.bfloat16)
+
+        runtimedtype = torch.bfloat16
+
+        def initTensor(x):
+            if (len(x.shape) != 2):
+                return x.to(dtype=runtimedtype, device='cuda')
+
+            maxi, mini = x.max(), x.min()
+            # quantize to int8
+            x = (x-mini)/(maxi-mini)
+            x = x*127
+            x = x.to(dtype=torch.int8, device='cuda')
+            return x, maxi, mini
+
+        self.initTensor = initTensor
+        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+
+        def matvec(x, y):
+            # unquantize
+            x, maxi, mini = x
+            return ((x.to(dtype=runtimedtype, device='cuda')/127)*(maxi-mini)+mini).mv(y)
+
+        self.matvec = matvec
+
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+
+        self.log = lambda x: torch.log(x)
+        self.exp = lambda x: torch.exp(x)
+        self.emptyState = torch.zeros(
+            4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
+
+
 class RWKVExportOnnxOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
@@ -600,6 +642,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "numpy": RWKVNumpyOps,
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
+    "pytorch-cuda-false-quant": RWKVCudaQuantOps,
     "pytorch-stream": RWKVStreamOps,
     "pytorch-stream-target": RWKVStreamBigOps,
     "pytorch-p2p": RWKVP2POps,

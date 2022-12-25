@@ -140,7 +140,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             wrd = (w/d)
 
-            mvv = ops.matvec(self.outputvv*r, wrd)
+            mvv = ops.matvec(self.outputvv, r*wrd)
 
             sxx = x + mvv
 
