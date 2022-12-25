@@ -120,31 +120,14 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def forward(self, x, statea, stateb, statec, stated):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
-            dolog = lambda *x: None
-            # dolog = print
-
-            dolog("xy", xy.isinf().any())
-
             kk = ops.matvec(
                 self.key, ops.lerp(xy, statea, 1-self.kktk))
 
             kk = kk.minimum(torch.ones_like(kk)*18)
 
-            dolog("kk", kk.isinf().any())
-
             k = ops.exp(kk)
 
-            dolog("k", k.isinf().any())
-
-            # get how many infs
-            dolog(torch.sum(torch.isinf(k).to(torch.float32)))
-            # get range
-            dolog(torch.min(k), torch.max(k))
-            dolog(torch.min(kk), torch.max(kk))
-
             v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
-
-            dolog("v", v.isinf().any())
 
             td = self.time_decay
             tf = ops.exp(self.time_first)
@@ -152,55 +135,30 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             w = stateb + (k*tf) * v
             d = statec + (k*tf)
 
-            dolog("w", w.isinf().any())
-            dolog("d", d.isinf().any())
-
             r = 1/(ops.exp(ops.matvec(
                 self.receptance, ops.lerp(xy, statea, 1-self.rrtr))) + 1)
 
-            dolog("r", r.isinf().any())
-
             wrd = (w/d)
-
-            dolog("wrd", wrd.isinf().any())
 
             mvv = ops.matvec(self.outputvv*r, wrd)
 
-            dolog("mvv", mvv.isinf().any())
-
             sxx = x + mvv
-
-            dolog("sxx", sxx.isinf().any())
 
             aaa = xy
 
-            dolog("aaa", aaa.isinf().any())
-
             bbb = stateb * td + k * v
-
-            dolog("bbb", bbb.isinf().any())
 
             ccc = statec * td + k
 
-            dolog("ccc", ccc.isinf().any())
-
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
-
-            dolog("ddd", ddd.isinf().any())
 
             km = ops.relu(ops.matvec(self.key_ffn, ops.lerp(
                 ddd, stated, 1-self.time_mix_k_ffn)))
 
-            dolog("KM", km.isinf().any())
-
             rt = ops.exp(ops.matvec(self.receptance_ffn, ops.lerp(
                 ddd, stated, 1-self.time_mix_r_ffn))) + 1
 
-            dolog("rt", rt.isinf().any())
-
             x = sxx + ops.matvec(self.value_ffn, km*km)/rt
-
-            dolog("X", x.isinf().any())
 
             return x, aaa, bbb, ccc, ddd
 
