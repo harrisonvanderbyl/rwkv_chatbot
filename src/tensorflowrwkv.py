@@ -148,7 +148,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             if (wrd.isnan().any()):
                 print("wrd is nan")
-                print([w.isnan().any(), r.isnan().any(), d.isnan().any()])
+                print([w.isnan().any(), r.isnan().any(), d.isnan().any(),
+                      w.isinf().any(), r.isinf().any(), d.isinf().any()])
                 exit()
 
             mvv = ops.matvec(self.outputvv, wrd)
