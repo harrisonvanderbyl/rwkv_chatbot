@@ -29,6 +29,7 @@ class RWKVOPS():
         self.matvec: notimplemented
         self.layernorm: notimplemented
         self.lerp: notimplemented
+        self.max: notimplemented
        # module def
         self.module: notimplemented
         self.log: notimplemented
@@ -57,18 +58,19 @@ class RWKVTFOps(RWKVOPS):
         self.lerp = tf.math.lerp
        # module def
         self.module = tf.Module
+        self.max = tf.maximum
 
        # tensorflow function defs
         self.initfunc = lambda x: x
         self.layerdef = tf.function(
             input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)])
         self.mainfunc = tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(
-            shape=[4*layers, embed], dtype=tf.float32)])
+            shape=[5*layers, embed], dtype=tf.float32)])
         self.prefunc = tf.function(
             input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)])
         self.postfunc = tf.function(
             input_signature=[tf.TensorSpec(shape=[embed], dtype=tf.float32)])
-        self.emptyState = tf.zeros([4*layers, embed], dtype=tf.float32)+0.01
+        self.emptyState = tf.zeros([5*layers, embed], dtype=tf.float32)+0.01
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
@@ -191,6 +193,7 @@ class RWKVNumpyOps(RWKVOPS):
         # module def
         self.module = object
         self.log = np.log
+        self.max = np.maximum
 
         # pytorch function defs
         self.initfunc = lambda x: x
@@ -206,7 +209,7 @@ class RWKVNumpyOps(RWKVOPS):
 
             return w*(xee2/x2) + b
         self.layernorm = ln
-        self.emptyState = [[0.01]*embed]*4*layers
+        self.emptyState = [[0.01]*embed]*5*layers
 
 
 class RWKVPTOps(RWKVOPS):
@@ -231,6 +234,7 @@ class RWKVPTOps(RWKVOPS):
         self.matvec = torch.mv
         self.log = torch.log
         self.lerp = torch.lerp
+        self.max = torch.maximum
 
         # module def
         self.module = torch.nn.Module
@@ -247,7 +251,7 @@ class RWKVPTOps(RWKVOPS):
             return torch.layer_norm(x, w.shape, w, b)
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype)+0.01
+            5*layers, embed, dtype=self.dtype)+0.01
 
 
 class RWKVPTCompatOps(RWKVPTOps):
@@ -280,7 +284,7 @@ class RWKVCudaOps(RWKVPTOps):
         self.log = lambda x: torch.log(x.to(torch.complex64))
         self.exp = lambda x: torch.exp(x).to(torch.float32)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
+            5*layers, embed, dtype=torch.float32, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVPTOps):
@@ -482,7 +486,7 @@ class RWKVStreamOps(RWKVPTOps):
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype, device="cuda")+0.01
+            5*layers, embed, dtype=self.dtype, device="cuda")+0.01
 
 
 class RWKVStreamBigOps(RWKVPTOps):
@@ -517,7 +521,7 @@ class RWKVStreamBigOps(RWKVPTOps):
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.matvec = lambda z, y: z.mv(y.to(storageDtype)).to(processDtype)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=processDtype, device="cuda")+0.01
+            5*layers, embed, dtype=processDtype, device="cuda")+0.01
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)

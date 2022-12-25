@@ -33,9 +33,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             if '.time_decay' in x:
                 w[x] = w[x].double()
 
-                w[x] = torch.exp(-torch.exp(w[x]))
-                print(w[x].max(), w[x].min())
-                w[x] = w[x].clamp(0.01, 0.99)
+                w[x] = -torch.exp(w[x])
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -117,53 +115,43 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             self.value_ffn = ops.initTensor(w[f"blocks.{x}.ffn.value.weight"])
 
         @ ops.layerdef
-        def forward(self, x, statea, stateb, statec, stated):
+        def forward(self, x, statea, stateb, statec, stated, statee):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
-            if (xy.isnan().any() or xy.isinf().any()):
-                print("xy is nan or inf")
-                print([xy.isnan().any(), xy.isinf().any()])
-                exit()
+            k = ops.matvec(
+                self.key, ops.lerp(xy, statea, 1-self.kktk))
 
-            k = ops.exp(ops.matvec(
-                self.key, ops.lerp(xy, statea, 1-self.kktk)))
-
-            if (k.isnan().any() or k.isinf().any()):
-                print("k is nan or inf")
-                print([k.isnan().any(), k.isinf().any()])
-                exit()
+            r = 1/(1+ops.exp(ops.matvec(
+                self.receptance, ops.lerp(xy, statea, 1-self.rrtr))))
 
             v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
 
             td = self.time_decay
-            tf = ops.exp(self.time_first)
+            tf = self.time_first
 
-            w = stateb + k * v * tf
-            d = statec + k * tf
+            ww = tf + k
+            p = ops.max(statee, ww)
 
-            r = ops.exp(ops.matvec(
-                self.receptance, ops.lerp(xy, statea, 1-self.rrtr))) + 1
+            e1 = ops.exp(statee - p)
+            e2 = ops.exp(ww - statee)
 
-            wrd = (w/(r*d))
+            a = e1 * stateb + e2 * v
+            b = e1 * statec + e2
 
-            if (wrd.isnan().any()):
-                print("wrd is nan")
-                print([w.isnan().any(), r.isnan().any(), d.isnan().any()])
-                exit()
+            ww = statee + td
+            p = ops.max(ww, k)
+            e1 = ops.exp(ww-p)
+            e2 = ops.exp(k-p)
 
-            mvv = ops.matvec(self.outputvv, wrd)
-
-            if (mvv.isnan().any()):
-                print("mvv is nan")
-                exit()
+            mvv = ops.matvec(self.outputvv, r*a/b)
 
             sxx = x + mvv
 
             aaa = xy
-            bbb = stateb * td + k * v
-            ccc = statec * td + k
-
+            bbb = e1 * stateb + e2 * v
+            ccc = e1 * statec + e2
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
+            eee = p
 
             km = ops.relu(ops.matvec(self.key_ffn, ops.lerp(
                 ddd, stated, 1-self.time_mix_k_ffn)))
@@ -173,7 +161,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             x = sxx + ops.matvec(self.value_ffn, km*km)/rt
 
-            return x, aaa, bbb, ccc, ddd
+            return x, aaa, bbb, ccc, ddd, eee
 
     class RWKVTFPre(ops.module):
         def __init__(self):
@@ -214,19 +202,20 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             x = self.preprocess.forward(x)
 
-            statea = state[0::4]
-            stateb = state[1::4]
-            statec = state[2::4]
-            stated = state[3::4]
+            statea = state[0::5]
+            stateb = state[1::5]
+            statec = state[2::5]
+            stated = state[3::5]
+            statee = state[4::5]
 
             ot = []
 
             # print("start", len(self.mylayers))
 
             for i, l in list(enumerate(self.mylayers)):
-                x, aaa, bbb, ccc, ddd = l.forward(
-                    x, statea[i], stateb[i], statec[i], stated[i])
-                ot = ot + [aaa, bbb, ccc, ddd]
+                x, aaa, bbb, ccc, ddd, eee = l.forward(
+                    x, statea[i], stateb[i], statec[i], stated[i], statee[i])
+                ot = ot + [aaa, bbb, ccc, ddd, eee]
 
             x = self.postprocess.forward(x)
             # print(len(ot))
