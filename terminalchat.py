@@ -2,12 +2,18 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+import numpy as np
+import src.model_run_onnx as mro
+import inquirer
 import loadModelForOnnx
 import os
 import sys
 import time
 import gc
+from scipy.special import softmax
+
 import torch
+from src.rwkvops import RwkvOpList
 from src.utils import TOKENIZER
 from tqdm import tqdm
 try:
@@ -58,8 +64,25 @@ top_p_newline = 0.9  # only used in TOKEN_MODE = char
 DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
+files = os.listdir()
+# filter by ending in .pth
+files = [f for f in files if f.endswith(".pth")]
 
-model = loadModelForOnnx.loadModelCompat()
+questions = [
+    inquirer.List('file',
+                  message="What model do you want to use?",
+                  choices=files,
+                  ),
+    inquirer.List(
+        'method',
+        message="What inference method?",
+        choices=RwkvOpList.keys()
+    )
+
+]
+q = inquirer.prompt(questions)
+model, emptyState = mro.createRWKVModel(
+    q["file"], mode=q["method"])
 
 
 print(f'\nOptimizing speed...')
@@ -113,20 +136,48 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 
 # init empty save state and question context
 model_tokens = tokenizer.tokenizer.encode(context)
+
+
+def loadContext(ctx: list[int], statex, newctx: list[int]):
+    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    with torch.jit.optimized_execution(True):
+        for i in tqdm(range(len(newctx))):
+
+            x = ctx+newctx[:i+1]
+
+            o = model.forward(x[:1], statex)
+            statex = o[1]
+            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    return ctx+newctx, o[1]
+
+
 print(tokenizer.tokenizer.encode("\n\n"))
 #  see if save_state file exists
-if os.path.isfile(f"save_state.pt"):
-    print("Loading save state...")
-    savestates = torch.load(
-        f"save_state.pt", map_location=torch.device(model.emptyState.device))
-    state = savestates["init"]
 
-else:
-    state = model.loadContext(newctx=model_tokens)
-    savestates = {
-        "init": (state[0], state[1].clone())
-    }
-    torch.save(savestates, f"save_state.pt")
+state = loadContext(newctx=model_tokens, ctx=[], statex=emptyState)
+
+
+def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+    ozut = ozut.numpy()
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # turn to float if is half and cpu
+    probs = softmax(ozut, axis=-1)
+
+    sorted_probs = np.sort(probs)[::-1]
+    cumulative_probs = np.cumsum(sorted_probs)
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = probs.pow(1.0 / temp)
+    probs = probs / np.sum(probs, axis=0)
+    mout = np.random.choice(a=len(probs), p=probs)
+
+    return mout
+
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     print("--")
@@ -145,10 +196,8 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         state = (savestates[inp[5:]][0], savestates[inp[5:]][1].clone())
 
         continue
-    state = model.loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
-        f"\n\nUser: {inp}\n\nRWKV:"), silent=True)
-
-    state = [{"score": 1, "state": state[1], "ctx": state[0]}]
+    state = loadContext(ctx=state[0], statex=state[1], newctx=tokenizer.tokenizer.encode(
+        f"\n\nUser: {inp}\n\nRWKV:"))
 
     if TRIAL == 0:
 
@@ -157,11 +206,13 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
     with torch.no_grad():
         for i in range(100):
-
-            state = model.run(
-                state, temp=TEMPERATURE, top_p=top_p)
-            outchar = tokenizer.tokenizer.decode(state[0]["ctx"][-1])
+            ctx = state[0]
+            state = model.forward(
+                *state)
+            mn = sample_logits(state[0], temp=1.0, top_p_usual=0.8)
+            outchar = tokenizer.tokenizer.decode(mn)
+            state = (ctx + [mn], state[1])
             if (outchar == "\n" or outchar == "\n\n"):
                 break
             print(outchar, end="")
-    state = (state[0]["ctx"], state[0]["state"])
+    state = state
