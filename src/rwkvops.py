@@ -270,17 +270,31 @@ class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
 
+        runtimedtype = inquirer.prompt([inquirer.List(
+            'type',
+            message="Dtype for operations:",
+            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
+
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
-            x.shape) == 2 else torch.float32, device='cuda')
+            x.shape) == 2 else runtimedtype, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
 
-        self.matvec = lambda x, y: x.to(torch.float32).mv(
+        self.matvec = lambda x, y: x.to(runtimedtype).mv(
             y)
 
-        self.log = lambda x: torch.log(x.to(torch.complex64))
-        self.exp = lambda x: torch.exp(x).to(torch.float32)
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+
+        self.log = lambda x: torch.log(x)
+        self.exp = lambda x: torch.exp(x)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=torch.float32, device="cuda")+0.01
+            4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVPTOps):
