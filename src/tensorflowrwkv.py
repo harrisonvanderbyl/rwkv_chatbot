@@ -33,8 +33,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             if '.time_decay' in x:
                 w[x] = w[x].double()
 
-                # w[x] = torch.exp(-torch.exp(w[x]))
-                w[x] = 1/(1+torch.exp(1.4*w[x]))
+                w[x] = torch.exp(-torch.exp(w[x]))
+                # w[x] = 1/(1+torch.exp(1.4*w[x]))
 
                 # print(w[x].max(), w[x].min())
                 # w[x] = w[x].clamp(0.01, 0.99)
