@@ -121,11 +121,14 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             xy = ops.layernorm(x, self.ln1w, self.ln1b)
 
             dolog = lambda *x: None
+            # dolog = print
 
             dolog("xy", xy.isinf().any())
 
             kk = ops.matvec(
-                self.key, ops.lerp(xy, statea, 1-self.kktk))-10
+                self.key, ops.lerp(xy, statea, 1-self.kktk))
+
+            kk = kk.minimum(torch.ones_like(kk)*18)
 
             dolog("kk", kk.isinf().any())
 
@@ -146,8 +149,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             td = self.time_decay
             tf = ops.exp(self.time_first)
 
-            w = stateb + (k*tf) * v*22000
-            d = statec + (k*tf)*22000
+            w = stateb + (k*tf) * v
+            d = statec + (k*tf)
 
             dolog("w", w.isinf().any())
             dolog("d", d.isinf().any())
@@ -173,11 +176,11 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             dolog("aaa", aaa.isinf().any())
 
-            bbb = stateb * td + k * v*22000
+            bbb = stateb * td + k * v
 
             dolog("bbb", bbb.isinf().any())
 
-            ccc = statec * td + k*22000
+            ccc = statec * td + k
 
             dolog("ccc", ccc.isinf().any())
 
