@@ -30,8 +30,8 @@ function App() {
   const [messages, setMessages] = useState(mess);
   const [state, setState] = useState<RwkvState>(undefined);
   const [currentMessage, setCurrentMessage] = useState("");
-
-  const [server, setServer] = useState("http://localhost:3001/");
+  // set state to current address
+  const [server, setServer] = useState(document.location.href);
 
   const getMessage = async (message: string, state: RwkvState) => {
     // do a fetch to the server

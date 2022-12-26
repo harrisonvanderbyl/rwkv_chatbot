@@ -193,6 +193,22 @@ class S(http.server.SimpleHTTPRequestHandler):
                          "X-Requested-With, Content-Type")
         self.end_headers()
 
+    def do_GET(self) -> None:
+        self.send_response(200)
+        if "css" in self.path:
+            self.send_header('Content-type', 'text/css')
+        elif "js" in self.path:
+            self.send_header('Content-type', 'text/javascript')
+        else:
+            self.send_header('Content-type', 'text/html')
+
+        self.end_headers()
+        if (self.path == "/"):
+            self.path = "/index.html"
+        # self._set_response()
+        self.wfile.write(
+            open("/".join(__file__.split("/")[:-1])+"/web-interface/build/"+self.path, "rb").read())
+
     def do_POST(self):
         self.send_response(200)
 
