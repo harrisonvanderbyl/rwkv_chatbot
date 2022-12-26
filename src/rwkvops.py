@@ -1,11 +1,9 @@
-from jax import numpy as npjax
-from jax import jit
-import time
+
 from urllib import request
 import inquirer
 import numpy as np
 import os
-import tensorflow as tf
+
 import torch
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -48,6 +46,7 @@ class RWKVOPS():
 
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
+        import tensorflow as tf
         super(RWKVTFOps, self).__init__(layers, embed)
         self.initTensor = lambda x: tf.convert_to_tensor(
             x.float().cpu().numpy())
@@ -91,6 +90,7 @@ class RWKVTFOps(RWKVOPS):
 class RWKVTFExport(RWKVTFOps):
     def __init__(self, layers, embed):
         super(RWKVTFExport, self).__init__(layers, embed)
+        import tensorflow as tf
         path = f"tfdist/rwkv-{layers}-{embed}/"
 
         def save(x):
@@ -221,6 +221,7 @@ class RWKVNumpyOps(RWKVOPS):
 
 class RWKVJaxOps(RWKVOPS):
     def __init__(self, layers, embed):
+        from jax import numpy as npjax
         super().__init__(layers, embed)
         self.initTensor = lambda x: npjax.array(x.float().cpu().numpy())
         self.sqrt = lambda x: npjax.sqrt(x)
