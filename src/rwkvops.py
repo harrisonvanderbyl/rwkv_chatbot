@@ -596,6 +596,48 @@ class RWKVStreamBigOps(RWKVPTOps):
         self.layernorm = ln
 
 
+class RWKVSplitCudaOps(RWKVPTOps):
+    def __init__(self, layers, embed, processDtype=torch.bfloat16, storageDtype=torch.bfloat16, target=None):
+        super().__init__(layers, embed, dtype=storageDtype)
+
+        target = target if target is not None else float(
+            input("Designate the max amount of mem to assign to gpu 0 (in GB):"))
+        self.initTensor = lambda x: x
+
+        # for everything in self, if its a tensor, send to cuda
+        self.matvec = torch.mv
+        self.emptyState = torch.zeros(
+            4*layers, embed, dtype=processDtype, device="cuda")+0.01
+
+        def sendToCuda(self, args, x):
+            # create a new modifiable empty object
+            hasbeendone = False
+            try:
+                r = self.sendToNext
+                hasbeendone = True
+            except:
+                self.sendToNext = torch.cuda.max_memory_reserved(
+                    0)/1024/1024/1024 > target
+                r = self.sendToNext
+
+            if not hasbeendone:
+
+                for k, v in self.__dict__.items():
+                    if isinstance(v, torch.Tensor):
+                        if r:
+                            self.__dict__[k] = v.to(device="cuda:1")
+                        else:
+                            self.__dict__[k] = v.to(device="cuda:0")
+            args = [mm.to(device="cuda:1" if r else "cuda:0") if isinstance(
+                mm, torch.Tensor) else mm for mm in args]
+
+            ret = x(self, *args)
+
+            return ret
+
+        self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
+
+
 class RWKVMobileOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
@@ -658,7 +700,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "pytorch-stream-target": RWKVStreamBigOps,
     "pytorch-p2p": RWKVP2POps,
     "pytorch-p2p-target": RWKVP2PServerOps,
-
+    "pytorch-splitcuda": RWKVSplitCudaOps,
     "export-pytorch-mobile": RWKVMobileOps,
     "export-onnx": RWKVExportOnnxOps,
     "export-tensorflow": RWKVTFExport,
