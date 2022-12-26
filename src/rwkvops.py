@@ -641,7 +641,7 @@ class RWKVSplitCudaOps(RWKVPTOps):
         self.postfunc = lambda x: lambda self, * \
             args: sendToCuda(self, args, x).float().cpu()
 
-        self.layernorm = lambda x, w, b: torch.layernorm(
+        self.layernorm = lambda x, w, b: torch.layer_norm(
             x.to(device=w.device), w.shape, w, b)
 
 
