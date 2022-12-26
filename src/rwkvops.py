@@ -297,6 +297,16 @@ class RWKVPTOps(RWKVOPS):
             4*layers, embed, dtype=self.dtype)+0.01
 
 
+class RWKVPoptorchOps(RWKVPTOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+        try:
+            import poptorch
+        except:
+            raise ImportError("poptorch not installed")
+        self.postProcessModule = poptorch.inferenceModel
+
+
 class RWKVPTCompatOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
@@ -743,6 +753,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "pytorch": RWKVPTOps,
     "numpy": RWKVNumpyOps,
     "jax": RWKVJaxOps,
+    "poptorch": RWKVPoptorchOps,
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
     "pytorch-cuda-false-quant": RWKVCudaQuantOps,
@@ -754,4 +765,5 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-pytorch-mobile": RWKVMobileOps,
     "export-onnx": RWKVExportOnnxOps,
     "export-tensorflow": RWKVTFExport,
+
 }
