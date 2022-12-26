@@ -33,6 +33,30 @@ function App() {
   // set state to current address
   const [server, setServer] = useState(document.location.href);
 
+  const exportData = () => {
+    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
+      JSON.stringify({ messages: messages, state: state })
+    )}`;
+    const link = document.createElement("a");
+    link.href = jsonString;
+    link.download = "data.json";
+
+    link.click();
+  };
+
+  const loadData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = JSON.parse(e.target?.result as string);
+        setMessages(data.messages);
+        setState(data.state);
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const getMessage = async (message: string, state: RwkvState) => {
     // do a fetch to the server
     const data = await fetch(server, {
@@ -96,6 +120,19 @@ function App() {
           }}
         />
         <h1>Chat-RWKV</h1>
+        <Button variant="outlined" onClick={exportData}>
+          Save
+        </Button>
+        <input type="file" id="convload" hidden onChange={loadData} />
+        <Button
+          variant="outlined"
+          onClick={() => {
+            document.getElementById("convload")?.click();
+          }}
+        >
+          Load
+        </Button>
+
         <div className="message-box">
           {messages
             .map((message, index) => (
