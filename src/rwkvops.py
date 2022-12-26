@@ -609,7 +609,7 @@ class RWKVSplitCudaOps(RWKVPTOps):
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
-        self.minimum = lambda x, y: torch.min(x, x.ones_like()*18)
+        self.minimum = lambda x, y: torch.min(x, torch.ones_like(x)*18)
 
         def sendToCuda(self, args, x):
             # create a new modifiable empty object
