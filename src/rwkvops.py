@@ -231,7 +231,7 @@ class RWKVPTOps(RWKVOPS):
         self.dtype = dtype
 
         self.initTensor = lambda x: x.to(dtype=self.dtype)
-        self.klimit = torch.tensor([18] * embed)
+        self.klimit = torch.tensor([18] * embed).to(dtype=self.dtype)
         self.minimum = torch.minimum
         self.sqrt = torch.sqrt
         self.mean = torch.mean
@@ -288,6 +288,7 @@ class RWKVCudaOps(RWKVPTOps):
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else runtimedtype, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+        self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
         self.matvec = lambda x, y: x.to(runtimedtype).mv(
             y)

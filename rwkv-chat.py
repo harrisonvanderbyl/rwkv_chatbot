@@ -23,6 +23,13 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import src.model_run_onnx as mro
 from sty import Style, RgbFg, fg
 
+# build website using yarn
+# yarn build
+os.chdir("web-interface")
+os.system("yarn")
+os.system("yarn build")
+os.chdir("..")
+
 fg.orange = Style(RgbFg(255, 150, 50))
 
 # context = 'A'
