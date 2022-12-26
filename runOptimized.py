@@ -157,7 +157,10 @@ origistate = (tokens[0], tokens[1])
 
 
 def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    ozut = ozut.numpy()
+    try:
+        ozut = ozut.numpy()
+    except:
+        pass
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
