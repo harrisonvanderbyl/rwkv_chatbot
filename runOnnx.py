@@ -76,7 +76,7 @@ pre = ort.InferenceSession(
 post = ort.InferenceSession(
     f"{loadFile}/post.onnx", providers=providers, sess_options=so)
 layers = os.listdir(loadFile)
-layers = filter(lambda x: x[0:2].isdigit(), layers)
+layers = filter(lambda x: x[0:2].isdigit() or x[0:1].isdigit(), layers)
 layers = list(layers)
 layers.sort()
 print(layers)

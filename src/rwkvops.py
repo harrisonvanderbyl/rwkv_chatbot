@@ -32,6 +32,8 @@ class RWKVOPS():
        # module def
         self.module: notimplemented
         self.log: notimplemented
+        self.minimum: notimplemented
+        self.klimit: notimplemented
        # tensorflow function defs
         self.initfunc: notimplemented
         self.layerdef: notimplemented
@@ -50,11 +52,15 @@ class RWKVTFOps(RWKVOPS):
         self.sqrt = tf.sqrt
         self.mean = tf.reduce_mean
         self.relu = lambda x: tf.maximum(x, tf.zeros_like(x))
+        self.minimum = tf.minimum
         self.exp = tf.exp
         self.stack = tf.stack
         self.matvec = tf.linalg.matvec
+        self.klimit = tf.convert_to_tensor(
+            [18]*embed, dtype=tf.float32
+        )
         self.log = tf.math.log
-        self.lerp = tf.math.lerp
+        self.lerp = lambda x, y, z: x*(1-z)+y*z
        # module def
         self.module = tf.Module
 
@@ -187,7 +193,9 @@ class RWKVNumpyOps(RWKVOPS):
         self.exp = lambda x: np.exp(x)
         self.stack = lambda x: x
         self.matvec = np.matmul
-        self.lerp = lambda x, y, z: x*z + y*(1-z)
+        self.lerp = lambda x, y, z: x*(1-z) + y*(z)
+        self.minimum = lambda x, y: np.minimum(x, y)
+        self.klimit = [18] * embed
         # module def
         self.module = object
         self.log = np.log
@@ -223,6 +231,8 @@ class RWKVPTOps(RWKVOPS):
         self.dtype = dtype
 
         self.initTensor = lambda x: x.to(dtype=self.dtype)
+        self.klimit = torch.tensor([18] * embed)
+        self.minimum = torch.minimum
         self.sqrt = torch.sqrt
         self.mean = torch.mean
         self.relu = torch.relu

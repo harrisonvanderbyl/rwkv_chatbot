@@ -2,6 +2,7 @@ import socketserver
 import json
 import http.server
 from http import HTTPStatus
+import webbrowser
 import matplotlib.pyplot as plt
 import loadModelForOnnx
 import tqdm
@@ -274,4 +275,8 @@ class S(http.server.SimpleHTTPRequestHandler):
 
 
 httpd = socketserver.TCPServer(('', int(input("Port:"))), S)
+# open browser
+if (input("Open browser? (y/N)") == "y"):
+    webbrowser.open("http://localhost:"+str(httpd.server_address[1]))
+
 httpd.serve_forever()

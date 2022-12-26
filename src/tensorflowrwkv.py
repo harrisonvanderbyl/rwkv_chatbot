@@ -125,7 +125,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             kk = ops.matvec(
                 self.key, ops.lerp(xy, statea, 1-self.kktk))
 
-            kk = kk.minimum(torch.ones_like(kk)*18)
+            kk = ops.minimum(kk, ops.klimit)
 
             k = ops.exp(kk)
 
