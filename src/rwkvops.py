@@ -1,4 +1,5 @@
 from jax import numpy as npjax
+from jax import jit
 import time
 from urllib import request
 import inquirer
@@ -221,7 +222,7 @@ class RWKVNumpyOps(RWKVOPS):
 class RWKVJaxOps(RWKVOPS):
     def __init__(self, layers, embed):
         super().__init__(layers, embed)
-        self.initTensor = lambda x: x.float().cpu().numpy()
+        self.initTensor = lambda x: npjax.array(x.float().cpu().numpy())
         self.sqrt = lambda x: npjax.sqrt(x)
         self.mean = lambda x: npjax.mean(x)
         self.relu = lambda x: npjax.maximum(x, 0)
