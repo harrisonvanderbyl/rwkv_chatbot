@@ -266,7 +266,7 @@ class S(http.server.SimpleHTTPRequestHandler):
         # recursively convert state to number from tensor
         state = currentData[1]
         for i in range(len(state)):
-            state[i] = state[i].cpu().numpy().tolist()
+            state[i] = state[i].float().cpu().numpy().tolist()
 
         out["state"] = currentData[1]
 
