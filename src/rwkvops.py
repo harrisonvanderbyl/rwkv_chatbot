@@ -343,6 +343,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             return w*(xee2/x2) + b
 
         self.layernorm = ln
+        self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
         self.log = lambda x: torch.log(x)
         self.exp = lambda x: torch.exp(x)
