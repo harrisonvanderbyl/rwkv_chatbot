@@ -632,6 +632,8 @@ class RWKVSplitCudaOps(RWKVPTOps):
                             self.__dict__[k] = v.to(device="cuda:0")
             # args = [mm.to(device="cuda:1" if r else "cuda:0") if isinstance(
             #     mm, torch.Tensor) else mm for mm in args]
+            args = [mm.to(device="cuda:1" if r else "cuda:0") if isinstance(
+                mm, torch.Tensor) else mm for mm in args]
 
             ret = x(self, *args)
 
