@@ -171,7 +171,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
         @ ops.prefunc
         def forward(self, x):
-            return self.preprocess[x[0]]
+            return self.preprocess[x[-1]]
 
     class RWKVTFPost(ops.module):
         def __init__(self):
