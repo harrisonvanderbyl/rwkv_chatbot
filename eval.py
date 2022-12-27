@@ -17,6 +17,7 @@ import torch
 from torch.nn import functional as F
 
 from src.rwkvops import RwkvOpList
+from src.utils import TOKENIZER
 
 RWKV_PAD = [0]  # <|endoftext|>
 # RWKV_PAD = [187] # \n
@@ -51,13 +52,18 @@ class TokenizerWrapper:
 
 class EvalHarnessAdapter(GPT2LM):
     def __init__(self):
-        if TEST_MODEL == 'rwkv':
-            self.tokenizer = TokenizerWrapper(
-                tokenizers.Tokenizer.from_file('20B_tokenizer.json'))
-        elif TEST_MODEL == 'neo':
-            self.tokenizer = gpt.tokenizer
-        else:
-            self.tokenizer = gpt.tokenizer
+        TOKEN_MODE = "pile"
+        WORD_NAME = [
+            "20B_tokenizer.json",
+            "20B_tokenizer.json",
+        ]  # [vocab, vocab] for Pile model
+        UNKNOWN_CHAR = None
+        print(f'\nLoading tokenizer {WORD_NAME}...')
+        tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
+        assert tokenizer.tokenizer.decode([187]) == '\n'
+
+        self.tokenizer = TokenizerWrapper(
+            tokenizer=tokenizer.tokenizer)
 
     def greedy_until(self, requests):
         raise NotImplementedError()
