@@ -241,7 +241,8 @@ class RWKVJaxOps(RWKVOPS):
         self.initfunc = lambda x: x
         self.layerdef = lambda x: x
         self.mainfunc = lambda x: x
-        self.postfunc = lambda x: x
+        # in postfunc, convert to numpy
+        self.postfunc = lambda x: lambda self, y: np.array(x(self, y))
         self.prefunc = lambda x: x
 
         def ln(x, w, b):
@@ -250,6 +251,7 @@ class RWKVJaxOps(RWKVOPS):
             x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
 
             return w*(xee2/x2) + b
+
         self.layernorm = ln
         self.emptyState = npjax.array([[0.01]*embed]*4*layers)
 
@@ -294,7 +296,7 @@ class RWKVPTOps(RWKVOPS):
             return torch.layer_norm(x, w.shape, w, b)
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype)+0.01
+            4*layers, embed, dtype=self.dtype)+0.0
 
 
 class RWKVPoptorchOps(RWKVPTOps):

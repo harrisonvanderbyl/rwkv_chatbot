@@ -199,7 +199,9 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             self.postprocess = RWKVTFPost()
 
         @ ops.mainfunc
-        def forward(self, x, state):
+        def forward(self, x, state=None):
+            if (state is None):
+                state = ops.emptyState
 
             x = self.preprocess.forward(x)
 

@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import loadModelForOnnx
 import tqdm
 import onnxruntime as ort
 from genericpath import exists
@@ -9,6 +8,7 @@ import os
 import time
 import gc
 import torch
+from src.model_run import RWKV_RNN
 from src.utils import TOKENIZER
 from src.rwkvops import RwkvOpList
 import inquirer
@@ -48,6 +48,25 @@ q = inquirer.prompt(questions)
 
 model, emptyState = mro.createRWKVModel(
     q["file"], mode=q["method"])
+
+# Omodel = RWKV_RNN(q["file"])
+# stat = None
+# stat2 = emptyState
+# print("testing diffs")
+# for i in tqdm.tqdm(range(100)):
+#     orig = Omodel.forward([145], stat)
+#     orig = orig[0].cpu().numpy()
+
+# for i in tqdm.tqdm(range(100)):
+#     curr = model.forward([145], stat2)
+#     stat2 = curr[1]
+#     curr = curr[0].cpu().numpy()
+
+# a = softmax(orig, axis=-1)
+# b = softmax(curr, axis=-1)
+
+# print("diffs", np.sum(np.abs(a-b)))
+
 
 ###### A good prompt for chatbot ######
 context = '''
