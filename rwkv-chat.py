@@ -4,6 +4,7 @@ import http.server
 from http import HTTPStatus
 import webbrowser
 import matplotlib.pyplot as plt
+from rwkvChatPersonalities import Personaities
 import loadModelForOnnx
 import tqdm
 import onnxruntime as ort
@@ -62,25 +63,7 @@ model, emptyState = mro.createRWKVModel(
     q["file"], mode=q["method"])
 
 ###### A good prompt for chatbot ######
-context = '''
-The following is a conversation between a highly knowledgeable and intelligent AI assistant, called RWKV, and a human user, called User. In the following interactions, User and RWKV will converse in natural language, and RWKV will do its best to answer User’s questions. RWKV was built to be respectful, polite and inclusive. It knows a lot, and always tells the truth. The conversation begins.
 
-User: OK RWKV, I’m going to start by quizzing you with a few warm-up questions. Who is currently the president of the USA?
-
-RWKV: It’s Joe Biden; he was sworn in earlier this year.
-
-User: What year was the French Revolution?
-
-RWKV: It started in 1789, but it lasted 10 years until 1799.
-
-User: Can you guess who I might want to marry?
-
-RWKV: Only if you tell me more about yourself - what are your interests?
-
-User: Aha, I’m going to refrain from that for now. Now for a science question. What can you tell me about the Large Hadron Collider (LHC)?
-
-RWKV: It’s a large and very expensive piece of science equipment. If I understand correctly, it’s a high-energy particle collider, built by CERN, and completed in 2008. They used it to confirm the existence of the Higgs boson in 2012.
-'''
 # context = "hello world! I am your supreme overlord!"
 NUM_TRIALS = 999
 LENGTH_PER_TRIAL = 200
@@ -113,10 +96,6 @@ if TOKEN_MODE == "pile":
     assert tokenizer.tokenizer.decode([187]) == '\n'
 
 ########################################################################################################
-
-
-ctx1 = tokenizer.tokenizer.encode(context)
-src_ctx1 = ctx1.copy()
 
 
 print(
@@ -163,13 +142,17 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
     return ctx+newctx, o[1]
 
 
-tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
-
-origistate = (tokens[0], tokens[1])
+people = {}
+for P, personality in Personaities.items():
+    people[P] = loadContext(ctx=[], newctx=tokenizer.tokenizer.encode(
+        personality), statex=emptyState)[1]
 
 
 def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    ozut = ozut.numpy()
+    try:
+        ozut = ozut.numpy()
+    except:
+        pass
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
@@ -213,6 +196,9 @@ class S(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         if (self.path == "/"):
             self.path = "/index.html"
+        if (self.path == "/personalities.json"):
+            self.wfile.write(json.dumps(list(people.keys())).encode('utf-8'))
+            return
         # self._set_response()
         self.wfile.write(
             open("/".join(__file__.split("/")[:-1])+"/web-interface/build/"+self.path, "rb").read())
@@ -231,17 +217,16 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         print(body)
 
-        try:
-            if (body["state"] is None):
-                body["state"] = origistate[1]
-            else:
-                body["state"] = torch.tensor(body["state"]).to(
-                    device=origistate[1].device, dtype=origistate[1].dtype)
-        except:
-            body["state"] = origistate[1]
+        body["state"] = body.get("state", None)
+        character = body.get("character", list(people.keys())[0])
+
+        if body["state"] is None:
+            body["state"] = people[character]
+        else:
+            body["state"] = model.ops.initTensor(torch.tensor(body["state"]))
 
         tokens = tokenizer.tokenizer.encode(
-            "User:"+body["message"]+"\n\nRWKV:")
+            "User:"+body["message"]+f"\n\{character}:")
 
         currentData = loadContext(ctx=[], newctx=tokens, statex=body["state"])
 
@@ -265,10 +250,14 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         # recursively convert state to number from tensor
         state = currentData[1]
+        ns = []
         for i in range(len(state)):
-            state[i] = state[i].float().cpu().numpy().tolist()
+            try:
+                ns += [np.array(state[i].float().cpu()).tolist()]
+            except:
+                ns += [np.array(state[i]).tolist()]
 
-        out["state"] = currentData[1]
+        out["state"] = ns
 
         # set content length
         out = json.dumps(out).encode("utf8")

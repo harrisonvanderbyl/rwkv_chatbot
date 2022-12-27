@@ -191,6 +191,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def __init__(self):
             super(myRWKV, self).__init__()
             self.preprocess = RWKVTFPre()
+            self.ops = ops
 
             self.mylayers: list[RWKVTFLayer] = []
             for i in range(n_layer):

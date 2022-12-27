@@ -1,12 +1,18 @@
 import "./App.scss";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Message, {
   MessageProps,
   MessageSide,
   MessageType,
 } from "./components/message/Message";
 import TextField from "@mui/material/TextField";
-import { Avatar, Button } from "@mui/material";
+import {
+  Avatar,
+  Button,
+  MenuItem,
+  Select,
+  SelectChangeEvent,
+} from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import crow from "./images/crow.png";
@@ -30,6 +36,8 @@ function App() {
   const [messages, setMessages] = useState(mess);
   const [state, setState] = useState<RwkvState>(undefined);
   const [currentMessage, setCurrentMessage] = useState("");
+  const [personalities, setPersonalities] = useState<string[]>([]);
+  const [character, setCharacter] = useState("RWKV");
   // set state to current address
   const [server, setServer] = useState(document.location.href);
 
@@ -68,6 +76,7 @@ function App() {
       body: JSON.stringify({
         message: message,
         state: state,
+        character: character,
       }),
     });
 
@@ -83,6 +92,20 @@ function App() {
       { text: datajson.message, side: MessageSide.Right, icon: crow },
     ]);
   };
+
+  const getPersonalities = async () => {
+    setPersonalities(["Loading..."]);
+    const data = await fetch(server + "/personalities.json");
+    const datajson = await data.json();
+    setPersonalities(datajson);
+  };
+
+  // Should be called on once everythings loaded
+  useEffect(() => {
+    if (personalities.length === 0) {
+      getPersonalities();
+    }
+  });
 
   const onInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentMessage(event.target.value);
@@ -102,6 +125,12 @@ function App() {
     ]);
     getMessage(currentMessage, state);
     setCurrentMessage("");
+  };
+
+  const onCharacterChange = (event: SelectChangeEvent<{ value: string }>) => {
+    setCharacter(event.target.value as string);
+    setMessages([]);
+    setState(undefined);
   };
 
   return (
@@ -132,6 +161,16 @@ function App() {
         >
           Load
         </Button>
+        <Select
+          variant="outlined"
+          defaultValue={{ value: "Loading..." }}
+          value={{ value: character }}
+          onChange={onCharacterChange}
+        >
+          {personalities.map((personality) => (
+            <MenuItem value={personality}>{personality}</MenuItem>
+          ))}
+        </Select>
 
         <div className="message-box">
           {messages
