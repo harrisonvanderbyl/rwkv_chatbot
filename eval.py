@@ -75,7 +75,7 @@ class EvalHarnessAdapter(GPT2LM):
         res = []
         sum_logit = 0
         nCorrect = 0
-        state = None
+
         for COUNTER in (range(len(requests))):
             n = COUNTER
 
@@ -99,7 +99,7 @@ class EvalHarnessAdapter(GPT2LM):
 
                 with torch.no_grad():
                     if RWKV_SLOW_MODE:
-
+                        state = None
                         fg.orange = Style(RgbFg(255, 255, 255))
                         print(fg.orange+"\n", end='')
 
