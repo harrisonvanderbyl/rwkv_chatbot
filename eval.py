@@ -44,7 +44,7 @@ class TokenizerWrapper:
         self.eos_token_id = 0
 
     def encode(self, string: str, add_special_tokens=False):
-        return self.tokenizer.encode(string).ids
+        return self.tokenizer.encode(string)
 
     def decode(self, tokens):
         return self.tokenizer.decode(tokens)
