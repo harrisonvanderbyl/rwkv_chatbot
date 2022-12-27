@@ -127,42 +127,34 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             kk = ops.minimum(kk, ops.klimit)
 
-            k = ops.exp(kk)
+            k = ops.exp(kk+self.time_first)
 
-            v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
+            v = ops.matvec(self.value,
+                           ops.lerp(xy, statea, 1-self.vvtv)) * k
 
-            td = self.time_decay
-            tf = ops.exp(self.time_first)
+            w = stateb * self.time_decay + v
+            d = statec * self.time_decay + k
 
-            w = stateb + (k*tf) * v
-            d = statec + (k*tf)
+            wrd = (w/d)
 
             r = 1/(ops.exp(ops.matvec(
                 self.receptance, ops.lerp(xy, statea, 1-self.rrtr))) + 1)
 
-            wrd = (w/d)
-
             mvv = ops.matvec(self.outputvv, r*wrd)
 
             sxx = x + mvv
-
-            aaa = xy
-
-            bbb = stateb * td + k * v
-
-            ccc = statec * td + k
 
             ddd = ops.layernorm(sxx, self.ln2w, self.ln2b)
 
             km = ops.relu(ops.matvec(self.key_ffn, ops.lerp(
                 ddd, stated, 1-self.time_mix_k_ffn)))
 
-            rt = ops.exp(ops.matvec(self.receptance_ffn, ops.lerp(
-                ddd, stated, 1-self.time_mix_r_ffn))) + 1
+            rt = 1/(ops.exp(ops.matvec(self.receptance_ffn, ops.lerp(
+                ddd, stated, 1-self.time_mix_r_ffn))) + 1)
 
-            x = sxx + ops.matvec(self.value_ffn, km*km)/rt
+            x = sxx + ops.matvec(self.value_ffn, km*km)*rt
 
-            return x, aaa, bbb, ccc, ddd
+            return x, xy, w, d, ddd
 
     class RWKVTFPre(ops.module):
         def __init__(self):
@@ -171,7 +163,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
         @ ops.prefunc
         def forward(self, x):
-            return self.preprocess[x[0]]
+            return self.preprocess[x[-1]]
 
     class RWKVTFPost(ops.module):
         def __init__(self):
