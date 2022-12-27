@@ -18,6 +18,9 @@ from torch.nn import functional as F
 
 from src.rwkvops import RwkvOpList
 from src.utils import TOKENIZER
+from sty import Style, RgbFg, fg
+
+fg.orange = Style(RgbFg(255, 150, 50))
 
 RWKV_PAD = [0]  # <|endoftext|>
 # RWKV_PAD = [187] # \n
@@ -73,7 +76,7 @@ class EvalHarnessAdapter(GPT2LM):
         sum_logit = 0
         nCorrect = 0
 
-        for COUNTER in tqdm(range(len(requests))):
+        for COUNTER in (range(len(requests))):
             n = COUNTER
 
             raw_src = requests[n][0][0] + requests[n][0][1]
@@ -97,8 +100,14 @@ class EvalHarnessAdapter(GPT2LM):
                 with torch.no_grad():
                     if RWKV_SLOW_MODE:
                         state = None
-                        for i in tqdm(range(1, len(src))):
+                        fg.orange = Style(RgbFg(255, 255, 255))
+                        print(fg.orange+"\n", end='')
+
+                        for i in (range(1, len(src))):
                             x = src[:i]
+
+                            print(self.tokenizer.decode([x[-1]]), end='')
+                            fg.orange = Style(RgbFg(255, 255, 255))
                             out, state = rwkv_rnn.forward(x, state)
                             if i >= q_len:
                                 oo = torch.tensor(out)
@@ -107,6 +116,10 @@ class EvalHarnessAdapter(GPT2LM):
                                 pred = s_index[0].item()
                                 if pred != src[i]:
                                     correct = False
+                                    fg.orange = Style(RgbFg(255, 0, 0))
+                                else:
+                                    fg.orange = Style(RgbFg(0, 255, 0))
+                                print(fg.orange, end="")
                                 # print(x, '=>', src[i], 'pred', pred)
                                 logit += math.log(F.softmax(oo,
                                                   dim=-1)[src[i]])
