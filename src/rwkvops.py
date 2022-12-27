@@ -41,6 +41,7 @@ class RWKVOPS():
         self.prefunc: notimplemented
         self.postfunc: notimplemented
         self.emptyState: notimplemented
+        self.logistical = lambda x: 1 / (self.exp(x) + 1)
         self.postProcessModule = lambda x: x
 
 
