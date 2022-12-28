@@ -128,15 +128,18 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             kk = ops.minimum(kk, ops.klimit)
 
             kt = ops.exp(kk + self.time_first)
+            k = ops.exp(kk)
 
-            v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv)) * kt
+            v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
 
             r = ops.logistical(ops.matvec(
                 self.receptance, ops.lerp(xy, statea, 1-self.rrtr)))
 
-            w = stateb * self.time_decay + v
-            d = statec * self.time_decay + kt
-            wrd = (w/d)
+            w = stateb * self.time_decay
+            d = statec * self.time_decay
+            wrd = ((w + kt*v)/(d + kt))
+            w += k*v
+            d += k
 
             mvv = ops.matvec(self.outputvv, r*wrd)
 
