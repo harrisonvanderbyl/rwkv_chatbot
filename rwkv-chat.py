@@ -226,7 +226,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             body["state"] = model.ops.initTensor(torch.tensor(body["state"]))
 
         tokens = tokenizer.tokenizer.encode(
-            "User:"+body["message"]+f"\n\{character}:")
+            "User:"+body["message"]+f"\n\n{character}:")
 
         currentData = loadContext(ctx=[], newctx=tokens, statex=body["state"])
 
