@@ -234,6 +234,8 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         for i in range(100):
             x, state = model.forward([currentData[0][-1]], currentData[1])
+            if isinstance(x, torch.Tensor):
+                x = x.cpu().float()
             token = sample_logits(x, temp=TEMPERATURE, top_p_usual=top_p)
             currentData = (currentData[0]+[token], state)
             if (token == newlinetok or token == double_newlinetok) and i > 0:
