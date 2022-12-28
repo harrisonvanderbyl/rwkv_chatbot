@@ -126,26 +126,7 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(ctx: list[int], statex, newctx: list[int]):
-    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    with torch.jit.optimized_execution(True):
-        for i in tqdm.tqdm(range(len(newctx))):
-
-            x = ctx+newctx[:i+1]
-
-            o = model.forward([x[-1]], statex)
-            statex = o[1]
-            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    return ctx+newctx, o[1]
-
-
-people = {}
-for P, personality in Personaities.items():
-    people[P] = loadContext(ctx=[], newctx=tokenizer.tokenizer.encode(
-        personality), statex=emptyState)[1]
+people: dict[str, str] = {}
 
 
 def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
@@ -173,6 +154,30 @@ def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
 newlinetok = tokenizer.tokenizer.encode('\n')[0]
 double_newlinetok = tokenizer.tokenizer.encode('\n\n')[0]
 
+progress = {}
+
+
+def loadContext(ctx: list[int], statex, newctx: list[int], id="none"):
+    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    with torch.jit.optimized_execution(True):
+        for i in tqdm.tqdm(range(len(newctx))):
+
+            x = ctx+newctx[:i+1]
+            progress[id] = x
+
+            o = model.forward([x[-1]], statex)
+            statex = o[1]
+            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    return ctx+newctx, o[1]
+
+
+for P, personality in Personaities.items():
+    people[P] = loadContext(ctx=[], newctx=tokenizer.tokenizer.encode(
+        personality), statex=emptyState)[1]
+
 
 class S(http.server.SimpleHTTPRequestHandler):
 
@@ -199,6 +204,10 @@ class S(http.server.SimpleHTTPRequestHandler):
         if (self.path == "/personalities.json"):
             self.wfile.write(json.dumps(list(people.keys())).encode('utf-8'))
             return
+        if ("/progress" in self.path):
+            self.wfile.write(
+                tokenizer.tokenizer.decode(progress.get(self.path.split("/")[-1], tokenizer.tokenizer.encode("..."))).encode('utf-8'))
+            return
         # self._set_response()
         self.wfile.write(
             open("/".join(__file__.split("/")[:-1])+"/web-interface/build/"+self.path, "rb").read())
@@ -214,8 +223,7 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         # get json
         body = json.loads(body)
-
-        print(body)
+        print(body["message"])
 
         body["state"] = body.get("state", None)
         character = body.get("character", list(people.keys())[0])
@@ -225,14 +233,18 @@ class S(http.server.SimpleHTTPRequestHandler):
         else:
             body["state"] = model.ops.initTensor(torch.tensor(body["state"]))
 
-        tokens = tokenizer.tokenizer.encode(
-            "User:"+body["message"]+f"\n\n{character}:")
+        progresskey = body["key"]
 
-        currentData = loadContext(ctx=[], newctx=tokens, statex=body["state"])
+        tokens = tokenizer.tokenizer.encode(
+            "\nUser:"+body["message"]+f"\n\n{character}:")
+
+        currentData = loadContext(
+            ctx=[], newctx=tokens, statex=body["state"], id=progresskey)
 
         ln = len(currentData[0])
 
         for i in range(100):
+            progress[progresskey] = currentData[0]
             x, state = model.forward([currentData[0][-1]], currentData[1])
             if isinstance(x, torch.Tensor):
                 x = x.cpu().float()
@@ -272,7 +284,7 @@ class S(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(out)
 
 
-httpd = socketserver.TCPServer(('', int(input("Port:"))), S)
+httpd = socketserver.ThreadingTCPServer(('', int(input("Port:"))), S)
 # open browser
 if (input("Open browser? (y/N)") == "y"):
     webbrowser.open("http://localhost:"+str(httpd.server_address[1]))
