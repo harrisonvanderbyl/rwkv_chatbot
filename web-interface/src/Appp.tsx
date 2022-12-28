@@ -9,6 +9,7 @@ import TextField from "@mui/material/TextField";
 import {
   Avatar,
   Button,
+  FormControl,
   MenuItem,
   Select,
   SelectChangeEvent,
@@ -18,18 +19,14 @@ import CssBaseline from "@mui/material/CssBaseline";
 import crow from "./images/crow.png";
 // import png
 
-const darkTheme = createTheme({
-  palette: {
-    mode: "dark",
-  },
-});
-
 type RwkvState = [number[], number[], number[], number[]] | undefined;
 
 const mess: MessageProps[] = [
-  { text: "Hello", type: MessageType.Success, side: MessageSide.Left },
-  { text: "World", type: MessageType.Error, side: MessageSide.Right },
-  { text: "!", type: MessageType.Info },
+  {
+    text: "Say Hello To RWKV!",
+    type: MessageType.Info,
+    side: MessageSide.Left,
+  },
 ];
 
 function App() {
@@ -38,8 +35,15 @@ function App() {
   const [currentMessage, setCurrentMessage] = useState("");
   const [personalities, setPersonalities] = useState<string[]>([]);
   const [character, setCharacter] = useState("RWKV");
+  const [darkmode, setDarkmode] = useState(true);
   // set state to current address
   const [server, setServer] = useState(document.location.href);
+
+  const darkTheme = createTheme({
+    palette: {
+      mode: darkmode ? "dark" : "light",
+    },
+  });
 
   const exportData = () => {
     const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
@@ -94,7 +98,7 @@ function App() {
   };
 
   const getPersonalities = async () => {
-    setPersonalities(["Loading..."]);
+    setPersonalities(["RWKV"]);
     const data = await fetch(server + "/personalities.json");
     const datajson = await data.json();
     setPersonalities(datajson);
@@ -133,6 +137,10 @@ function App() {
     setState(undefined);
   };
 
+  const onThemeClick = () => {
+    setDarkmode(!darkmode);
+  };
+
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
@@ -145,10 +153,12 @@ function App() {
             position: "absolute",
             left: 32,
             top: 32,
-            filter: "invert(1)",
+            filter: `invert(${darkmode ? 1 : 0})`,
           }}
+          onClick={onThemeClick}
         />
         <h1>Chat-RWKV</h1>
+
         <Button variant="outlined" onClick={exportData}>
           Save
         </Button>
@@ -161,16 +171,6 @@ function App() {
         >
           Load
         </Button>
-        <Select
-          variant="outlined"
-          defaultValue={{ value: "Loading..." }}
-          value={{ value: character }}
-          onChange={onCharacterChange}
-        >
-          {personalities.map((personality) => (
-            <MenuItem value={personality}>{personality}</MenuItem>
-          ))}
-        </Select>
 
         <div className="message-box">
           {messages
@@ -178,24 +178,40 @@ function App() {
               <Message
                 key={index}
                 {...{ ...message, index: messages.length - index }}
+                darkTheme={darkmode}
               />
             ))
             .reverse()}
         </div>
-
-        <TextField
-          id="serverSet"
-          label="Server"
-          variant="outlined"
-          value={server}
-          onChange={onServerChange}
-          color="primary"
+        <FormControl
           sx={{
             position: "absolute",
             right: 32,
             top: 32,
           }}
-        />
+        >
+          <TextField
+            id="serverSet"
+            label="Server"
+            variant="outlined"
+            value={server}
+            onChange={onServerChange}
+            color="primary"
+            sx={{
+              marginBottom: 2,
+            }}
+          />
+          <Select
+            value={character as any}
+            label="Character"
+            onChange={onCharacterChange}
+            variant="outlined"
+          >
+            {personalities.map((personality) => (
+              <MenuItem value={personality}>{personality}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         <TextField
           id="outlined-basic"

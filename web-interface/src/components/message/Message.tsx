@@ -21,6 +21,7 @@ export interface MessageProps {
   type?: MessageType;
   side?: MessageSide;
   index?: number;
+  darkTheme?: boolean;
 }
 
 function Message({
@@ -29,6 +30,7 @@ function Message({
   side = MessageSide.Left,
   icon = undefined,
   index = 10,
+  darkTheme = true,
 }: MessageProps) {
   return (
     <Paper
@@ -47,7 +49,7 @@ function Message({
             height: 32,
             position: "absolute",
             top: -16,
-            filter: "invert(1)",
+            filter: `invert(${darkTheme ? 1 : 0})`,
             ...(side === MessageSide.Left ? { left: -16 } : { right: -16 }),
           }}
         />
