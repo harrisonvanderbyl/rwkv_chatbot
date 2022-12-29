@@ -1,10 +1,5 @@
 import discord
-import matplotlib.pyplot as plt
-import loadModelForOnnx
 import tqdm
-import onnxruntime as ort
-from genericpath import exists
-from typing import List
 import numpy as np
 import os
 import time
@@ -14,8 +9,6 @@ from src.utils import TOKENIZER
 from src.rwkvops import RwkvOpList
 import inquirer
 from scipy.special import softmax
-from torch.nn import functional as F
-from torch.profiler import profile, record_function, ProfilerActivity
 import src.model_run_onnx as mro
 from sty import Style, RgbFg, fg
 
@@ -222,7 +215,7 @@ def s1(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     return mout
 
 
-sample_logits = [s0, s1][int(input("sample method: 0 for torch, 1 for numpy"))]
+sample_logits = s1
 
 
 @client.event
