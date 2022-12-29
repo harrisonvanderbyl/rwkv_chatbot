@@ -5,7 +5,6 @@
 import numpy as np
 import src.model_run_onnx as mro
 import inquirer
-import loadModelForOnnx
 import os
 import sys
 import time

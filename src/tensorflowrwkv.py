@@ -165,6 +165,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         @ ops.prefunc
         def forward(self, x):
             return self.preprocess[x[-1]]
+    matvec = ops.matvec
+    layernorm = ops.layernorm
 
     class RWKVTFPost(ops.module):
         def __init__(self):
@@ -176,8 +178,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
         @ ops.postfunc
         def forward(self, x):
-            return ops.matvec(self.postprocess2, ops.layernorm(x, self.postprocess0,
-                                                               self.postprocess1))
+            return matvec(self.postprocess2, layernorm(x, self.postprocess0,
+                                                       self.postprocess1))
 
     class myRWKV(ops.module):
         @ ops.initfunc
@@ -186,9 +188,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             self.preprocess = RWKVTFPre()
             self.ops = ops
 
-            self.mylayers: list[RWKVTFLayer] = []
             for i in range(n_layer):
-                self.mylayers.append(RWKVTFLayer(i))
+                self.__dict__[f"layer{i}"] = RWKVTFLayer(i)
 
             self.postprocess = RWKVTFPost()
 
@@ -208,8 +209,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             # print("start", len(self.mylayers))
 
-            for i, l in list(enumerate(self.mylayers)):
-                x, aaa, bbb, ccc, ddd = l.forward(
+            for i in range(n_layer):
+                x, aaa, bbb, ccc, ddd = self.__dict__[f"layer{i}"].forward(
                     x, statea[i], stateb[i], statec[i], stated[i])
                 ot = ot + [aaa, bbb, ccc, ddd]
 

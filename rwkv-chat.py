@@ -3,13 +3,8 @@ import json
 import http.server
 from http import HTTPStatus
 import webbrowser
-import matplotlib.pyplot as plt
 from rwkvChatPersonalities import Personaities
-import loadModelForOnnx
 import tqdm
-import onnxruntime as ort
-from genericpath import exists
-from typing import List
 import numpy as np
 import os
 import time
@@ -19,8 +14,6 @@ from src.utils import TOKENIZER
 from src.rwkvops import RwkvOpList
 import inquirer
 from scipy.special import softmax
-from torch.nn import functional as F
-from torch.profiler import profile, record_function, ProfilerActivity
 import src.model_run_onnx as mro
 from sty import Style, RgbFg, fg
 
