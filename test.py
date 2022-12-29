@@ -2,9 +2,16 @@ import time
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 mat = torch.rand(3, 3)
+mat2 = torch.rand(3, 3)
 # print(mat)
 vec = torch.rand(3)
 vec2 = torch.rand(3)
+
+print((mat*vec).sum(1).exp()+(mat2*vec2).sum(1))
+matvec = mat*vec
+matvec2 = mat2*vec2
+print(matvec.sum(1).exp()+matvec2.sum(1))
+print((matvec2.prod(1).log()*matvec.prod(1)))
 # dvec = -torch.rand(3)
 # # print(vec)
 # print(dvec)
@@ -101,118 +108,118 @@ mathc = math.cuda()
 vechc = vech.cuda()
 rounds = 100000
 
-with torch.no_grad():
+# with torch.no_grad():
 
-    # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-    #     with record_function("fp32"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(mat, vec)
-    #     with record_function("bf16"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(matb, vecb)
-    #     with record_function("fp64"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(matp, vecp)
-    #     # # with record_function("uint8"):
-    #     # #     for x in range(rounds):
-    #     # #         testt = torch.mv(matu, vecu)
-    #     with record_function("fp32 cuda"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(matc, vecc)
-    #     with record_function("bf16 cuda"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(matbc, vecbc)
-    #     with record_function("fp64 cuda"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(matpc, vecpc)
-    #     with record_function("half cuda"):
-    #         for x in range(rounds):
-    #             testt = torch.mv(mathc, vechc)
+# with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+#     with record_function("fp32"):
+#         for x in range(rounds):
+#             testt = torch.mv(mat, vec)
+#     with record_function("bf16"):
+#         for x in range(rounds):
+#             testt = torch.mv(matb, vecb)
+#     with record_function("fp64"):
+#         for x in range(rounds):
+#             testt = torch.mv(matp, vecp)
+#     # # with record_function("uint8"):
+#     # #     for x in range(rounds):
+#     # #         testt = torch.mv(matu, vecu)
+#     with record_function("fp32 cuda"):
+#         for x in range(rounds):
+#             testt = torch.mv(matc, vecc)
+#     with record_function("bf16 cuda"):
+#         for x in range(rounds):
+#             testt = torch.mv(matbc, vecbc)
+#     with record_function("fp64 cuda"):
+#         for x in range(rounds):
+#             testt = torch.mv(matpc, vecpc)
+#     with record_function("half cuda"):
+#         for x in range(rounds):
+#             testt = torch.mv(mathc, vechc)
 
-    # print(prof.key_averages().table(sort_by="cuda_time_total",
-    #                                 top_level_events_only=True, row_limit=10))
+# print(prof.key_averages().table(sort_by="cuda_time_total",
+#                                 top_level_events_only=True, row_limit=10))
 
-    # try with basic time
+# try with basic time
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(mat, vec)
+# for x in range(rounds):
+#     testt = torch.mv(mat, vec)
 
-    # print("fp32 time: ", time.time() - currentTime)
+# print("fp32 time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(matb, vecb)
+# for x in range(rounds):
+#     testt = torch.mv(matb, vecb)
 
-    # print("bf16 time: ", time.time() - currentTime)
+# print("bf16 time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(matp, vecp)
+# for x in range(rounds):
+#     testt = torch.mv(matp, vecp)
 
-    # print("fp64 time: ", time.time() - currentTime)
+# print("fp64 time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(matc, vecc)
+# for x in range(rounds):
+#     testt = torch.mv(matc, vecc)
 
-    # print("fp32 cuda time: ", time.time() - currentTime)
+# print("fp32 cuda time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(matbc, vecbc)
+# for x in range(rounds):
+#     testt = torch.mv(matbc, vecbc)
 
-    # print("bf16 cuda time: ", time.time() - currentTime)
+# print("bf16 cuda time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(matpc, vecpc)
+# for x in range(rounds):
+#     testt = torch.mv(matpc, vecpc)
 
-    # print("fp64 cuda time: ", time.time() - currentTime)
+# print("fp64 cuda time: ", time.time() - currentTime)
 
-    # currentTime = time.time()
+# currentTime = time.time()
 
-    # for x in range(rounds):
-    #     testt = torch.mv(mathc, vechc)
+# for x in range(rounds):
+#     testt = torch.mv(mathc, vechc)
 
-    # print("half cuda time: ", time.time() - currentTime)
-    print(mat.mv(vec).exp())
-    currentTime = time.time()
-    for x in range(rounds):
-        test = mat.mv(vec).exp()
+# print("half cuda time: ", time.time() - currentTime)
+# print(mat.mv(vec).exp())
+# currentTime = time.time()
+# for x in range(rounds):
+#     test = mat.mv(vec).exp()
 
-    print("mat@vec.exp", time.time() - currentTime)
+# print("mat@vec.exp", time.time() - currentTime)
 
-    currentTime = time.time()
-    for x in range(rounds):
-        test = mat.exp().mul(vec.exp()).prod(1)
+# currentTime = time.time()
+# for x in range(rounds):
+#     test = mat.exp().mul(vec.exp()).prod(1)
 
-    print("matexpprod", time.time() - currentTime)
-    matexp = mat.exp()
-    currentTime = time.time()
+# print("matexpprod", time.time() - currentTime)
+# matexp = mat.exp()
+# currentTime = time.time()
 
-    for x in range(rounds):
-        test = matexp.mul(vec.exp()).prod(1)
+# for x in range(rounds):
+#     test = matexp.mul(vec.exp()).prod(1)
 
-    print("mat@vec.exp", time.time() - currentTime)
-    vecexp = vec.exp()
-    currentTime = time.time()
+# print("mat@vec.exp", time.time() - currentTime)
+# vecexp = vec.exp()
+# currentTime = time.time()
 
-    for x in range(rounds):
-        test = matexp.mul(vec).prod(1)
+# for x in range(rounds):
+#     test = matexp.mul(vec).prod(1)
 
-    print("mat@vec.exp", time.time() - currentTime)
-    matexpp = mat.prod(1).exp()
-    print(matexpp.mul(vec.exp().prod()))
-    currentTime = time.time()
+# print("mat@vec.exp", time.time() - currentTime)
+# matexpp = mat.prod(1).exp()
+# print(matexpp.mul(vec.exp().prod()))
+# currentTime = time.time()
 
-    for x in range(rounds):
-        test = matexpp.mul(vec.exp())
+# for x in range(rounds):
+#     test = matexpp.mul(vec.exp())
 
-    print("mat@vec.exp", time.time() - currentTime)
+# print("mat@vec.exp", time.time() - currentTime)

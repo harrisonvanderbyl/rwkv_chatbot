@@ -48,6 +48,8 @@ class RWKVOPS():
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
         import tensorflow as tf
+        if (not inquirer.confirm("Do you want to use GPU?")):
+            tf.config.experimental.set_visible_devices([], "GPU")
         super(RWKVTFOps, self).__init__(layers, embed)
         self.initTensor = lambda x: tf.convert_to_tensor(
             x.float().cpu().numpy())
