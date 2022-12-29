@@ -56,7 +56,9 @@ function Message({
       ) : (
         ""
       )}
-      {text}
+      {text.split("\n").map((line, i) => (
+        <div key={i}>{line.replace("User:", "").replace("END", "")}</div>
+      ))}
     </Paper>
   );
 }

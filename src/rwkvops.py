@@ -259,7 +259,7 @@ class RWKVJaxOps(RWKVOPS):
 
 class RWKVPTOps(RWKVOPS):
     def __init__(self, layers, embed, dtype=None):
-        super(RWKVPTOps, self).__init__(layers, embed)
+        RWKVOPS.__init__(self, layers, embed)
         q = [inquirer.List(
             'type',
             message="What model varient",
@@ -312,7 +312,7 @@ class RWKVPoptorchOps(RWKVPTOps):
 
 class RWKVPTCompatOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
-        super().__init__(layers, embed, *args)
+        RWKVPTOps.__init__(self, layers, embed, *args)
         self.relu = lambda x: torch.max(x, torch.zeros_like(x))
         self.matvec = lambda x, y: torch.sum(x*y, dim=1)
 
@@ -401,12 +401,28 @@ class RWKVCudaQuantOps(RWKVPTOps):
             4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
-class RWKVExportOnnxOps(RWKVPTOps):
+class RWKVExportOnnxOps(RWKVOPS):
     def __init__(self, layers, embed, *args):
-        super().__init__(layers, embed, *args)
+        base = inquirer.prompt([inquirer.List(
+            'type',
+            message="Base class for export:",
+            choices=["Pytorch", "Cuda", "Compat"])])['type']
+
+        if base == "Pytorch":
+            base = RWKVPTOps
+        elif base == "Cuda":
+            base = RWKVCudaOps
+        elif base == "Compat":
+            base = RWKVPTCompatOps
+        base.__init__(self, layers, embed, *args)
         path = f"onnx/rwkv-{layers}-{embed}-{torch.float32}/"
-        super().__init__(layers, embed)
+        # super().__init__(layers, embed)
         self.stack = torch.stack
+
+        onnxOpversion = inquirer.prompt([inquirer.List(
+            'type',
+            message="ONNX Opset version:",
+            choices=[12, 13, 14, 15, 16, 17])])['type']
 
         def export(self, x, state):
             print("exporting")
@@ -419,12 +435,12 @@ class RWKVExportOnnxOps(RWKVPTOps):
             except:
                 pass
             torch.onnx.export(
-                self.preprocess, (torch.zeros(1, dtype=torch.int32),), f"{path}pre.onnx")
+                self.preprocess, (torch.zeros(1, dtype=torch.int32),), f"{path}pre.onnx", opset_version=onnxOpversion)
             torch.onnx.export(
-                self.postprocess, (torch.zeros(embed, dtype=torch.float32),), f"{path}post.onnx")
+                self.postprocess, (torch.zeros(embed, dtype=torch.float32),), f"{path}post.onnx", opset_version=onnxOpversion)
             for i, layer in enumerate(self.mylayers):
                 torch.onnx.export(
-                    layer, (torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01), f"{path}{i}.onnx")
+                    layer, do_constant_folding=True, input_names=["X", "S1", "S2", "S3", "S4"], output_names=["Out", "O1", "O2", "O3", "O4"],  args=(torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01), f=f"{path}{i}.onnx", opset_version=onnxOpversion)
 
             exit()
         self.mainfunc = lambda x: export

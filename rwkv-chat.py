@@ -236,21 +236,21 @@ class S(http.server.SimpleHTTPRequestHandler):
         progresskey = body["key"]
 
         tokens = tokenizer.tokenizer.encode(
-            "\nUser:"+body["message"]+f"\n\n{character}:")
+            "\nUser:"+body["message"].replace("User:", ""), ""+f"END\n{character}:")
 
         currentData = loadContext(
             ctx=[], newctx=tokens, statex=body["state"], id=progresskey)
 
         ln = len(currentData[0])
 
-        for i in range(100):
+        for i in range(400):
             progress[progresskey] = currentData[0]
             x, state = model.forward([currentData[0][-1]], currentData[1])
             if isinstance(x, torch.Tensor):
                 x = x.cpu().float()
             token = sample_logits(x, temp=TEMPERATURE, top_p_usual=top_p)
             currentData = (currentData[0]+[token], state)
-            if (token == newlinetok or token == double_newlinetok) and i > 0:
+            if tokenizer.tokenizer.decode(currentData[0]).strip().endswith(("END", "User:")):
                 break
 
         tokens = tokenizer.tokenizer.decode(currentData[0][ln:])
