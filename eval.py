@@ -1,6 +1,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+import json
 import inquirer
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -190,3 +191,6 @@ for RUN_NUM in RUN_TABLE:
         bootstrap_iters=10000,
     )
     print(results)
+    # output results to file
+    with open(f"results/{RWKV_ID}.json", "w") as f:
+        json.dump(results, f)
