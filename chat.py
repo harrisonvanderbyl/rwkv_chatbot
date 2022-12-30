@@ -220,6 +220,7 @@ sample_logits = s1
 
 @client.event
 async def on_message(message):
+
     global model_tokens, currstate
     # print(
     #     f"message received({message.guild.name}:{message.channel.name}):", message.content)
@@ -228,6 +229,17 @@ async def on_message(message):
         return
 
     msg = message.content.strip()
+
+    temp = 1.0
+    top_p = 0.8
+    if ("-temp=" in msg):
+        temp = float(msg.split("-temp=")[1].split(" ")[0])
+        msg = msg.replace("-temp="+str(temp), "")
+        print(f"temp: {temp}")
+    if ("-top_p=" in msg):
+        top_p = float(msg.split("-top_p=")[1].split(" ")[0])
+        msg = msg.replace("-top_p="+str(top_p), "")
+        print(f"top_p: {top_p}")
 
     if msg == '+reset_drkv' or msg == '+drkv_reset':
         model_tokens = tokenizer.tokenizer.encode(context)
@@ -266,7 +278,7 @@ async def on_message(message):
         with torch.no_grad():
             for i in range(100):
                 o = model.forward([state[0][-1]], state[1])
-                tok = sample_logits(o[0])
+                tok = sample_logits(o[0], temp=temp, top_p_usual=top_p)
                 print(tokenizer.tokenizer.decode(tok), end='')
                 state = (state[0] + [tok], o[1])
                 if (tok == 187):
@@ -292,7 +304,7 @@ async def on_message(message):
         with torch.no_grad():
             for i in range(100):
                 o = model.forward([state[0][-1]], state[1])
-                tok = sample_logits(o[0])
+                tok = sample_logits(o[0], temp=temp, top_p_usual=top_p)
                 state = (state[0] + [tok], o[1])
 
         send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
