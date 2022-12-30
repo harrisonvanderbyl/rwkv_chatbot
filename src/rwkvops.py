@@ -335,15 +335,25 @@ class RWKVCudaOps(RWKVPTOps):
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
             message="Dtype for operations:",
-            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
+            choices=[torch.bfloat16, torch.float32, torch.float64])])['type']
+
+        upscale = True
+        if runtimedtype != self.dtype:
+            upscale = inquirer.prompt([inquirer.Confirm(
+                'type',
+                message=f"Convert Matrix to {runtimedtype} during matvec(Y, higher mem usage, more accurate), or convert vector to {self.dtype} during matvec(N, lower mem usage, less accurate)",
+                default=True)])['type']
 
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else runtimedtype, device='cuda')
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
-        self.matvec = lambda x, y: x.to(runtimedtype).mv(
-            y)
+        if upscale:
+            self.matvec = lambda x, y: x.to(runtimedtype).mv(
+                y)
+        else:
+            self.matvec = lambda x, y: x.mv(y.to(self.dtype)).to(runtimedtype)
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
