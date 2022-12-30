@@ -243,7 +243,7 @@ class S(http.server.SimpleHTTPRequestHandler):
                 x = x.cpu().float()
             token = sample_logits(x, temp=TEMPERATURE, top_p_usual=top_p)
             currentData = (currentData[0]+[token], state)
-            if tokenizer.tokenizer.decode(currentData[0]).strip().endswith(("END", "User:")):
+            if tokenizer.tokenizer.decode(currentData[0]).strip().endswith(("END", "User:", "\nEnd")):
                 break
 
         tokens = tokenizer.tokenizer.decode(currentData[0][ln:])
