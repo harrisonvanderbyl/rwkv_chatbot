@@ -125,10 +125,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             kk = ops.matvec(
                 self.key, ops.lerp(xy, statea, 1-self.kktk))
 
-            kk = ops.minimum(kk, ops.klimit)
-
-            kt = ops.exp(kk + self.time_first)
-            k = ops.exp(kk)
+            kt = ops.exp(ops.minimum(kk + self.time_first, ops.klimit))
+            k = ops.exp(ops.minimum(kk))
 
             v = ops.matvec(self.value, ops.lerp(xy, statea, 1-self.vvtv))
 
