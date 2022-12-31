@@ -192,5 +192,5 @@ for RUN_NUM in RUN_TABLE:
     )
     print(results)
     # output results to file
-    with open(f"results/{RWKV_ID}.json", "w") as f:
+    with open(f"res.json", "w") as f:
         json.dump(results, f)

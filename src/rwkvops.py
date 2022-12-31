@@ -12,6 +12,9 @@ import json
 import logging
 import socketserver
 
+# allow tf32
+torch.backends.cuda.matmul.allow_tf32 = True
+
 
 def notimplemented(*args):
     raise "not implemented"
