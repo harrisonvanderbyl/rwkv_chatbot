@@ -5,11 +5,8 @@ import numpy as np
 import os
 
 import torch
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import http.server
 import json
-import logging
 import socketserver
 
 # allow tf32
@@ -50,7 +47,14 @@ class RWKVOPS():
 
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
-        import tensorflow as tf
+        try:
+            import tensorflow as tf
+        except:
+            inst = inquirer.confirm(
+                "Tensorflow not installed, do you want to install it?")
+            if inst:
+                os.system("pip3 install tensorflow")
+                import tensorflow as tf
         if (not inquirer.confirm("Do you want to use GPU?")):
             tf.config.experimental.set_visible_devices([], "GPU")
             tf.config.optimizer.set_jit(True)

@@ -9,13 +9,70 @@ import numpy as np
 import os
 import time
 import gc
-import torch
+
+
 from src.utils import TOKENIZER
 from src.rwkvops import RwkvOpList
-import inquirer
-from scipy.special import softmax
+try:
+    import inquirer
+except:
+    install = not input(
+        "inquirer not installed. Would you like to install it? (Y/n)") in ["n", "N"]
+    if install:
+        os.system("pip3 install inquirer")
+        import inquirer
+    else:
+        print("Exiting...")
+        exit()
+try:
+    from scipy.special import softmax
+except:
+    install = inquirer.prompt([inquirer.Confirm(
+        'install',
+        message="scipy not installed. Would you like to install it?",
+        default=True,
+    )])["install"]
+    if install:
+        os.system("pip3 install scipy")
+        from scipy.special import softmax
+    else:
+        print("Exiting...")
+        exit()
+
+try:
+    import torch
+except:
+    install = inquirer.prompt([inquirer.Confirm(
+        'install',
+        message="torch not installed. Would you like to install it? NOTE: AMD GPU users should double check https://pytorch.org/get-started/locally/",
+        default=True,
+    )])["install"]
+    if install:
+        # test if amd gpu
+
+        os.system(
+            "pip3 install torch torchvision torchaudio")
+        import torch
+    else:
+        print("Exiting...")
+        exit()
 import src.model_run_onnx as mro
-from sty import Style, RgbFg, fg
+
+
+# check if yarn installed
+if os.system("yarn --version"):
+    install = inquirer.prompt([inquirer.Confirm(
+        'install',
+        message="yarn not installed. Would you like to install it?",
+        default=True,
+    )])["install"]
+    if install:
+        if os.system("npm install -g yarn"):
+            print("Failed to install yarn using npm. you need to install nodejs manually from https://nodejs.org/en/download/")
+            exit()
+    else:
+        print("Exiting...")
+        exit()
 
 # build website using yarn
 # yarn build
@@ -24,7 +81,6 @@ os.system("yarn")
 os.system("yarn build")
 os.chdir("..")
 
-fg.orange = Style(RgbFg(255, 150, 50))
 
 # context = 'A'
 # context = "\nIn the"
@@ -37,23 +93,50 @@ fg.orange = Style(RgbFg(255, 150, 50))
 files = os.listdir()
 # filter by ending in .pth
 files = [f for f in files if f.endswith(".pth")]
-
+DownloadPrompt = "Download more models..."
 questions = [
     inquirer.List('file',
                   message="What model do you want to use?",
-                  choices=files,
+                  choices=files+[DownloadPrompt],
                   ),
-    inquirer.List(
-        'method',
-        message="What inference method?",
-        choices=RwkvOpList.keys()
-    )
+
 
 ]
+
+downloadLinks = [{
+    "name": "RWKV-14B: recomended specs: 32GB VRAM, 2x4060FE",
+    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-14b/resolve/main/RWKV-4-Pile-14B-20221217-3794.pth",
+},
+    {
+    "name": "RWKV-7B: recomended specs: 16GB VRAM, 4060FE/2x2080",
+    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-7b/resolve/main/RWKV-4-Pile-7B-20221123-ctx2048.pth"
+},
+    {
+    "name": "RWKV-3B: recomended specs: 8GB VRAM, 2080/2x1060-6G",
+    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-3b/resolve/main/RWKV-4-Pile-3B-20221110-ctx4096.pth"
+},
+]
+
 q = inquirer.prompt(questions)
 
+if q["file"] == DownloadPrompt:
+    print(f"\n NOTE: The following models can, and do, run on lower spec machines, through the user of layer streaming. You can download smaller models https://huggingface.co/BlinkDL here, however they are not recommended for use on this chatbot. \n")
+    toDownload = inquirer.prompt([inquirer.List('model',
+                                                message="What model do you want to download?",
+                                                choices=[d["name"]
+                                                         for d in downloadLinks],
+                                                )])
+    os.system(
+        f"wget {downloadLinks[[d['name'] for d in downloadLinks].index(toDownload['model'])]['link']}")
+
+method = inquirer.prompt([inquirer.List(
+    'method',
+    message="What inference method?",
+    choices=RwkvOpList.keys())]
+)
+
 model, emptyState = mro.createRWKVModel(
-    q["file"], mode=q["method"])
+    q["file"], mode=method["method"])
 
 ###### A good prompt for chatbot ######
 

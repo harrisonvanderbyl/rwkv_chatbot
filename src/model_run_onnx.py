@@ -3,7 +3,7 @@
 ########################################################################################################
 
 import src.tensorflowrwkv as tensorflowrwkv
-import tensorflow as tf
+
 # Make sure to use nightly build of torchdynamo
 # import torchdynamo
 # MyFunction = torchdynamo.optimize(
