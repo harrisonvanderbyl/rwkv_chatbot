@@ -134,7 +134,7 @@ def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
 
     sorted_probs = np.sort(probs)[::-1]
     cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
         probs = probs.pow(1.0 / temp)
