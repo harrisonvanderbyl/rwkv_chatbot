@@ -12,7 +12,7 @@ import gc
 
 
 from src.utils import TOKENIZER
-from src.rwkvops import RwkvOpList
+
 try:
     import inquirer
 except:
@@ -73,7 +73,7 @@ if os.system("yarn --version"):
     else:
         print("Exiting...")
         exit()
-
+from src.rwkvops import RwkvOpList
 # build website using yarn
 # yarn build
 os.chdir("web-interface")
