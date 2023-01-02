@@ -379,6 +379,19 @@ class RWKVCudaOps(RWKVPTOps):
             4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
+class RWKVCudaDeepspeedOps(RWKVCudaOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+
+        try:
+            import deepspeed
+        except:
+            raise ImportError("deepspeed not installed")
+
+        self.postProcessModule = lambda x: deepspeed.init_inference(
+            x, replace_method='auto', replace_with_kernel_inject=True).module
+
+
 class RWKVCudaQuantOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, torch.bfloat16)
@@ -796,6 +809,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "poptorch": RWKVPoptorchOps,
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
+    "pytorch-cuda-deepspeed": RWKVCudaDeepspeedOps,
     "pytorch-cuda-false-quant": RWKVCudaQuantOps,
     "pytorch-stream": RWKVStreamOps,
     "pytorch-stream-target": RWKVStreamBigOps,
@@ -805,5 +819,6 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-pytorch-mobile": RWKVMobileOps,
     "export-onnx": RWKVExportOnnxOps,
     "export-tensorflow": RWKVTFExport,
+
 
 }
