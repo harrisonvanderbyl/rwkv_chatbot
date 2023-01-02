@@ -126,8 +126,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 self.receptance, ops.lerp(statea, xy, self.rrtr)))
 
             wrd = ((stateb + kt*v)/(statec + kt))
-            w = stateb*self.time_decay + k*v
-            d = statec*self.time_decay + k
+            outb = stateb*self.time_decay + k*v
+            outc = statec*self.time_decay + k
 
             mvv = x + ops.matvec(self.outputvv, r*wrd)
 
@@ -141,7 +141,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             x = mvv + ops.matvec(self.value_ffn, km*km)*rt
 
-            return x, xy, w, d, ddd
+            return x, xy, outb, outc, ddd
 
     class RWKVTFPre(ops.module):
         def __init__(self):
