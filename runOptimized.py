@@ -187,10 +187,10 @@ def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
 
     sorted_probs = np.sort(probs)[::-1]
     cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p)])
+    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
-        probs = probs.pow(1.0 / temp)
+        probs = pow(probs, 1.0 / temp)
     probs = probs / np.sum(probs, axis=0)
     mout = np.random.choice(a=len(probs), p=probs)
 
@@ -216,7 +216,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
             xout = model.forward([chars[-1]], state)
 
             chars += [sample_logits(
-                xout[0], temp=TEMPERATURE, top_p_usual=top_p)]
+                xout[0], temp=1.9, top_p_usual=top_p)]
 
             char = tokenizer.tokenizer.decode(chars[-1])
 

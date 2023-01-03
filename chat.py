@@ -208,7 +208,7 @@ def s1(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
     cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
     probs[probs < cutoff] = 0
     if temp != 1.0:
-        probs = probs.pow(1.0 / temp)
+        probs = pow(probs, 1.0 / temp)
     probs = probs / np.sum(probs, axis=0)
     mout = np.random.choice(a=len(probs), p=probs)
 
