@@ -396,7 +396,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, torch.bfloat16)
 
-        runtimedtype = torch.bfloat16
+        runtimedtype = inquirer.prompt([inquirer.List(
+            'type',
+            message="Dtype for operations:",
+            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
 
         def initTensor(x):
             if (len(x.shape) != 2):
@@ -407,7 +410,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             x = (x-mini)/(maxi-mini)
             x = x*127
             x = x.to(dtype=torch.int8, device='cuda')
-            return x, maxi.cuda(), mini.cuda()
+            return x, maxi.to(runtimedtype).cuda(), mini.to(runtimedtype).cuda()
 
         self.initTensor = initTensor
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
@@ -415,7 +418,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
         def matvec(x, y):
             # unquantize
             x, maxi, mini = x
-            return ((x.to(dtype=runtimedtype, device='cuda')/127)*(maxi-mini)+mini).mv(y)
+            return ((x.to(dtype=runtimedtype, device='cuda'))).mv(y*(maxi-mini)/127)+mini.dot(y)
 
         self.matvec = matvec
 
