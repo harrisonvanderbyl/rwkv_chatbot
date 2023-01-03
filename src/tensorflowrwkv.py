@@ -26,10 +26,6 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 w[x] = w[x].double()
 
                 w[x] = torch.exp(-torch.exp(w[x]))
-                # w[x] = 1/(1+torch.exp(1.4*w[x]))
-
-                # print(w[x].max(), w[x].min())
-                # w[x] = w[x].clamp(0.01, 0.99)
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -51,28 +47,6 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             preprocess = preprocess + [torch.layer_norm(w["emb.weight"][x], (w["blocks.0.ln0.weight"].shape[0],),
                                                         weight=w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"])]
 
-        # for x in range(n_layer):
-            # w[f"blocks.{x}.att.key.weight"] = w[f"blocks.{x}.att.time_mix_k"]
-            # w[f"blocks.{x}.att.value.weight"] *= w[f"blocks.{x}.att.time_mix_v"]
-            # w[f"blocks.{x}.att.receptance.weight"] *= w[f"blocks.{x}.att.time_mix_r"]
-
-            # w[f"blocks.{x}.ffn.key.weight"] *= w[f"blocks.{x}.ffn.time_mix_k"]
-            # w[f"blocks.{x}.ffn.receptance.weight"] *= w[f"blocks.{x}.ffn.time_mix_r"]
-
-            # w[f"blocks.{x}.att.time_mix_k"] = 1 / \
-            #     w[f"blocks.{x}.att.time_mix_k"] - 1
-            # w[f"blocks.{x}.att.time_mix_v"] = 1 / \
-            #     w[f"blocks.{x}.att.time_mix_v"] - 1
-            # w[f"blocks.{x}.att.time_mix_r"] = 1 / \
-            #     w[f"blocks.{x}.att.time_mix_r"] - 1
-
-            # w[f"blocks.{x}.ffn.time_mix_k"] = 1 / \
-            #     w[f"blocks.{x}.ffn.time_mix_k"] - 1
-            # w[f"blocks.{x}.ffn.time_mix_r"] = 1 / \
-            #     w[f"blocks.{x}.ffn.time_mix_r"] - 1
-
-            # garbage collect
-
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -83,10 +57,6 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def __init__(self, x):
             super(RWKVTFLayer, self).__init__()
 
-            # self.__dict__ = {k: ops.initTensor(v) for k, v in dic.items()}
-
-            # for k, v in dic.items():
-            #     print(len(v.shape), v.shape)
             self.ln1w = ops.initTensor(w[f"blocks.{x}.ln1.weight"])
             self.ln1b = ops.initTensor(w[f"blocks.{x}.ln1.bias"])
             self.ln2w = ops.initTensor(w[f"blocks.{x}.ln2.weight"])
@@ -117,13 +87,13 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             kk = ops.matvec(
                 self.key, ops.lerp(statea, xy, self.kktk))
 
-            kt = ops.exp(ops.minimum(kk + self.time_first, ops.klimit))
-            k = ops.exp(ops.minimum(kk, ops.klimit))
-
             v = ops.matvec(self.value, ops.lerp(statea, xy, self.vvtv))
 
             r = ops.logistical(ops.matvec(
                 self.receptance, ops.lerp(statea, xy, self.rrtr)))
+
+            kt = ops.exp(ops.minimum(kk + self.time_first, ops.klimit))
+            k = ops.exp(ops.minimum(kk, ops.klimit))
 
             wrd = ((stateb + kt*v)/(statec + kt))
             outb = stateb*self.time_decay + k*v

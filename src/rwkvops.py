@@ -402,12 +402,12 @@ class RWKVCudaQuantOps(RWKVPTOps):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device='cuda')
 
-            maxi, mini = x.max(), x.min()
+            maxi, mini = x.max(0)[0], x.min(0)[0]
             # quantize to int8
             x = (x-mini)/(maxi-mini)
             x = x*127
             x = x.to(dtype=torch.int8, device='cuda')
-            return x, maxi, mini
+            return x, maxi.cuda(), mini.cuda()
 
         self.initTensor = initTensor
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
