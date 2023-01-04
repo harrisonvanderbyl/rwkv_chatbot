@@ -366,7 +366,7 @@ class RWKVCudaOps(RWKVPTOps):
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
             message="Dtype for operations:",
-            choices=[torch.bfloat16, torch.float32, torch.float64])])['type']
+            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
 
         upscale = True
         if runtimedtype != self.dtype:
