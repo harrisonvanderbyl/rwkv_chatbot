@@ -13,7 +13,7 @@ from torch.nn import functional as F
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
-import onnxruntime as ort
+from typing import List as list
 import tqdm
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese

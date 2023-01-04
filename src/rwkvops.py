@@ -3,7 +3,7 @@ from urllib import request
 import inquirer
 import numpy as np
 import os
-
+from typing import Dict as dict
 import torch
 import http.server
 import json

@@ -5,6 +5,7 @@ import numpy as np
 import os
 import time
 import gc
+from typing import List as list
 import torch
 from src.utils import TOKENIZER
 import inquirer
