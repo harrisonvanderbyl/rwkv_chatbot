@@ -1,11 +1,10 @@
 
 import torch
-import src.rwkvops
+from src.rwkvops import RwkvOpList as Backends
 
 import torch
 import gc
 from typing import Dict
-import numpy as np
 from tqdm import tqdm
 
 
@@ -50,7 +49,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
     gc.collect()
     torch.cuda.empty_cache()
 
-    ops = src.rwkvops.RwkvOpList[mode](
+    ops = Backends[mode](
         n_layer, len(w[f"blocks.0.ffn.time_mix_k"]), *args, **kwargs)
 
     class RWKVTFLayer(ops.module):

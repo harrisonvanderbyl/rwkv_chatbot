@@ -6,10 +6,9 @@ import time
 import gc
 import torch
 from src.utils import TOKENIZER
-from src.rwkvops import RwkvOpList
 import inquirer
 from scipy.special import softmax
-import src.model_run_onnx as mro
+from src.rwkv import RWKV, Backends
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
@@ -34,12 +33,12 @@ questions = [
     inquirer.List(
         'method',
         message="What inference method?",
-        choices=RwkvOpList.keys()
+        choices=Backends.keys()
     )
 ]
 q = inquirer.prompt(questions)
 
-model, emptyState = mro.createRWKVModel(
+model, emptyState = RWKV(
     q["file"], mode=q["method"])
 
 ###### A good prompt for chatbot ######

@@ -56,7 +56,7 @@ except:
     else:
         print("Exiting...")
         exit()
-import src.model_run_onnx as mro
+from src.rwkv import RWKV, Backends
 
 
 # check if yarn installed
@@ -73,7 +73,6 @@ if os.system("yarn --version"):
     else:
         print("Exiting...")
         exit()
-from src.rwkvops import RwkvOpList
 # build website using yarn
 # yarn build
 os.chdir("web-interface")
@@ -132,10 +131,10 @@ if q["file"] == DownloadPrompt:
 method = inquirer.prompt([inquirer.List(
     'method',
     message="What inference method?",
-    choices=RwkvOpList.keys())]
+    choices=Backends.keys())]
 )
 
-model, emptyState = mro.createRWKVModel(
+model, emptyState = RWKV(
     q["file"], mode=method["method"])
 
 ###### A good prompt for chatbot ######
