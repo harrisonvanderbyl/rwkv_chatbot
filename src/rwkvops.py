@@ -729,10 +729,10 @@ class RWKVStreamOps(RWKVPTOps):
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
 
         def prefunc(xx, args, x):
-            if xx.preprocess[0].is_cuda:
+            if xx.preprocess[0].device == "cuda":
                 xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
 
-            return x(self, *args).cuda(non_blocking=True)
+            return x(xx, *args).cuda(non_blocking=True)
 
         self.prefunc = lambda x: lambda *args: prefunc(*args, x)
         self.emptyState = torch.zeros(
@@ -766,17 +766,16 @@ class RWKVStreamBigOps(RWKVPTOps):
             return ret
 
         def prefunc(xx, args, x):
-            if xx.preprocess[0].is_cuda:
+            if xx.preprocess[0].device == "cuda":
                 xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
 
             return x(xx, *args).cuda(non_blocking=True)
 
-        self.prefunc = lambda x: lambda *args: prefunc(*args, x)
+        self.prefunc = lambda x: lambda self, *args: prefunc(self, *args, x)
         self.klimit = self.klimit.cuda(non_blocking=True)
         self.postfunc = lambda x: lambda self, * \
             args: sendToCuda(self, args, x).float().cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
-        self.prefunc = lambda x: lambda *args: prefunc(*args, x)
         self.matvec = lambda z, y: z.mv(y.to(storageDtype)).to(processDtype)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
