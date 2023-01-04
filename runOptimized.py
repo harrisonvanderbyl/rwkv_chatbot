@@ -8,7 +8,6 @@ import os
 import time
 import gc
 import torch
-from src.model_run import RWKV_RNN
 from src.utils import TOKENIZER
 from src.rwkvops import RwkvOpList
 import inquirer
