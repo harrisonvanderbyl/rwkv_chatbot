@@ -728,9 +728,9 @@ class RWKVStreamOps(RWKVPTOps):
             args: sendToCuda(self, args, x).cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
 
-        def prefunc(self, args, x):
-            if x.preprocess.is_cuda:
-                x.preprocess = x.preprocess.cpu()
+        def prefunc(xx, args, x):
+            if xx.preprocess[0].is_cuda:
+                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
 
             return x(self, *args).cuda(non_blocking=True)
 
@@ -766,8 +766,8 @@ class RWKVStreamBigOps(RWKVPTOps):
             return ret
 
         def prefunc(xx, args, x):
-            if xx.preprocess.is_cuda:
-                xx.preprocess = xx.preprocess.cpu()
+            if xx.preprocess[0].is_cuda:
+                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
 
             return x(xx, *args).cuda(non_blocking=True)
 
