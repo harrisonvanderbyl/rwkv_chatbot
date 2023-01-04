@@ -6,6 +6,7 @@ import torch
 import gc
 from typing import Dict
 from tqdm import tqdm
+RWKV_RESCALE_LAYER = 6
 
 
 def RWKV(Path, mode="tensorflow", *args, **kwargs):
@@ -55,6 +56,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
     class RWKVTFLayer(ops.module):
         def __init__(self, x):
             super(RWKVTFLayer, self).__init__()
+
+            self.i = x
 
             self.ln1w = ops.initTensor(w[f"blocks.{x}.ln1.weight"])
             self.ln1b = ops.initTensor(w[f"blocks.{x}.ln1.bias"])
@@ -109,6 +112,9 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 stated, ddd, self.time_mix_r_ffn)))
 
             x = mvv + ops.matvec(self.value_ffn, km*km)*rt
+
+            if (self.i+1) % RWKV_RESCALE_LAYER == 0:
+                x = x / 2
 
             return x, xy, outb, outc, ddd
 
