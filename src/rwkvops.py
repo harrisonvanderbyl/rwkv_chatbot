@@ -9,6 +9,9 @@ import http.server
 import json
 import socketserver
 
+KLIMIT = 30
+KLIMIT16 = 11
+
 # allow tf32
 torch.backends.cuda.matmul.allow_tf32 = True
 
@@ -73,7 +76,7 @@ class RWKVTFOps(RWKVOPS):
         self.stack = tf.stack
         self.matvec = tf.linalg.matvec
         self.klimit = tf.convert_to_tensor(
-            [18]*embed, dtype=tf.float32
+            [KLIMIT]*embed, dtype=tf.float32
         )
         self.log = tf.math.log
         self.lerp = lambda x, y, z: x*(1-z)+y*z
@@ -212,7 +215,7 @@ class RWKVNumpyOps(RWKVOPS):
         self.matvec = np.matmul
         self.lerp = lambda x, y, z: x*(1-z) + y*(z)
         self.minimum = lambda x, y: np.minimum(x, y)
-        self.klimit = [18] * embed
+        self.klimit = [KLIMIT] * embed
         # module def
         self.module = object
         self.log = np.log
@@ -247,7 +250,7 @@ class RWKVJaxOps(RWKVOPS):
         self.matvec = npjax.matmul
         self.lerp = lambda x, y, z: x*(1-z) + y*(z)
         self.minimum = lambda x, y: npjax.minimum(x, y)
-        self.klimit = npjax.array([18] * embed)
+        self.klimit = npjax.array([KLIMIT] * embed)
         # module def
         self.module = object
         self.log = npjax.log
@@ -304,7 +307,8 @@ class RWKVPTOps(RWKVOPS):
         self.dtype = dtype
 
         self.initTensor = lambda x: x.to(dtype=self.dtype)
-        self.klimit = torch.tensor([18] * embed).to(dtype=self.dtype)
+        self.klimit = torch.tensor(
+            [KLIMIT16 if dtype == torch.float16 else KLIMIT] * embed).to(dtype=self.dtype)
         self.minimum = torch.minimum
         self.sqrt = torch.sqrt
         self.mean = torch.mean
@@ -783,7 +787,7 @@ class RWKVSplitCudaOps(RWKVPTOps):
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
-        self.minimum = lambda x, y: torch.min(x, torch.ones_like(x)*18)
+        self.minimum = lambda x, y: torch.min(x, torch.ones_like(x)*KLIMIT)
 
         def sendToCuda(self, args, x):
             # create a new modifiable empty object

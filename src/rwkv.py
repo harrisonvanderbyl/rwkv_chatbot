@@ -6,7 +6,6 @@ import torch
 import gc
 from typing import Dict
 from tqdm import tqdm
-RWKV_RESCALE_LAYER = 6
 
 
 def RWKV(Path, mode="tensorflow", *args, **kwargs):
@@ -72,7 +71,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             self.value = ops.initTensor(w[f"blocks.{x}.att.value.weight"])
             self.receptance = ops.initTensor(
                 w[f"blocks.{x}.att.receptance.weight"])
-            self.outputvv = ops.initTensor(w[f"blocks.{x}.att.output.weight"])
+            self.outputvv = ops.initTensor(
+                w[f"blocks.{x}.att.output.weight"])
             self.time_mix_k_ffn = ops.initTensor(
                 w[f"blocks.{x}.ffn.time_mix_k"])
             self.time_mix_r_ffn = ops.initTensor(
@@ -80,7 +80,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             self.key_ffn = ops.initTensor(w[f"blocks.{x}.ffn.key.weight"])
             self.receptance_ffn = ops.initTensor(
                 w[f"blocks.{x}.ffn.receptance.weight"])
-            self.value_ffn = ops.initTensor(w[f"blocks.{x}.ffn.value.weight"])
+            self.value_ffn = ops.initTensor(
+                w[f"blocks.{x}.ffn.value.weight"])
 
         @ ops.layerdef
         def forward(self, x, statea, stateb, statec, stated):
@@ -94,7 +95,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
             r = ops.logistical(ops.matvec(
                 self.receptance, ops.lerp(statea, xy, self.rrtr)))
 
-            kt = ops.exp(ops.minimum(kk + self.time_first, ops.klimit))
+            kt = ops.exp(ops.minimum(
+                kk + self.time_first, ops.klimit))
             k = ops.exp(ops.minimum(kk, ops.klimit))
 
             wrd = ((stateb + kt*v)/(statec + kt))
@@ -112,9 +114,6 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
                 stated, ddd, self.time_mix_r_ffn)))
 
             x = mvv + ops.matvec(self.value_ffn, km*km)*rt
-
-            if (self.i+1) % RWKV_RESCALE_LAYER == 0:
-                x = x / 2
 
             return x, xy, outb, outc, ddd
 
