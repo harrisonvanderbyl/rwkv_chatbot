@@ -285,7 +285,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             return
         # self._set_response()
         self.wfile.write(
-            open("/".join(__file__.split("/")[:-1])+"/web-interface/build/"+self.path, "rb").read())
+            open("web-interface/build/"+self.path, "rb").read())
 
     def do_POST(self):
         self.send_response(200)
