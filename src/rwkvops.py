@@ -722,6 +722,8 @@ class RWKVStreamOps(RWKVPTOps):
             del newself
             return ret
 
+        self.klimit = self.klimit.cuda(non_blocking=True)
+
         self.postfunc = lambda x: lambda self, * \
             args: sendToCuda(self, args, x).cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
