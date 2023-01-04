@@ -44,6 +44,9 @@ class RWKVOPS():
         self.logistical = lambda x: 1 / (self.exp(x) + 1)
         self.postProcessModule = lambda x: x
 
+        # typing, set as any
+        self.tensorDef = None
+
 
 class RWKVTFOps(RWKVOPS):
     def __init__(self, layers, embed):
@@ -268,6 +271,25 @@ class RWKVJaxOps(RWKVOPS):
         self.emptyState = npjax.array([[0.01]*embed]*4*layers)
 
 
+class RWKVJaxIreeOps(RWKVJaxOps):
+    def __init__(self, layers, embed):
+        RWKVJaxOps.__init__(self, layers, embed)
+        from iree.jax import Program
+        from jax import numpy as npjax
+
+        self.module = Program
+        self.prefunc = Program.kernel
+        self.postfunc = Program.kernel
+        self.layerdef = Program.kernel
+        # annotate the function
+
+        self.tensorDef = Program.like(self.initTensor(torch.ones((embed))))
+
+        self.emptyState = Program.like(self.emptyState)
+
+        # self.postProcessModule()
+
+
 class RWKVPTOps(RWKVOPS):
     def __init__(self, layers, embed, dtype=None):
         RWKVOPS.__init__(self, layers, embed)
@@ -405,9 +427,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device='cuda')
 
-            ran, mini = (x.max(0)[0]-x.min(0)[0])/127, x.min(0)[0]
+            ran, mini = (x.max(0)[0]-x.min(0)[0]) / \
+                255,  x.min(0)[0]
             # quantize to int8
-            x = (x-mini)/ran
+            x = (x-mini)/ran - 128
             x = x.to(dtype=torch.int8, device='cuda')
             return x, ran.to(runtimedtype).cuda(), mini.to(runtimedtype).cuda()
 
@@ -418,7 +441,53 @@ class RWKVCudaQuantOps(RWKVPTOps):
             # unquantize
             rx, spread, zpoint = x
 
-            return (rx.to(dtype=runtimedtype)).mv(y*spread)+zpoint.dot(y)
+            return (rx.to(dtype=runtimedtype)).mv(y*spread)+zpoint.dot(y) + (y*spread*127).sum()
+
+        self.matvec = matvec
+
+        def ln(x, w, b):
+            xee2 = x - self.mean(x)
+
+            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
+
+            return w*(xee2/x2) + b
+
+        self.layernorm = ln
+        self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
+
+        self.log = lambda x: torch.log(x)
+        self.exp = lambda x: torch.exp(x)
+        self.emptyState = torch.zeros(
+            4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
+
+
+class RWKVCudaQuantOffOps(RWKVPTOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, torch.bfloat16)
+
+        runtimedtype = torch.float32
+
+        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+
+        def initTensor(x):
+            if (len(x.shape) != 2):
+                return x.to(dtype=runtimedtype, device='cuda')
+            # calculate zpoint instead of min
+            ran, zeroPoint = (x.max(0)[0]-x.min(0)[0]) / \
+                127,  x.min(0)[0]
+            # quantize to int8
+            x = torch.quantize_per_channel(
+                x.float(), ran, zeroPoint, 1, torch.qint8)
+
+            return x.cuda()
+
+        self.initTensor = initTensor
+
+        def matvec(x, y):
+            # unquantize
+            rx = x
+
+            return (rx.dequantize()).mv(y)
 
         self.matvec = matvec
 
@@ -813,7 +882,8 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "pytorch-compatible": RWKVPTCompatOps,
     "pytorch-cuda": RWKVCudaOps,
     "pytorch-cuda-deepspeed": RWKVCudaDeepspeedOps,
-    "pytorch-cuda-false-quant": RWKVCudaQuantOps,
+    "pytorch-cuda-matrix-quant": RWKVCudaQuantOps,
+    "pytorch-cuda-matrix-quant(broken)": RWKVCudaQuantOffOps,
     "pytorch-stream": RWKVStreamOps,
     "pytorch-stream-target": RWKVStreamBigOps,
     "pytorch-p2p": RWKVP2POps,
@@ -822,6 +892,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-pytorch-mobile": RWKVMobileOps,
     "export-onnx": RWKVExportOnnxOps,
     "export-tensorflow": RWKVTFExport,
+    "RWKVJaxIreeOps": RWKVJaxIreeOps,
 
 
 }
