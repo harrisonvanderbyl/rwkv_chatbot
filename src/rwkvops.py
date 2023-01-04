@@ -460,6 +460,14 @@ class RWKVCudaQuantOps(RWKVPTOps):
         self.layernorm = ln
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
+        def prefunc(xx, *args, fn):
+            if xx.preprocess[0].device == "cuda":
+                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
+
+            return fn(xx, *args).cuda(non_blocking=True)
+
+        self.prefunc = lambda x: lambda self, *args: prefunc(self, *args, fn=x)
+
         self.log = lambda x: torch.log(x)
         self.exp = lambda x: torch.exp(x)
         self.emptyState = torch.zeros(
