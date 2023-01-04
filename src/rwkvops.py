@@ -427,11 +427,11 @@ class RWKVCudaQuantOps(RWKVPTOps):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device='cuda')
 
-            ran, mini = (x.max(0)[0]-x.min(0)[0]) / \
-                127,  x.min(0)[0]
+            ran, mini = (x.max(0)[0]-x.min(0)[0])/255,  x.min(0)[0]
             # quantize to int8
-            x = (x-mini)/ran - 128
-            x = x.to(dtype=torch.int8, device='cuda')
+            x = (x-mini)/ran
+            print(x.min(), x.max())
+            x = x.to(dtype=torch.uint8, device='cuda')
             return x, ran.to(runtimedtype).cuda(), mini.to(runtimedtype).cuda()
 
         self.initTensor = initTensor
@@ -441,7 +441,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             # unquantize
             rx, spread, zpoint = x
 
-            return (rx.to(dtype=runtimedtype)).mv(y*spread)+zpoint.dot(y) + (y*spread*127).sum()
+            return (rx.to(runtimedtype) * spread + zpoint).mv(y)
 
         self.matvec = matvec
 
