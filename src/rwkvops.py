@@ -428,7 +428,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
                 return x.to(dtype=runtimedtype, device='cuda')
 
             ran, mini = (x.max(0)[0]-x.min(0)[0]) / \
-                255,  x.min(0)[0]
+                127,  x.min(0)[0]
             # quantize to int8
             x = (x-mini)/ran - 128
             x = x.to(dtype=torch.int8, device='cuda')
