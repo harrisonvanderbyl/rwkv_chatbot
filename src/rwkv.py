@@ -120,7 +120,8 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
     class RWKVTFPre(ops.module):
         def __init__(self):
             super(RWKVTFPre, self).__init__()
-            self.preprocess = ops.stack(list(map(ops.initTensor, preprocess)))
+            self.preprocess = ops.stack(
+                list(map(ops.initCpuTensor, preprocess)))
 
         @ ops.prefunc
         def forward(self, x):

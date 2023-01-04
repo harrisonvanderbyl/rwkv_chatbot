@@ -24,6 +24,7 @@ class RWKVOPS():
     def __init__(self, layers, embed):
         print("init RWKVOPS, from super")
         self.initTensor: notimplemented
+        self.initCpuTensor = lambda x: self.initTensor(x)
         self.sqrt: notimplemented
         self.mean: notimplemented
         self.relu: notimplemented
@@ -307,6 +308,7 @@ class RWKVPTOps(RWKVOPS):
         self.dtype = dtype
 
         self.initTensor = lambda x: x.to(dtype=self.dtype)
+        self.initCpuTensor = lambda x: self.initTensor(x).cpu()
         self.klimit = torch.tensor(
             [KLIMIT16 if dtype == torch.float16 else KLIMIT] * embed).to(dtype=self.dtype)
         self.minimum = torch.minimum
@@ -381,7 +383,9 @@ class RWKVCudaOps(RWKVPTOps):
 
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else runtimedtype, device='cuda')
+        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+        self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
         if upscale:
@@ -439,6 +443,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             return x, ran.to(runtimedtype).cuda(), mini.to(runtimedtype).cuda()
 
         self.initTensor = initTensor
+        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
 
         def matvec(x, y):
@@ -459,14 +464,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
 
         self.layernorm = ln
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
-
-        def prefunc(xx, *args, fn):
-            if xx.preprocess[0].device == "cuda":
-                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
-
-            return fn(xx, *args).cuda(non_blocking=True)
-
-        self.prefunc = lambda x: lambda self, *args: prefunc(self, *args, fn=x)
+        self.prefunc = lambda x: lambda *args: x(*args).cuda()
 
         self.log = lambda x: torch.log(x)
         self.exp = lambda x: torch.exp(x)
@@ -481,6 +479,9 @@ class RWKVCudaQuantOffOps(RWKVPTOps):
         runtimedtype = torch.float32
 
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+
+        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
+        self.prefunc = lambda x: lambda *args: x(*args).cuda()
 
         def initTensor(x):
             if (len(x.shape) != 2):
@@ -736,13 +737,10 @@ class RWKVStreamOps(RWKVPTOps):
             args: sendToCuda(self, args, x).cpu()
         self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
 
-        def prefunc(xx, args, x):
-            if xx.preprocess[0].device == "cuda":
-                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
+        self.initCpuTensor = lambda x: x.to(self.dtype).cpu()
 
-            return x(xx, *args).cuda(non_blocking=True)
-
-        self.prefunc = lambda x: lambda *args: prefunc(*args, x)
+        self.prefunc = lambda x: lambda self, * \
+            args: x(self, *args).cuda(non_blocking=True)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=self.dtype, device="cuda")+0.01
 
@@ -772,14 +770,9 @@ class RWKVStreamBigOps(RWKVPTOps):
 
             del newself
             return ret
-
-        def prefunc(xx, args, x):
-            if xx.preprocess[0].device == "cuda":
-                xx.preprocess = list(map(lambda x: x.cpu(), xx.preprocess))
-
-            return x(xx, *args).cuda(non_blocking=True)
-
-        self.prefunc = lambda x: lambda self, *args: prefunc(self, *args, x)
+        self.initCpuTensor = lambda x: x.to(
+            dtype=storageDtype if len(x.shape) == 2 else processDtype).cpu()
+        self.prefunc = lambda x: lambda *args: x(*args).cuda(non_blocking=True)
         self.klimit = self.klimit.cuda(non_blocking=True)
         self.postfunc = lambda x: lambda self, * \
             args: sendToCuda(self, args, x).float().cpu()
