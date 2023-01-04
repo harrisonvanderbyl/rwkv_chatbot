@@ -440,8 +440,9 @@ class RWKVCudaQuantOps(RWKVPTOps):
         def matvec(x, y):
             # unquantize
             rx, spread, zpoint = x
+            yy = y*spread
 
-            return (rx.to(runtimedtype) * spread + zpoint).mv(y)
+            return (rx.to(runtimedtype).mv(yy)) + zpoint.dot(y)
 
         self.matvec = matvec
 
