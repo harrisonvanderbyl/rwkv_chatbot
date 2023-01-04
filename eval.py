@@ -179,7 +179,7 @@ for RUN_NUM in RUN_TABLE:
     if RWKV_SLOW_MODE:
         # from src.model_run import RWKV_RNN
         # rwkv_rnn = RWKV_RNN(RWKV_FILENAME)
-        from src.tensorflowrwkv import RWKV
+        from src.rwkv import RWKV
         rwkv_rnn, emptystate = RWKV(RWKV_FILENAME, q["method"])
 
     import tokenizers
