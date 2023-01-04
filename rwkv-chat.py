@@ -9,7 +9,7 @@ import numpy as np
 import os
 import time
 from typing import Dict as dict
-from typing import List as list
+from typing import List
 import gc
 
 
@@ -234,7 +234,7 @@ double_newlinetok = tokenizer.tokenizer.encode('\n\n')[0]
 progress = {}
 
 
-def loadContext(ctx: list[int], statex, newctx: list[int], id="none"):
+def loadContext(ctx: List[int], statex, newctx: List[int], id="none"):
     # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
     #     with record_function("model_inference"):
     with torch.jit.optimized_execution(True):
