@@ -381,10 +381,17 @@ class RWKVCudaOps(RWKVPTOps):
                 message=f"Convert Matrix to {runtimedtype} during matvec(Y, higher mem usage, more accurate), or convert vector to {self.dtype} during matvec(N, lower mem usage, less accurate)",
                 default=True)])['type']
 
+        offload = inquirer.prompt([inquirer.Confirm(
+            'type',
+            message=f"Offload preprocess/postprocess to cpu?",
+            default=True)])['type']
+
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else runtimedtype, device='cuda')
-        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
-        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+        self.initCpuTensor = lambda x: x.to(
+            dtype=self.dtype).cpu() if offload else self.initTensor(x)
+        self.postfunc = lambda x: lambda self, y: x(
+            self, y.to("cpu" if offload else "cuda")).cpu().float()
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
@@ -433,6 +440,11 @@ class RWKVCudaQuantOps(RWKVPTOps):
             message="Dtype for operations:",
             choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
 
+        offload = inquirer.prompt([inquirer.Confirm(
+            'type',
+            message=f"Offload preprocess/postprocess to cpu?",
+            default=True)])['type']
+
         def initTensor(x):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device=dev)
@@ -445,9 +457,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
             return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
         self.initTensor = initTensor
-        self.initCpuTensor = lambda x: x.to(dtype=runtimedtype).cpu() if len(
-            x.shape) == 1 else (x.to(dtype=runtimedtype).cpu(), 1, torch.zeros(embed, dtype=runtimedtype))
-        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
+        self.initCpuTensor = (lambda x: x.to(dtype=runtimedtype).cpu() if len(
+            x.shape) == 1 else (x.to(dtype=runtimedtype).cpu(), 1, torch.zeros(embed, dtype=runtimedtype))) if offload else self.initTensor
+        self.postfunc = lambda x: lambda self, y: x(
+            self, y.to("cpu" if offload else "cuda")).cpu().float()
 
         def matvec(x, y):
             # unquantize

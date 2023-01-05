@@ -140,7 +140,7 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         @ ops.postfunc
         def forward(self, x):
 
-            return matvec(self.postprocess2, layernorm(x.cpu(), self.postprocess0,
+            return matvec(self.postprocess2, layernorm(x, self.postprocess0,
                                                        self.postprocess1))
 
     class myRWKV(ops.module):
