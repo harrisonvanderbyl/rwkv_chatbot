@@ -133,13 +133,14 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
         def __init__(self):
             super(RWKVTFPost, self).__init__()
 
-            self.postprocess0 = ops.initTensor(w["ln_out.weight"])
-            self.postprocess1 = ops.initTensor(w["ln_out.bias"])
-            self.postprocess2 = ops.initTensor(w["head.weight"])
+            self.postprocess0 = ops.initCpuTensor(w["ln_out.weight"])
+            self.postprocess1 = ops.initCpuTensor(w["ln_out.bias"])
+            self.postprocess2 = ops.initCpuTensor(w["head.weight"])
 
         @ ops.postfunc
         def forward(self, x):
-            return matvec(self.postprocess2, layernorm(x, self.postprocess0,
+
+            return matvec(self.postprocess2, layernorm(x.cpu(), self.postprocess0,
                                                        self.postprocess1))
 
     class myRWKV(ops.module):

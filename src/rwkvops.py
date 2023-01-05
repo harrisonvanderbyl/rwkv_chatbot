@@ -445,7 +445,8 @@ class RWKVCudaQuantOps(RWKVPTOps):
             return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
         self.initTensor = initTensor
-        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
+        self.initCpuTensor = lambda x: x.to(dtype=runtimedtype).cpu() if len(
+            x.shape) == 1 else (x.to(dtype=runtimedtype).cpu(), 1, torch.zeros(embed, dtype=runtimedtype))
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
 
         def matvec(x, y):
@@ -493,7 +494,7 @@ class RWKVCudaQuantOffOps(RWKVPTOps):
                 127,  x.min(0)[0]
             # quantize to int8
             x = torch.quantize_per_channel(
-                x.float(), ran, zeroPoint, 1, torch.qint8)
+                x.to(runtimedtype), ran, zeroPoint, 1, torch.qint8)
 
             return x.cuda()
 
