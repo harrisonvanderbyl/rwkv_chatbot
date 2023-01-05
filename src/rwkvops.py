@@ -494,20 +494,27 @@ class RWKVCudaQuantOffOps(RWKVPTOps):
 
         runtimedtype = torch.float32
 
+        offload = inquirer.prompt([inquirer.Confirm(
+            'type',
+            message=f"Offload preprocess/postprocess to cpu?",
+            default=True)])['type']
+
         self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
 
-        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
+        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu(
+        ) if offload else self.initTensor(x)
         self.prefunc = lambda x: lambda *args: x(*args).cuda()
 
-        def initTensor(x):
+        def initTensor(x: torch.Tensor):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device='cuda')
             # calculate zpoint instead of min
-            ran, zeroPoint = (x.max(0)[0]-x.min(0)[0]) / \
-                127,  x.min(0)[0]
+            ran = 255/(x.max(0)[0]-x.min(0)[0])
+
+            zeroPoint = -(ran*x).min(0)[0]
             # quantize to int8
             x = torch.quantize_per_channel(
-                x.to(runtimedtype), ran, zeroPoint, 1, torch.qint8)
+                x.to(runtimedtype), ran, zeroPoint, 1, torch.quint8)
 
             return x.cuda()
 
