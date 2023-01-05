@@ -165,13 +165,7 @@ def loadContext(ctx: list[int], statex, newctx: list[int]):
     return ctx+newctx, o[1]
 
 
-try:
-    tokens = torch.load(f"{q['file']}-state{emptyState.dtype}.pt")
-    print("loaded state")
-except:
-
-    tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
-    torch.save(tokens, f"{q['file']}-state{emptyState.dtype}.pt")
+tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
 
 origistate = (tokens[0], tokens[1])
 
