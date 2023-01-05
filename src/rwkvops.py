@@ -453,7 +453,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             rx, spread, zpoint = x
             yy = y*spread
 
-            return (rx.to(runtimedtype) @ yy) + zpoint.dot(y)
+            return rx.to(dtype=runtimedtype).mv(yy) + zpoint.dot(y)
 
         self.matvec = matvec
 

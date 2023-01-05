@@ -156,6 +156,12 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
         @ ops.mainfunc
         def forward(self, x, state=None):
+
+            # profile usage
+            # print("start", len(self.mylayers))
+
+            # with torch.profiler.profile(record_shapes=True, use_cuda=True) as prof:
+
             if (state is None):
                 state = ops.emptyState
 
@@ -177,6 +183,11 @@ def RWKV(Path, mode="tensorflow", *args, **kwargs):
 
             x = self.postprocess.forward(x)
             # print(len(ot))
-            return x, ops.stack(ot)
 
+            # display usage
+
+            # print(prof.key_averages().table(
+            #     sort_by="cuda_time_total", row_limit=10, top_level_events_only=True))
+            # exit()
+            return x, ops.stack(ot)
     return ops.postProcessModule(myRWKV()), ops.emptyState
