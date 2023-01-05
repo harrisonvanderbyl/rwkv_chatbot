@@ -426,6 +426,8 @@ class RWKVCudaQuantOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, torch.bfloat16)
 
+        dev = "cuda"
+
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
             message="Dtype for operations:",
@@ -433,14 +435,14 @@ class RWKVCudaQuantOps(RWKVPTOps):
 
         def initTensor(x):
             if (len(x.shape) != 2):
-                return x.to(dtype=runtimedtype, device='cuda')
+                return x.to(dtype=runtimedtype, device=dev)
 
             ran, mini = (x.max(0)[0]-x.min(0)[0])/255,  x.min(0)[0]
             # quantize to int8
             x = (x-mini)/ran
             print(x.min(), x.max())
-            x = x.to(dtype=torch.uint8, device='cuda')
-            return x, ran.to(runtimedtype).cuda(), mini.to(runtimedtype).cuda()
+            x: torch.Tensor = x.to(dtype=torch.uint8, device=dev)
+            return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
         self.initTensor = initTensor
         self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu()
@@ -451,7 +453,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             rx, spread, zpoint = x
             yy = y*spread
 
-            return (rx.to(runtimedtype).mv(yy)) + zpoint.dot(y)
+            return (rx.to(runtimedtype) @ yy) + zpoint.dot(y)
 
         self.matvec = matvec
 
@@ -463,13 +465,13 @@ class RWKVCudaQuantOps(RWKVPTOps):
             return w*(xee2/x2) + b
 
         self.layernorm = ln
-        self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
-        self.prefunc = lambda x: lambda *args: x(*args).cuda()
+        self.klimit = self.klimit.to(dtype=runtimedtype, device=dev)
+        self.prefunc = lambda x: lambda *args: x(*args).to(device=dev)
 
         self.log = lambda x: torch.log(x)
         self.exp = lambda x: torch.exp(x)
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
+            4*layers, embed, dtype=runtimedtype, device=dev)+0.01
 
 
 class RWKVCudaQuantOffOps(RWKVPTOps):
