@@ -394,7 +394,7 @@ class RWKVCudaOps(RWKVPTOps):
         self.matvec = lambda x, y: x.mv(
             y.to(self.dtype)).to(runtimedtype)
 
-        self.postfunc = lambda x: lambda *args: x(*args).cpu()
+        self.postfunc = lambda x: lambda *args: x(*args).float().cpu()
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
