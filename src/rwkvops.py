@@ -163,7 +163,7 @@ class RWKVTFExport(RWKVTFOps):
                     converter = tf.lite.TFLiteConverter.from_concrete_functions(
                         [x.forward.get_concrete_function()])
                     tflite_model = converter.convert()
-                    open(path+f"tflite32/whole.tflite",
+                    open(f"model-{layers}-{embed}-32.tflite",
                          "wb").write(tflite_model)
 
             if "tflite16" in q:
@@ -198,7 +198,7 @@ class RWKVTFExport(RWKVTFOps):
                     converter.optimizations = [tf.lite.Optimize.DEFAULT]
                     converter.target_spec.supported_types = [tf.float16]
                     tflite_model = converter.convert()
-                    open(path+f"tflite16/whole.tflite",
+                    open(f"model-{layers}-{embed}-16.tflite",
                          "wb").write(tflite_model)
             exit()
         self.postProcessModule = save
@@ -337,6 +337,18 @@ class RWKVPTOps(RWKVOPS):
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=self.dtype)+0.0
+
+
+class RWKVPTTSExportOps(RWKVPTOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+        self.stack = lambda x: torch.stack(x)
+
+        def exportTorchScript(x):
+            torch.jit.save(torch.jit.trace(
+                x, (torch.LongTensor([0]), self.emptyState)), f"model-{layers}-{embed}.pt")
+            exit()
+        self.postProcessModule = exportTorchScript
 
 
 class RWKVPoptorchOps(RWKVPTOps):
@@ -938,6 +950,6 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-onnx": RWKVExportOnnxOps,
     "export-tensorflow": RWKVTFExport,
     "RWKVJaxIreeOps": RWKVJaxIreeOps,
-
+    "pytorch-export-torchscript": RWKVPTTSExportOps,
 
 }

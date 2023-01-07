@@ -6,9 +6,63 @@ import torch
 import gc
 from typing import Dict
 from tqdm import tqdm
+import inquirer
+import os
 
 
-def RWKV(Path, mode="tensorflow", *args, **kwargs):
+def RWKV(Path=None, mode=None, *args, **kwargs):
+
+    if (Path == None):
+        files = os.listdir()
+        # filter by ending in .pth
+        files = [f for f in files if f.endswith(".pth") or f.endswith(".pt")]
+
+        questions = [
+            inquirer.List('file',
+                          message="What model do you want to use?",
+                          choices=files,
+                          )]
+        Path = inquirer.prompt(questions)["file"]
+
+    if (mode == None and Path.endswith(".pth")):
+        mode = inquirer.prompt([inquirer.List('mode',
+                                              message="What inference backend do you want to use?",
+                                              choices=Backends.keys(),
+                                              )])["mode"]
+
+    elif Path.endswith(".pt"):
+        embed = Path.split("-")[2].split(".")[0]
+        layers = Path.split("-")[1]
+        model = torch.jit.load(Path)
+        model = model.cuda()
+
+        class InterOp():
+            def forward(self, x, y):
+
+                mm = model(torch.LongTensor(x), y)
+
+                return mm
+        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5)
+
+    elif Path.endswith(".tflite"):
+        import tensorflow.lite as tflite
+        interpreter = tflite.Interpreter(model_path=Path)
+        interpreter.allocate_tensors()
+
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+
+        class InterOp():
+            def forward(self, x, y):
+
+                interpreter.set_tensor(
+                    input_details[0]['index'], torch.LongTensor(x).cuda())
+                interpreter.set_tensor(input_details[1]['index'], y.cuda())
+                interpreter.invoke()
+                output_data = interpreter.get_tensor(
+                    output_details[0]['index'])
+                return output_data
+        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5)
 
     n_layer = 0
 
