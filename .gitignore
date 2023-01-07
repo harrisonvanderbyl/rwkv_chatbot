@@ -143,6 +143,7 @@ dmypy.json
 .pyre/
 *.pt
 *.onnx
+*.tflite
 /tf
 /tensorflow-models
 /iree
