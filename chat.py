@@ -14,33 +14,8 @@ from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
 
-# context = 'A'
-# context = "\nIn the"
-# context = '\nSugar:'
-# context = "\n深圳是" # test Chinese
-# context = "\n東京は" # test Japanese
-# context = "\n深圳是" # test Chinese
-# context = "\n東京は" # test Japanese
 
-files = os.listdir()
-# filter by ending in .pth
-files = [f for f in files if f.endswith(".pth")]
-
-questions = [
-    inquirer.List('file',
-                  message="What model do you want to use?",
-                  choices=files,
-                  ),
-    inquirer.List(
-        'method',
-        message="What inference method?",
-        choices=Backends.keys()
-    )
-]
-q = inquirer.prompt(questions)
-
-model, emptyState = RWKV(
-    q["file"], mode=q["method"])
+model, emptyState = RWKV()
 
 ###### A good prompt for chatbot ######
 context = '''
