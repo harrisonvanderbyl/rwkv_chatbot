@@ -346,7 +346,7 @@ class RWKVPTTSExportOps(RWKVPTOps):
 
         def exportTorchScript(x):
             torch.jit.save(torch.jit.trace(
-                x, (torch.LongTensor([0]), self.emptyState)), f"model-{layers}-{embed}.pt")
+                x, (torch.LongTensor([0]), self.emptyState)), f"model-{layers}-{embed}-{self.dtype}.pt")
             exit()
         self.postProcessModule = exportTorchScript
 

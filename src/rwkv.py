@@ -35,7 +35,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
         embed = Path.split("-")[2].split(".")[0]
         layers = Path.split("-")[1]
         model = torch.jit.load(Path)
-        model = model.cuda()
+        dtype = torch.bfloat16 if "bfloat16" in Path else torch.float32 if "float32" in Path else torch.float16 if "float16" in Path else torch.float64
+        print("input shape", dtype)
 
         class InterOp():
             def forward(self, x, y):
@@ -43,12 +44,15 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
                 mm = model(torch.LongTensor(x), y)
 
                 return mm
-        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5)
+        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5, dtype=dtype)
 
     elif Path.endswith(".tflite"):
         import tensorflow.lite as tflite
+
         import tensorflow as tf
-        interpreter = tflite.Interpreter(model_path=Path)
+
+        interpreter = tflite.Interpreter(
+            model_path=Path)
         interpreter.allocate_tensors()
 
         input_details = interpreter.get_input_details()
