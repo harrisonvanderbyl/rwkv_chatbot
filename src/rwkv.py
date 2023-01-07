@@ -35,16 +35,17 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
         embed = Path.split("-")[2].split(".")[0]
         layers = Path.split("-")[1]
         model = torch.jit.load(Path)
+        device = torch.device("cuda" if "gpu" in Path else "cpu")
         dtype = torch.bfloat16 if "bfloat16" in Path else torch.float32 if "float32" in Path else torch.float16 if "float16" in Path else torch.float64
         print("input shape", dtype)
 
         class InterOp():
             def forward(self, x, y):
 
-                mm = model(torch.LongTensor(x), y)
+                mm, nn = model(torch.LongTensor(x), y)
 
-                return mm
-        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5, dtype=dtype)
+                return mm.cpu(), nn
+        return InterOp(), torch.tensor([[0.01]*int(embed)]*int(layers)*5, dtype=dtype, device=device)
 
     elif Path.endswith(".tflite"):
         import tensorflow.lite as tflite
@@ -88,9 +89,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
                 w[x] = w[x].squeeze()
 
             if '.time_decay' in x:
-                w[x] = w[x].double()
-
-                w[x] = torch.exp(-torch.exp(w[x]))
+                w[x] = torch.exp(-torch.exp(w[x].double())
+                                 ).to(dtype=torch.bfloat16)
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
@@ -166,8 +166,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
             k = ops.exp(ops.minimum(kk, ops.klimit))
 
             wrd = ((stateb + kt*v)/(statec + kt))
-            outb = stateb*self.time_decay + k*v
-            outc = statec*self.time_decay + k
+            outb = (stateb + k*v) * self.time_decay
+            outc = (statec + k) * self.time_decay
 
             mvv = x + ops.matvec(self.outputvv, r*wrd)
 
@@ -191,6 +191,7 @@ def RWKV(Path=None, mode=None, *args, **kwargs):
 
         @ ops.prefunc
         def forward(self, x):
+            # invert x to be reversed,
             return self.preprocess[x[-1]]
     matvec = ops.matvec
     layernorm = ops.layernorm

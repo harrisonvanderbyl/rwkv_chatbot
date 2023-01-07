@@ -299,7 +299,7 @@ class RWKVPTOps(RWKVOPS):
         RWKVOPS.__init__(self, layers, embed)
         q = [inquirer.List(
             'type',
-            message="What model varient",
+            message="Load model with which dtype?",
             choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])]
 
         if dtype is None:
@@ -310,15 +310,17 @@ class RWKVPTOps(RWKVOPS):
         self.initTensor = lambda x: x.to(dtype=self.dtype)
         self.initCpuTensor = lambda x: self.initTensor(x).cpu()
         self.klimit = torch.tensor(
-            [KLIMIT16 if dtype == torch.float16 else KLIMIT] * embed).to(dtype=self.dtype)
+            [KLIMIT] * embed).to(dtype=self.dtype)
         self.minimum = torch.minimum
         self.sqrt = torch.sqrt
         self.mean = torch.mean
         self.relu = torch.relu
-        self.exp = torch.exp
         self.stack = lambda x: x
         self.matvec = torch.mv
-        self.log = torch.log
+        # safe log
+        self.log = lambda x: torch.complex(x, torch.zeros_like(x)).log()
+
+        self.exp = lambda x: torch.exp(x).to(dtype=self.dtype)
         self.lerp = torch.lerp
 
         # module def
@@ -337,18 +339,6 @@ class RWKVPTOps(RWKVOPS):
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=self.dtype)+0.0
-
-
-class RWKVPTTSExportOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args):
-        super().__init__(layers, embed, *args)
-        self.stack = lambda x: torch.stack(x)
-
-        def exportTorchScript(x):
-            torch.jit.save(torch.jit.trace(
-                x, (torch.LongTensor([0]), self.emptyState)), f"model-{layers}-{embed}-{self.dtype}.pt")
-            exit()
-        self.postProcessModule = exportTorchScript
 
 
 class RWKVPoptorchOps(RWKVPTOps):
@@ -381,37 +371,30 @@ class RWKVCudaOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
 
+        useGPU = inquirer.confirm("Use GPU?", default=True)
+
+        self.useGPU = useGPU
+
+        if not useGPU:
+            return
+
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
-            message="Dtype for operations:",
-            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
+            message="Dtype for non-matrix ops:",
+            choices=[torch.bfloat16, torch.float32, torch.float64])])['type']
 
-        upscale = True
-        if runtimedtype != self.dtype:
-            upscale = inquirer.prompt([inquirer.Confirm(
-                'type',
-                message=f"Convert Matrix to {runtimedtype} during matvec(Y, higher mem usage, more accurate), or convert vector to {self.dtype} during matvec(N, lower mem usage, less accurate)",
-                default=True)])['type']
-
-        offload = inquirer.prompt([inquirer.Confirm(
-            'type',
-            message=f"Offload preprocess/postprocess to cpu?",
-            default=True)])['type']
+        self.exp = lambda x: torch.exp(x).to(dtype=runtimedtype)
 
         self.initTensor = lambda x: x.to(dtype=self.dtype if len(
             x.shape) == 2 else runtimedtype, device='cuda')
-        self.initCpuTensor = lambda x: x.to(
-            dtype=self.dtype).cpu() if offload else self.initTensor(x)
-        self.postfunc = lambda x: lambda self, y: x(
-            self, y.to("cpu" if offload else "cuda")).cpu().float()
-        self.prefunc = lambda x: lambda *args: x(*args).cuda()
+        self.initCpuTensor = self.initTensor  # could be used for offload
+
         self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
 
-        if upscale:
-            self.matvec = lambda x, y: x.to(runtimedtype).mv(
-                y)
-        else:
-            self.matvec = lambda x, y: x.mv(y.to(self.dtype)).to(runtimedtype)
+        self.matvec = lambda x, y: x.mv(
+            y.to(self.dtype)).to(runtimedtype)
+
+        self.postfunc = lambda x: lambda *args: x(*args).cpu()
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
@@ -422,10 +405,20 @@ class RWKVCudaOps(RWKVPTOps):
 
         self.layernorm = ln
 
-        self.log = lambda x: torch.log(x)
-        self.exp = lambda x: torch.exp(x)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
+
+
+class RWKVPTTSExportOps(RWKVCudaOps):
+    def __init__(self, layers, embed, *args):
+        super().__init__(layers, embed, *args)
+        self.stack = lambda x: torch.stack(x)
+
+        def exportTorchScript(x):
+            torch.jit.save(torch.jit.trace(
+                x, (torch.LongTensor([0]), self.emptyState), check_trace=False, strict=False), f"model-{layers}-{embed}-{'gpu' if self.useGPU else 'cpu'}-{self.dtype}.pt")
+            exit()
+        self.postProcessModule = exportTorchScript
 
 
 class RWKVCudaDeepspeedOps(RWKVCudaOps):
@@ -932,8 +925,7 @@ class RWKVMobileOps(RWKVPTOps):
 
 RwkvOpList: dict[str, type[RWKVOPS]] = {
     "tensorflow(cpu/gpu)": RWKVTFOps,
-    "pytorch(cpu)": RWKVPTOps,
-    "pytorch(gpu)": RWKVCudaOps,
+    "pytorch(cpu/gpu)": RWKVCudaOps,
     "numpy(cpu)": RWKVNumpyOps,
     "jax(cpu/gpu/tpu)": RWKVJaxOps,
     "pytorch-deepspeed(gpu)": RWKVCudaDeepspeedOps,
