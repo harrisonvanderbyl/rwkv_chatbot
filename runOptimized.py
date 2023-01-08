@@ -1,16 +1,11 @@
 
-import tqdm
 from typing import List
 import numpy as np
-import os
 import time
 import gc
-from typing import List as list
 import torch
-from src.utils import TOKENIZER
-import inquirer
 from scipy.special import softmax
-from src.rwkv import RWKV, Backends
+from src.rwkv import RWKV
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
@@ -24,7 +19,7 @@ fg.orange = Style(RgbFg(255, 150, 50))
 # context = "\n東京は" # test Japanese
 
 
-model, emptyState = RWKV()
+model = RWKV()
 
 # Omodel = RWKV_RNN(q["file"])
 # stat = None
@@ -77,30 +72,7 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 
 ########################################################################################################
 
-
-print(f'\nOptimizing speed...')
-
-gc.collect()
-torch.cuda.empty_cache()
-
-# input(0)
-
-TOKEN_MODE = "pile"
-WORD_NAME = [
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-]  # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = None
-print(f'\nLoading tokenizer {WORD_NAME}...')
-tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
-if TOKEN_MODE == "pile":
-    assert tokenizer.tokenizer.decode([187]) == '\n'
-
 ########################################################################################################
-
-
-ctx1 = tokenizer.tokenizer.encode(context)
-src_ctx1 = ctx1.copy()
 
 
 print(
@@ -131,47 +103,7 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(ctx: list[int], statex, newctx: list[int]):
-    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    with torch.jit.optimized_execution(True):
-        for i in tqdm.tqdm(range(len(newctx))):
-
-            x = ctx+newctx[:i+1]
-
-            o = model.forward([x[-1]], statex)
-            statex = o[1]
-            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    return ctx+newctx, o[1]
-
-
-tokens = loadContext(ctx=[], newctx=ctx1, statex=emptyState)
-
-origistate = (tokens[0], tokens[1])
-
-
-def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    try:
-        ozut = ozut.numpy()
-    except:
-        pass
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # turn to float if is half and cpu
-    probs = softmax(ozut, axis=-1)
-
-    sorted_probs = np.sort(probs)[::-1]
-    cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
-    probs[probs < cutoff] = 0
-    if temp != 1.0:
-        probs = pow(probs, 1.0 / temp)
-    probs = probs / np.sum(probs, axis=0)
-    mout = np.random.choice(a=len(probs), p=probs)
-
-    return mout
+model.loadContext(ctx="\n\n", newctx=context)
 
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
@@ -184,25 +116,15 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         torch.cuda.empty_cache()
 
     record_time('preprocess')
-    tokens = (origistate[0], origistate[1])
+    text = context
     xout = 0.0
     with torch.no_grad():
         for i in range(100):
-            chars: List[int] = tokens[0]
-            state = tokens[1]
-            xout = model.forward([chars[-1]], state)
 
-            chars += [sample_logits(
-                xout[0], temp=1.9, top_p_usual=top_p)]
+            char = model.forward()["output"]
+            print(char, end='')
 
-            char = tokenizer.tokenizer.decode(chars[-1])
-
-            tokens = (chars, xout[1])
-
-            if '\ufffd' not in char:
-                fg.orange = Style(RgbFg(int((xout[0][chars[-1]])*255), 0, 0))
-
-                print(fg.orange+char, end="", flush=True)
+            text += char
 
     record_time('total')
 

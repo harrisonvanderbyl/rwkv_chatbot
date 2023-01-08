@@ -1,21 +1,16 @@
 import discord
-import tqdm
-import numpy as np
 import os
 import time
 import gc
-from typing import List as list
 import torch
-from src.utils import TOKENIZER
-import inquirer
-from scipy.special import softmax
-from src.rwkv import RWKV, Backends
+
+from src.rwkv import RWKV
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))
 
 
-model, emptyState = RWKV()
+model = RWKV()
 
 ###### A good prompt for chatbot ######
 context = '''
@@ -45,34 +40,11 @@ TEMPERATURE = 1.0
 top_p = 0.8
 top_p_newline = 0.9  # only used in TOKEN_MODE = char
 
-DEBUG_DEBUG = False  # True False --> show softmax output
-
-########################################################################################################
-
 
 print(f'\nOptimizing speed...')
 
 gc.collect()
 torch.cuda.empty_cache()
-
-# input(0)
-
-TOKEN_MODE = "pile"
-WORD_NAME = [
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-]  # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = None
-print(f'\nLoading tokenizer {WORD_NAME}...')
-tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
-if TOKEN_MODE == "pile":
-    assert tokenizer.tokenizer.decode([187]) == '\n'
-
-########################################################################################################
-
-
-ctx1 = tokenizer.tokenizer.encode(context)
-src_ctx1 = ctx1.copy()
 
 
 print(
@@ -103,22 +75,6 @@ print("torch.cuda.max_memory_reserved: %fGB" %
       (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
 
-def loadContext(ctx: list[int], newctx: list[int], statex):
-    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    with torch.jit.optimized_execution(True):
-        for i in tqdm.tqdm(range(len(newctx))):
-
-            x = ctx+newctx[:i+1]
-
-            o = model.forward([x[-1]], statex)
-            statex = o[1]
-            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    return ctx+newctx, o[1]
-
-
 # bot.py
 
 
@@ -131,66 +87,15 @@ async def on_ready():
     print(f'{client.user} has connected to Discord!')
 
 
-# init empty save state and question context
-init_state = emptyState
-model_tokens = tokenizer.tokenizer.encode(context)
-
-
 saveStates = {}
-saveStates["empty"] = ([187, 187], init_state.clone())
+saveStates["empty"] = (model.emptyState.clone())
 
 # Put the prompt into the init_state
-init_state = loadContext([187, 187], model_tokens, init_state)
-saveStates["questions"] = (init_state[0], init_state[1])
+init_state = model.loadContext("\n\n", context)
+saveStates["questions"] = (init_state[1])
 
-src_model_tokens = model_tokens.copy()
-currstate = init_state
 
 storys = []
-
-
-def s0(probs, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    probs[probs < 0] = 0.00001
-    # remove nan and inf
-    probs[probs != probs] = 0.00001
-    probs.nan_to_num_(0.00001)
-    probs[probs == float('Inf')] = 0.00001
-
-    sorted_probs = torch.sort(probs, descending=True)[0]
-    cumulative_probs = torch.cumsum(
-        sorted_probs.float(), dim=-1).cpu().numpy()
-    cutoff = float(sorted_probs[np.argmax(
-        cumulative_probs > top_p_usual)])
-    probs[probs < cutoff] = 0.0001
-
-    if temp != 1.0:
-        probs = probs.pow(1.0 / temp)
-
-    out = torch.multinomial(probs.float(), 1, True)[0]
-    # print(sorted_probs[:3])
-    return out
-
-
-def s1(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    ozut = ozut.numpy()
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # turn to float if is half and cpu
-    probs = softmax(ozut, axis=-1)
-
-    sorted_probs = np.sort(probs)[::-1]
-    cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
-    probs[probs < cutoff] = 0
-    if temp != 1.0:
-        probs = pow(probs, 1.0 / temp)
-    probs = probs / np.sum(probs, axis=0)
-    mout = np.random.choice(a=len(probs), p=probs)
-
-    return mout
-
-
-sample_logits = s1
 
 
 @client.event
@@ -217,14 +122,13 @@ async def on_message(message):
         print(f"top_p: {top_p}")
 
     if msg == '+reset_drkv' or msg == '+drkv_reset':
-        model_tokens = tokenizer.tokenizer.encode(context)
-        currstate = init_state
+        model.resetState()
 
         await message.reply(f"Chat reset. This is powered by RWKV-4 Language Model.")
         return
 
     if msg[:11] == '+drkv_save ':
-        saveStates[msg[11:]] = (currstate[0], currstate[1].clone())
+        saveStates[msg[11:]] = model.getState()
         await message.reply(f"Saved state {msg[11:]}")
         return
 
@@ -243,23 +147,24 @@ async def on_message(message):
 
         real_msg = msg[6:].strip()
         new = f"\nUser: {real_msg}\n\nRWKV:"
-        tknew = tokenizer.tokenizer.encode(new)
+        tknew = new
         print(f'### add ###\n[{new}]')
 
-        currstate = loadContext(currstate[0], tknew, currstate[1])
+        currstate = model.loadContext("\n", tknew)
         begin = len(currstate[0])
         state = currstate
 
         with torch.no_grad():
+            out = ""
             for i in range(100):
-                o = model.forward([state[0][-1]], state[1])
-                tok = sample_logits(o[0], temp=temp, top_p_usual=top_p)
-                print(tokenizer.tokenizer.decode(tok), end='')
-                state = (state[0] + [tok], o[1])
-                if (tok == 187):
+                o = model.forward()["output"]
+
+                out += o
+
+                if (o == "\n"):
                     break
 
-        send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
+        send_msg = out[len(tknew):]
         currstate = state
         if (len(send_msg) == 0):
             send_msg = "Error: No response generated."
@@ -267,44 +172,46 @@ async def on_message(message):
         await message.reply(send_msg)
     if msg[:10] == '+drkv_gen ':
 
+        currstate = model.getState()
+
         real_msg = msg[10:].strip()
         new = f"{real_msg}".replace("\\n", "\n")
-        tknew = tokenizer.tokenizer.encode(new)
+        tknew = new
+        skiz = len(new)
         print(f'### add ###\n[{new}]')
 
-        begin = len(tknew)
-
-        state = loadContext([187, 187], tknew, emptyState)
+        model.loadContext("\n", tknew, model.emptyState)
 
         with torch.no_grad():
             for i in range(100):
-                o = model.forward([state[0][-1]], state[1])
-                tok = sample_logits(o[0], temp=temp, top_p_usual=top_p)
-                state = (state[0] + [tok], o[1])
+                o = model.forward()["output"]
 
-        send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
-        state = state
+                tknew += o
+
+        send_msg = tknew[skiz:]
+        state = model.getState()
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg+"\n continue with +drkv_cont "+str(len(storys)))
         storys.append(state)
+        model.setState(currstate)
 
     if msg[:11] == '+drkv_cont ':
         real_msg = msg[11:].strip()
-
+        oldstate = model.getState()
         state = storys[int(real_msg)]
-
-        begin = len(state[0])
+        model.setState(state)
 
         with torch.no_grad():
+            out = ""
             for i in range(100):
-                o = model.forward([state[0][-1]], state[1])
-                tok = sample_logits(o[0])
-                state = (state[0] + [tok], o[1])
+                o = model.forward()["output"]
+                out += o
 
-        send_msg = tokenizer.tokenizer.decode(state[0][begin:]).strip()
+        send_msg = out
         print(f'### send ###\n[{send_msg}]')
         await message.reply(send_msg+"\n continue with +drkv_cont "+real_msg)
-        storys[int(real_msg)] = state
+        storys[int(real_msg)] = model.getState()
+        model.setState(oldstate)
 
 
 client.run(os.environ["TOKEN"])

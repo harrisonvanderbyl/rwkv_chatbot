@@ -104,40 +104,8 @@ questions = [
 
 ]
 
-downloadLinks = [{
-    "name": "RWKV-14B: recomended specs: 32GB VRAM, 2x4060FE",
-    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-14b/resolve/main/RWKV-4-Pile-14B-20221217-3794.pth",
-},
-    {
-    "name": "RWKV-7B: recomended specs: 16GB VRAM, 4060FE/2x2080",
-    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-7b/resolve/main/RWKV-4-Pile-7B-20221123-ctx2048.pth"
-},
-    {
-    "name": "RWKV-3B: recomended specs: 8GB VRAM, 2080/2x1060-6G",
-    "link": "https://huggingface.co/BlinkDL/rwkv-4-pile-3b/resolve/main/RWKV-4-Pile-3B-20221110-ctx4096.pth"
-},
-]
 
-q = inquirer.prompt(questions)
-
-if q["file"] == DownloadPrompt:
-    print(f"\n NOTE: The following models can, and do, run on lower spec machines, through the user of layer streaming. You can download smaller models https://huggingface.co/BlinkDL here, however they are not recommended for use on this chatbot. \n")
-    toDownload = inquirer.prompt([inquirer.List('model',
-                                                message="What model do you want to download?",
-                                                choices=[d["name"]
-                                                         for d in downloadLinks],
-                                                )])
-    os.system(
-        f"wget {downloadLinks[[d['name'] for d in downloadLinks].index(toDownload['model'])]['link']}")
-
-method = inquirer.prompt([inquirer.List(
-    'method',
-    message="What inference method?",
-    choices=Backends.keys())]
-)
-
-model, emptyState = RWKV(
-    q["file"], mode=method["method"])
+model = RWKV()
 
 ###### A good prompt for chatbot ######
 
@@ -159,18 +127,6 @@ print(f'\nOptimizing speed...')
 gc.collect()
 torch.cuda.empty_cache()
 
-# input(0)
-
-TOKEN_MODE = "pile"
-WORD_NAME = [
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-]  # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = None
-print(f'\nLoading tokenizer {WORD_NAME}...')
-tokenizer = TOKENIZER(WORD_NAME, UNKNOWN_CHAR=UNKNOWN_CHAR)
-if TOKEN_MODE == "pile":
-    assert tokenizer.tokenizer.decode([187]) == '\n'
 
 ########################################################################################################
 
@@ -178,18 +134,6 @@ if TOKEN_MODE == "pile":
 print(
     "Note: currently the first run takes a while if your prompt is long, as we are using RNN to preprocess the prompt. Use GPT to build the hidden state for better speed.\n"
 )
-
-time_slot = {}
-time_ref = time.time_ns()
-
-
-def record_time(name):
-    if name not in time_slot:
-        time_slot[name] = 1e20
-    tt = (time.time_ns() - time_ref) / 1e9
-    if tt < time_slot[name]:
-        time_slot[name] = tt
-
 
 init_out = []
 
@@ -206,54 +150,12 @@ print("torch.cuda.max_memory_reserved: %fGB" %
 people: dict[str, str] = {}
 
 
-def sample_logits(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    try:
-        ozut = ozut.numpy()
-    except:
-        pass
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # out[self.UNKNOWN_CHAR] = -float('Inf')
-    # turn to float if is half and cpu
-    probs = softmax(ozut, axis=-1)
-
-    sorted_probs = np.sort(probs)[::-1]
-    cumulative_probs = np.cumsum(sorted_probs)
-    cutoff = float(sorted_probs[np.argmax(cumulative_probs > top_p_usual)])
-    probs[probs < cutoff] = 0
-    if temp != 1.0:
-        probs = probs.pow(1.0 / temp)
-    probs = probs / np.sum(probs, axis=0)
-    mout = np.random.choice(a=len(probs), p=probs)
-
-    return mout
-
-
-newlinetok = tokenizer.tokenizer.encode('\n')[0]
-double_newlinetok = tokenizer.tokenizer.encode('\n\n')[0]
-
 progress = {}
 
 
-def loadContext(ctx: List[int], statex, newctx: List[int], id="none"):
-    # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    with torch.jit.optimized_execution(True):
-        for i in tqdm.tqdm(range(len(newctx))):
-
-            x = ctx+newctx[:i+1]
-            progress[id] = x
-
-            o = model.forward([x[-1]], statex)
-            statex = o[1]
-            # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
-    #     with record_function("model_inference"):
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    return ctx+newctx, o[1]
-
-
 for P, personality in Personaities.items():
-    people[P] = loadContext(ctx=[], newctx=tokenizer.tokenizer.encode(
-        personality), statex=emptyState)[1]
+    people[P] = model.loadContext(
+        ctx="\n", newctx=personality, statex=model.emptyState)[1]
 
 
 class S(http.server.SimpleHTTPRequestHandler):
@@ -283,7 +185,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             return
         if ("/progress" in self.path):
             self.wfile.write(
-                tokenizer.tokenizer.decode(progress.get(self.path.split("/")[-1], tokenizer.tokenizer.encode("..."))).encode('utf-8'))
+                progress.get(self.path.split("/")[-1]).encode('utf-8'))
             return
         # self._set_response()
         self.wfile.write(
@@ -308,29 +210,31 @@ class S(http.server.SimpleHTTPRequestHandler):
         if body["state"] is None:
             body["state"] = people[character]
         else:
-            body["state"] = model.ops.initTensor(torch.tensor(body["state"]))
+            body["state"] = model.initTensor(torch.tensor(body["state"]))
 
         progresskey = body["key"]
 
-        tokens = tokenizer.tokenizer.encode(
-            "\nUser:"+body["message"].replace("User:", ""), ""+f"END\n{character}:")
+        tokens = (
+            "\nUser:"+body["message"].replace("User:", "")+f"END\n{character}:")
 
-        currentData = loadContext(
-            ctx=[], newctx=tokens, statex=body["state"], id=progresskey)
+        def updateProgress(x):
+            progress[progresskey] = model.tokenizer.decode(x)
+
+        model.loadContext(
+            ctx="\n", newctx=tokens, statex=body["state"], progressCallBack=updateProgress)
+        currentData = (tokens, model.getState())
 
         ln = len(currentData[0])
 
         for i in range(400):
             progress[progresskey] = currentData[0]
-            x, state = model.forward([currentData[0][-1]], currentData[1])
-            if isinstance(x, torch.Tensor):
-                x = x.cpu().float()
-            token = sample_logits(x, temp=TEMPERATURE, top_p_usual=top_p)
-            currentData = (currentData[0]+[token], state)
-            if tokenizer.tokenizer.decode(currentData[0]).strip().endswith(("END", "User:", "\nEnd")):
+            x = model.forward(state=currentData[1])["output"]
+
+            currentData = (currentData[0]+x, model.getState())
+            if (currentData[0]).strip().endswith(("END", "User:", "\nEnd")):
                 break
 
-        tokens = tokenizer.tokenizer.decode(currentData[0][ln:])
+        tokens = currentData[0][ln:]
 
         # flatten
         print(tokens)

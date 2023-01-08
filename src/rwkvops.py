@@ -107,7 +107,7 @@ class RWKVTFOps(RWKVOPS):
 
 
 class RWKVTFExport(RWKVTFOps):
-    def __init__(self, layers, embed):
+    def __init__(self, layers, embed, splitmodel=None, exports=None):
         super(RWKVTFExport, self).__init__(layers, embed)
         import tensorflow as tf
         path = f"tfdist/rwkv-{layers}-{embed}/"
@@ -121,17 +121,18 @@ class RWKVTFExport(RWKVTFOps):
                 os.mkdir(path)
             except:
                 pass
-            splitmodel = inquirer.prompt([inquirer.Confirm(
-                'splitmodel', message="Split model?", default=False)])
-            q = inquirer.checkbox(message="What to export?", choices=[
-                                  "savedmodel32", "tflite32", "tflite16"])
+            split = splitmodel if splitmodel is not None else inquirer.prompt([inquirer.Confirm(
+                'splitmodel', message="Split model?", default=False)])["splitmodel"]
+
+            q = exports if exports is not None else inquirer.checkbox(message="What to export?", choices=[
+                "savedmodel32", "tflite32", "tflite16"])
 
             if "savedmodel32" in q:
                 try:
                     os.mkdir(path+"sm")
                 except:
                     pass
-                if splitmodel["splitmodel"]:
+                if split:
                     tf.saved_model.save(x.preprocess, path+"sm/pre")
                     tf.saved_model.save(x.postprocess, path+"sm/post")
                     for i, l in enumerate(x.mylayers):
@@ -144,7 +145,7 @@ class RWKVTFExport(RWKVTFOps):
                     os.mkdir(path+"tflite32")
                 except:
                     pass
-                if splitmodel["splitmodel"]:
+                if split:
                     for i, l in enumerate(x.mylayers):
                         converter = tf.lite.TFLiteConverter.from_concrete_functions(
                             [l.forward.get_concrete_function()])
@@ -171,7 +172,7 @@ class RWKVTFExport(RWKVTFOps):
                     os.mkdir(path+"tflite16")
                 except:
                     pass
-                if splitmodel["splitmodel"]:
+                if split:
                     for i, l in enumerate(x.mylayers):
                         converter = tf.lite.TFLiteConverter.from_concrete_functions(
                             [l.forward.get_concrete_function()])
@@ -368,10 +369,11 @@ class RWKVPTCompatOps(RWKVPTOps):
 
 
 class RWKVCudaOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args):
+    def __init__(self, layers, embed, *args, useGPU=None, runtimedtype=None):
         super().__init__(layers, embed, *args)
 
-        useGPU = inquirer.confirm("Use GPU?", default=True)
+        useGPU = inquirer.confirm(
+            "Use GPU?", default=True) if useGPU is None else useGPU
 
         self.useGPU = useGPU
 
@@ -381,7 +383,7 @@ class RWKVCudaOps(RWKVPTOps):
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
             message="Dtype for non-matrix ops:",
-            choices=[torch.bfloat16, torch.float32, torch.float64])])['type']
+            choices=[torch.bfloat16, torch.float32, torch.float64])])['type'] if runtimedtype is None else runtimedtype
 
         self.exp = lambda x: torch.exp(x).to(dtype=runtimedtype)
 
@@ -435,7 +437,7 @@ class RWKVCudaDeepspeedOps(RWKVCudaOps):
 
 
 class RWKVCudaQuantOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args):
+    def __init__(self, layers, embed, *args, runtimedtype=None):
         super().__init__(layers, embed, torch.bfloat16)
 
         dev = "cuda"
@@ -443,12 +445,9 @@ class RWKVCudaQuantOps(RWKVPTOps):
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
             message="Dtype for operations:",
-            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type']
+            choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type'] if runtimedtype is None else runtimedtype
 
-        offload = inquirer.prompt([inquirer.Confirm(
-            'type',
-            message=f"Offload preprocess/postprocess to cpu?",
-            default=True)])['type']
+        offload = False
 
         def initTensor(x):
             if (len(x.shape) != 2):
