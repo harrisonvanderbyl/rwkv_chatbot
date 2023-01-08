@@ -29,7 +29,10 @@ def loadContext(model, ctx: list[int], newctx: list[int], statex, progressCallBa
 
 
 def sample(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-    ozut = ozut.numpy()
+    try:
+        ozut = ozut.numpy()
+    except:
+        ozut = np.array(ozut)
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # out[self.UNKNOWN_CHAR] = -float('Inf')
     # turn to float if is half and cpu
