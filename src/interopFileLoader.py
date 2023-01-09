@@ -1,4 +1,4 @@
-from rwkvMaster import RWKVMaster
+from src.rwkvMaster import RWKVMaster
 
 
 def initTorchScriptFile(Path):

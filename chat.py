@@ -1,3 +1,4 @@
+import requests
 import discord
 import os
 import time
@@ -143,6 +144,18 @@ async def on_message(message):
     if msg[:11] == '+drkv_list ':
         await message.reply(f"Saved states: {', '.join(saveStates.keys())}")
         return
+
+    if msg.startswith('+drkv_load_website '):
+        url = msg.split(' ')[1]
+        print(f"Loading from {url}")
+        r = requests.get(url)
+        if r.status_code == 200:
+            model.loadContext(
+                "\n\n", "User: can you please read this document, and remember the imprtant bits?:\n\n\n"+r.text)
+            await message.reply(f"Data loaded")
+        else:
+            await message.reply(f"Error loading from {url}")
+
     if msg[:6] == '+drkv ':
 
         real_msg = msg[6:].strip()
