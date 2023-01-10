@@ -1,6 +1,6 @@
 import "./message.scss";
 import React from "react";
-import { Avatar, Paper } from "@mui/material";
+import { Avatar, Box, Paper } from "@mui/material";
 
 export enum MessageType {
   Normal = "normal",
@@ -22,6 +22,7 @@ export interface MessageProps {
   side?: MessageSide;
   index?: number;
   darkTheme?: boolean;
+  timeSent?: Date;
 }
 
 function Message({
@@ -31,6 +32,7 @@ function Message({
   icon = undefined,
   index = 10,
   darkTheme = true,
+  timeSent = undefined,
 }: MessageProps) {
   return (
     <Paper
@@ -38,6 +40,7 @@ function Message({
       className={["message", type, side].join(" ")}
       sx={{
         position: "relative",
+        minWidth: 200,
       }}
     >
       {icon ? (
@@ -62,6 +65,24 @@ function Message({
         .map((line, i) => (
           <div key={i}>{line.replace("User:", "").replace("END", "")}</div>
         ))}
+      {timeSent ? (
+        <Box
+          className="time-sent"
+          sx={{
+            position: "absolute",
+            bottom: -16,
+
+            ...(side === MessageSide.Left ? { left: 0 } : { right: 0 }),
+          }}
+        >
+          {timeSent.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Box>
+      ) : (
+        ""
+      )}
     </Paper>
   );
 }
