@@ -1,4 +1,5 @@
 from src.rwkvMaster import RWKVMaster
+from src.rwkvops import RWKVOPS, RWKVPTOps, torchsample
 
 
 def initTorchScriptFile(Path):
@@ -22,7 +23,7 @@ def initTorchScriptFile(Path):
 
     def initTensor(x): return torch.tensor(x, dtype=dtype, device=device)
 
-    return RWKVMaster(model, emptyState, initTensor)
+    return RWKVMaster(model, emptyState, initTensor, torchsample if "sampler" not in Path else None)
 
 
 def initTFLiteFile(Path):
@@ -58,4 +59,4 @@ def initTFLiteFile(Path):
         [[0.01]*int(embed)]*int(layers), dtype=dtype)
 
     def initTensor(x): return tf.convert_to_tensor(x, dtype=dtype)
-    return RWKVMaster(model, emptyState, initTensor)
+    return RWKVMaster(model, emptyState, initTensor, RWKVOPS().sample)

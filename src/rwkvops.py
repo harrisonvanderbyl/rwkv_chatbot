@@ -8,6 +8,7 @@ import torch
 import http.server
 import json
 import socketserver
+from scipy.special import softmax
 
 KLIMIT = 30
 KLIMIT16 = 11
@@ -47,6 +48,29 @@ class RWKVOPS():
         self.emptyState: notimplemented
         self.logistical = lambda x: 1 / (self.exp(x) + 1)
         self.postProcessModule = lambda x: x
+
+        def sample(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+            try:
+                ozut = ozut.numpy()
+            except:
+                ozut = np.array(ozut)
+            # out[self.UNKNOWN_CHAR] = -float('Inf')
+            # out[self.UNKNOWN_CHAR] = -float('Inf')
+            # turn to float if is half and cpu
+            probs = softmax(ozut, axis=-1)
+
+            sorted_probs = np.sort(probs)[::-1]
+            cumulative_probs = np.cumsum(sorted_probs)
+            cutoff = float(sorted_probs[np.argmax(
+                cumulative_probs > top_p_usual)])
+            probs[probs < cutoff] = 0
+            if temp != 1.0:
+                probs = pow(probs, 1.0 / temp)
+            probs = probs / np.sum(probs, axis=0)
+            mout = np.random.choice(a=len(probs), p=probs)
+            return mout
+
+        self.sample = sample
 
         # typing, set as any
         self.tensorDef = None
@@ -295,7 +319,24 @@ class RWKVJaxIreeOps(RWKVJaxOps):
         # self.postProcessModule()
 
 
+def torchsample(ozut: torch.LongTensor, temp=1.0, top_p_usual=0.9) -> int:
+    # do it in pytorch
+
+    probs = torch.softmax(ozut, dim=-1)
+    sorted_probs, indices = torch.sort(probs, descending=True)
+    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+    cutoff = sorted_probs[torch.argmax(
+        cumulative_probs[cumulative_probs > top_p_usual])]
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = torch.pow(probs, 1.0 / temp)
+    probs = probs / torch.sum(probs, dim=-1)
+    mout = torch.multinomial(probs, 1)
+    return mout
+
+
 class RWKVPTOps(RWKVOPS):
+
     def __init__(self, layers, embed, dtype=None):
         RWKVOPS.__init__(self, layers, embed)
         q = [inquirer.List(
@@ -307,6 +348,7 @@ class RWKVPTOps(RWKVOPS):
             a = inquirer.prompt(q)
             dtype = a['type']
         self.dtype = dtype
+        self.sample = torchsample
 
         self.initTensor = lambda x: x.to(dtype=self.dtype)
         self.initCpuTensor = lambda x: self.initTensor(x).cpu()
@@ -412,13 +454,20 @@ class RWKVCudaOps(RWKVPTOps):
 
 
 class RWKVPTTSExportOps(RWKVCudaOps):
-    def __init__(self, layers, embed, *args):
+    def __init__(self, layers, embed, *args, includeSampler=None):
         super().__init__(layers, embed, *args)
         self.stack = lambda x: torch.stack(x)
 
+        includeSampler = inquirer.confirm(
+            "Include sampler?", default=True) if includeSampler is None else includeSampler
+
+        if includeSampler:
+            self.postfunc = lambda x: lambda *args: self.sample(
+                x(*args).float().cpu(), torch.tensor(1), torch.tensor(0.9))
+
         def exportTorchScript(x):
             torch.jit.save(torch.jit.trace(
-                x, (torch.LongTensor([0]), self.emptyState), check_trace=False, strict=False), f"model-{layers}-{embed}-{'gpu' if self.useGPU else 'cpu'}-{self.dtype}.pt")
+                x, (torch.LongTensor([0]), self.emptyState), check_trace=False, strict=False), f"model-{layers}-{embed}-{'sampler' if includeSampler else 'logits'}-{'gpu' if self.useGPU else 'cpu'}-{self.dtype}.pt")
             exit()
         self.postProcessModule = exportTorchScript
 
