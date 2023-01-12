@@ -439,7 +439,7 @@ class RWKVCudaDeepspeedOps(RWKVCudaOps):
 class RWKVCudaQuantOps(RWKVPTOps):
     def __init__(self, layers, embed, *args, runtimedtype=None):
         super().__init__(layers, embed, torch.bfloat16)
-
+        import matplotlib.pyplot as plt
         dev = "cuda"
 
         runtimedtype = inquirer.prompt([inquirer.List(
@@ -454,10 +454,18 @@ class RWKVCudaQuantOps(RWKVPTOps):
                 return x.to(dtype=runtimedtype, device=dev)
 
             ran, mini = (x.max(0)[0]-x.min(0)[0])/255,  x.min(0)[0]
+
             # quantize to int8
-            x = (x-mini)/ran
-            print(x.min(), x.max())
-            x: torch.Tensor = x.to(dtype=torch.uint8, device=dev)
+            x = x.double()
+            x = ((x-mini)/ran)
+
+            x = x.to(
+                dtype=torch.uint8, non_blocking=True, device=dev)
+
+            counts = torch.bincount(
+                x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
+            plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
+
             return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
         self.initTensor = initTensor
@@ -466,12 +474,15 @@ class RWKVCudaQuantOps(RWKVPTOps):
         self.postfunc = lambda x: lambda self, y: x(
             self, y.to("cpu" if offload else "cuda")).cpu().float()
 
+        self.postProcessModule = lambda x: x
+
         def matvec(x, y):
             # unquantize
             rx, spread, zpoint = x
             yy = y*spread
+            rx = rx.to_dense().to(dtype=runtimedtype) + 128
 
-            return rx.to(dtype=runtimedtype).mv(yy) + zpoint.dot(y)
+            return rx.mv(yy) + zpoint.dot(y)
 
         self.matvec = matvec
 
