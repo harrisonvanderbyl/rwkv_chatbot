@@ -43,9 +43,12 @@ class RWKVMaster():
         logits, state = self.model.forward([self.lastToken], state)
         self.myState = state
         sampled = self.sample(
-            logits, temp, top_p_usual) if self.sampler is not None else logits.item()
+            logits, temp, top_p_usual) if self.sampler is not None else logits
         self.lastToken = sampled
-        sampled = self.tokenizer.decode([sampled])
+        try:
+            sampled = self.tokenizer.decode([sampled])
+        except:
+            sampled = self.tokenizer.decode([sampled.item()])
         return {"logits": logits, "state": state, "output": sampled}
 
     def loadContext(self, ctx: str = "\n\n", newctx: str = "", statex=None, progressCallBack=lambda x: x):

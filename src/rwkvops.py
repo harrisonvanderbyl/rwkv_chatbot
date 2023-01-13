@@ -332,7 +332,7 @@ def torchsample(ozut: torch.LongTensor, temp=1.0, top_p_usual=0.9) -> int:
         probs = torch.pow(probs, 1.0 / temp)
     probs = probs / torch.sum(probs, dim=-1)
     mout = torch.multinomial(probs, 1)
-    return mout
+    return mout.cpu()
 
 
 class RWKVPTOps(RWKVOPS):
@@ -438,7 +438,7 @@ class RWKVCudaOps(RWKVPTOps):
         self.matvec = lambda x, y: x.mv(
             y.to(self.dtype)).to(runtimedtype)
 
-        self.postfunc = lambda x: lambda *args: x(*args).float().cpu()
+        self.postfunc = lambda x: lambda *args: x(*args).float()
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
