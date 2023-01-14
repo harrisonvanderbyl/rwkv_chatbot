@@ -170,6 +170,8 @@ class S(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+
         if "css" in self.path:
             self.send_header('Content-type', 'text/css')
         elif "js" in self.path:
@@ -178,6 +180,9 @@ class S(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
 
         self.end_headers()
+        if "ping" in self.path:
+            self.wfile.write("pong".encode('utf-8'))
+            return
         if (self.path == "/"):
             self.path = "/index.html"
         if (self.path == "/personalities.json"):
@@ -215,7 +220,7 @@ class S(http.server.SimpleHTTPRequestHandler):
         progresskey = body["key"]
 
         tokens = (
-            "\nUser:"+body["message"].replace("User:", "")+f"END\n{character}:")
+            ":"+body["message"]+f"\n\n{character}:")
 
         def updateProgress(x):
             progress[progresskey] = model.tokenizer.decode(x)
@@ -231,7 +236,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             x = model.forward(state=currentData[1])["output"]
 
             currentData = (currentData[0]+x, model.getState())
-            if (currentData[0]).strip().endswith(("END", "User:", "\nEnd")):
+            if (currentData[0]).strip().endswith(("\nUser")):
                 break
 
         tokens = currentData[0][ln:]
@@ -241,7 +246,7 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         out = {}
 
-        out["message"] = tokens
+        out["message"] = tokens + ":"
 
         # recursively convert state to number from tensor
         state = currentData[1]

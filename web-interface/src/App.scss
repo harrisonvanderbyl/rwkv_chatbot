@@ -1,20 +1,45 @@
 .App {
-  text-align: center;
-  
-  height: 100%;
   max-width: 756px;
   margin: 0 auto;
+  display: table;
 }
 
+.message-input{
+  display:table-row;
+
+}
 .message-box{
-  max-height: 750px;
+  // height: 750px;
+  // set height to equal the rest of the screen
+  height: calc(100vh - 200px);
+  @media (max-width: 768px) {
+    height: calc(100vh - 250px);
+  }
+    
+  
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px;
   border-radius: 5px;
+  
   display: flex;
   flex-direction: column-reverse;
+  //Message input needs to sticky to bottom, regardless of scroll
+  .message-input{
+    position: sticky;
+    bottom: 0;
+    // float above
+    z-index: 1;
+    background-color: black;
+
+  }
 }
+
+.nav{
+  text-align: center;
+}
+
+
 
 #root {
   height: 100%;

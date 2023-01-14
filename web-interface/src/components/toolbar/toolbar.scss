@@ -1,0 +1,29 @@
+.main-logo{
+   position: absolute;
+    left: 16px;
+    top: 16px;
+    
+ }
+
+.server-settings{
+position: absolute !important;
+right: 32px;
+top: 32px;
+
+@media (max-width: 768px) {
+    //Hide behind menu
+
+    flex-direction: row !important;
+    position: static !important;
+
+    
+    
+}
+}
+
+.nav h1{
+    text-align: center;
+    margin:16px
+}
+  
+  

@@ -1,22 +1,16 @@
 import "./App.scss";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Message, {
   MessageProps,
   MessageSide,
   MessageType,
 } from "./components/message/Message";
 import TextField from "@mui/material/TextField";
-import {
-  Avatar,
-  Button,
-  FormControl,
-  MenuItem,
-  Select,
-  SelectChangeEvent,
-} from "@mui/material";
+import { Button } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import crow from "./images/crow.png";
+import { Nav } from "./components/toolbar/toolbar";
 // import png
 
 type RwkvState = [number[], number[], number[], number[]] | undefined;
@@ -33,8 +27,8 @@ function App() {
   const [messages, setMessages] = useState(mess);
   const [state, setState] = useState<RwkvState>(undefined);
   const [currentMessage, setCurrentMessage] = useState("");
-  const [personalities, setPersonalities] = useState<string[]>([]);
-  const [character, setCharacter] = useState("RWKV");
+  // const [personalities, setPersonalities] = useState<string[]>([]);
+  // const [character, setCharacter] = useState("RWKV");
   const [darkmode, setDarkmode] = useState(true);
   // set state to current address
   const [server, setServer] = useState(document.location.href);
@@ -44,30 +38,6 @@ function App() {
       mode: darkmode ? "dark" : "light",
     },
   });
-
-  const exportData = () => {
-    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
-      JSON.stringify({ messages: messages, state: state })
-    )}`;
-    const link = document.createElement("a");
-    link.href = jsonString;
-    link.download = "data.json";
-
-    link.click();
-  };
-
-  const loadData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = JSON.parse(e.target?.result as string);
-        setMessages(data.messages);
-        setState(data.state);
-      };
-      reader.readAsText(file);
-    }
-  };
 
   const getMessage = async (message: string, state: RwkvState) => {
     // Randomly generated guid:
@@ -82,16 +52,13 @@ function App() {
       body: JSON.stringify({
         message: message,
         state: state,
-        character: character,
+        // character: character,
         key: id,
       }),
     });
 
-    var done = false;
-
     data.then((data) =>
       data.json().then((datajson: { message: string; state: RwkvState }) => {
-        done = true;
         setState(datajson.state);
         setMessages([
           ...messages,
@@ -109,56 +76,24 @@ function App() {
         ]);
       })
     );
-
-    // Loop while request still running
-    while (!done) {
-      // Wait for 1 second
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Get progress
-      const progress = await fetch(server + "/progress/" + id);
-      const progresstext = await progress.text();
-      if (done) break;
-      const readtext = progresstext.split("RWKV:")[0].slice(6);
-      setMessages([
-        ...messages,
-        {
-          text: message.includes(readtext)
-            ? readtext + "|" + message.replace(readtext, "")
-            : message,
-          timeSent: new Date(),
-          icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAeFBMVEX///8AAACAgIB8fHz19fXp6emNjY37+/umpqbY2NiYmJiwsLB2dnb4+PgwMDCtra2UlJTKysq/v7/R0dGdnZ1eXl4qKipvb2/v7+9ISEhRUVHg4OATExMLCwsiIiJnZ2eIiIhBQUE6OjrDw8NFRUVZWVkbGxu4uLjqLqXEAAAEJElEQVR4nO3di3aiMBAGYOMNEPCCN6pWq1Z9/zfcspazPZZISAZmcP/vCfIfYhKSMHY6AAAAAAAAAAAAAAAAAAAAAK+nPwhCf5jxJ8Ggz90cYvF8sVypn1aX0fx1Us6jnSryvp5xN42CNylMl/Nj7gY68vz904BK7Ratzjgfl+TL7M/czbTmrQ3yZQ4tHXOCq2HAL3Puxtp4PsI8WnA3t7qPSgGVirgbXJXpT/CfJXeTqzlUDtiyiJFFwK8hlbvZ5oZWAZXqcjfclG8ZUKkRd9PNBNYBWzIveiYrNZ19G1Y3dqNMrgWjzdwpoFLyl+EufTSz4w5Qxn4czQ25IzznvTsnVLIHG/dHKHxSdJopcjvJD3FGEFCpkDvGE9XfmYpcuGPoxSQBlUq5g2glRAkn3EG0qu5c6Mhduq3KG2+GO4hOnyqg2nJH0aCZKzIJdxSNG1lCnzuKxpQsodTNU5stxGIb7igaF7KER+4oGm9kCU/cUTSOSGhszB1F4/V76YYsodSRZkmW8I07ikaPLKHUg7aQLOGUO4rGmSzhjTuKxpYsodjbYGQJuYNoUS29pU4WNDveGakDTaczIEoo+CSYZt0mdVWaoemmcjspVTeVutP2F8XCTe5+cIbiIQbcIZ5zf4hSV905933vAXeEMq7Dqegz7rtPp4CS58Kc2xuG8GHmzuVFWOqBxQP7m21r7qabst2Sknpc8ZtntwI/Sb5I8yA+WQRctShgx2Z3+Ohxt7miqpeHLm0LWPXCfmuu6f9U5eKC1KsJJVLTWeMifrWtlRh9oCd1h9uINyrNN2zXJFHg6ZfA10X7htACs15xZ91FYs8nKusHi8dRZzkKWt89H3nBLfQz4S14ib4JAAAAAAAAAC8n7qfpdjYJ/dGdH05m2zTtt7ra3rdtkIyi5al4r+06XkbTW7Bt66ZNkHxszAoQrDbdRPCFyyLxeVr9iHQ8TNqxvZgmXZsD4O+U3ZvwQ5pg4f4N4mYqtsfOorJapaaua3mVhuIz3SdBd+uzpLlkHhEU3ikIOZMxj2wtxk1T4yH/jegb3WeVxT5Dzgc5sC2QWM0H14MMaOrtmDhwTCAB3df3JjZNZ2w4X+MZU+rJz0zU2IrOLy6T34BmKkYP6p4fnjk2MKzSfc5sp/YqWTy/wJ/qvQse05VNsPdW44tySlbMy8m1tjE1pXr/c7WrKSJJYUsaNV16b34Zo1fLlxnlN0WbVEMtXrqSEDToV6n1vcjbWVEHpCrcSYe6Uq2ccTS3pw3oWmm9DrR7qvzL0d9IF6ixvE5KPO1TFS2hRfmuSFcBihLlaCprPZOjXNdQFXmmRflFX5c7TCEkREIk5IeESIiE/JAQCZGQHxIiIRLyQ8IqJG6XKtUjTBj2uvL0JP/HHgAAAAAAAAAAAAAAAAAAAPyf/gCZuUm9oVCsnAAAAABJRU5ErkJggg==",
-        },
-        {
-          text: progresstext.split("RWKV:").slice(1).join("RWKV:"),
-          side: MessageSide.Right,
-          timeSent: new Date(),
-          icon: crow,
-        },
-      ]);
-    }
   };
 
-  const getPersonalities = async () => {
-    setPersonalities(["RWKV"]);
-    const data = await fetch(server + "/personalities.json");
-    const datajson = await data.json();
-    setPersonalities(datajson);
-  };
+  // const getPersonalities = async () => {
+  //   // setPersonalities(["RWKV"]);
+  //   const data = await fetch(server + "/personalities.json");
+  //   const datajson = await data.json();
+  //   setPersonalities(datajson);
+  // };
 
   // Should be called on once everythings loaded
-  useEffect(() => {
-    if (personalities.length === 0) {
-      getPersonalities();
-    }
-  });
+  // useEffect(() => {
+  //   if (personalities.length === 0) {
+  //     getPersonalities();
+  //   }
+  // });
 
   const onInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentMessage(event.target.value);
-  };
-
-  const onServerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setServer(event.target.value);
   };
 
   const onSend = () => {
@@ -169,53 +104,56 @@ function App() {
         timeSent: new Date(),
         icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAeFBMVEX///8AAACAgIB8fHz19fXp6emNjY37+/umpqbY2NiYmJiwsLB2dnb4+PgwMDCtra2UlJTKysq/v7/R0dGdnZ1eXl4qKipvb2/v7+9ISEhRUVHg4OATExMLCwsiIiJnZ2eIiIhBQUE6OjrDw8NFRUVZWVkbGxu4uLjqLqXEAAAEJElEQVR4nO3di3aiMBAGYOMNEPCCN6pWq1Z9/zfcspazPZZISAZmcP/vCfIfYhKSMHY6AAAAAAAAAAAAAAAAAAAAAK+nPwhCf5jxJ8Ggz90cYvF8sVypn1aX0fx1Us6jnSryvp5xN42CNylMl/Nj7gY68vz904BK7Ratzjgfl+TL7M/czbTmrQ3yZQ4tHXOCq2HAL3Puxtp4PsI8WnA3t7qPSgGVirgbXJXpT/CfJXeTqzlUDtiyiJFFwK8hlbvZ5oZWAZXqcjfclG8ZUKkRd9PNBNYBWzIveiYrNZ19G1Y3dqNMrgWjzdwpoFLyl+EufTSz4w5Qxn4czQ25IzznvTsnVLIHG/dHKHxSdJopcjvJD3FGEFCpkDvGE9XfmYpcuGPoxSQBlUq5g2glRAkn3EG0qu5c6Mhduq3KG2+GO4hOnyqg2nJH0aCZKzIJdxSNG1lCnzuKxpQsodTNU5stxGIb7igaF7KER+4oGm9kCU/cUTSOSGhszB1F4/V76YYsodSRZkmW8I07ikaPLKHUg7aQLOGUO4rGmSzhjTuKxpYsodjbYGQJuYNoUS29pU4WNDveGakDTaczIEoo+CSYZt0mdVWaoemmcjspVTeVutP2F8XCTe5+cIbiIQbcIZ5zf4hSV905933vAXeEMq7Dqegz7rtPp4CS58Kc2xuG8GHmzuVFWOqBxQP7m21r7qabst2Sknpc8ZtntwI/Sb5I8yA+WQRctShgx2Z3+Ohxt7miqpeHLm0LWPXCfmuu6f9U5eKC1KsJJVLTWeMifrWtlRh9oCd1h9uINyrNN2zXJFHg6ZfA10X7htACs15xZ91FYs8nKusHi8dRZzkKWt89H3nBLfQz4S14ib4JAAAAAAAAAC8n7qfpdjYJ/dGdH05m2zTtt7ra3rdtkIyi5al4r+06XkbTW7Bt66ZNkHxszAoQrDbdRPCFyyLxeVr9iHQ8TNqxvZgmXZsD4O+U3ZvwQ5pg4f4N4mYqtsfOorJapaaua3mVhuIz3SdBd+uzpLlkHhEU3ikIOZMxj2wtxk1T4yH/jegb3WeVxT5Dzgc5sC2QWM0H14MMaOrtmDhwTCAB3df3JjZNZ2w4X+MZU+rJz0zU2IrOLy6T34BmKkYP6p4fnjk2MKzSfc5sp/YqWTy/wJ/qvQse05VNsPdW44tySlbMy8m1tjE1pXr/c7WrKSJJYUsaNV16b34Zo1fLlxnlN0WbVEMtXrqSEDToV6n1vcjbWVEHpCrcSYe6Uq2ccTS3pw3oWmm9DrR7qvzL0d9IF6ixvE5KPO1TFS2hRfmuSFcBihLlaCprPZOjXNdQFXmmRflFX5c7TCEkREIk5IeESIiE/JAQCZGQHxIiIRLyQ8IqJG6XKtUjTBj2uvL0JP/HHgAAAAAAAAAAAAAAAAAAAPyf/gCZuUm9oVCsnAAAAABJRU5ErkJggg==",
       },
+      {
+        text: "RWKV is typing...",
+        side: MessageSide.Right,
+      },
     ]);
     getMessage(currentMessage, state);
     setCurrentMessage("");
   };
 
-  const onCharacterChange = (event: SelectChangeEvent<{ value: string }>) => {
-    setCharacter(event.target.value as string);
-    setMessages([]);
-    setState(undefined);
-  };
-
-  const onThemeClick = () => {
-    setDarkmode(!darkmode);
-  };
+  // const onCharacterChange = (event: SelectChangeEvent<{ value: string }>) => {
+  //   setCharacter(event.target.value as string);
+  //   setMessages([]);
+  //   setState(undefined);
+  // };
 
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
+      <Nav
+        server={server}
+        setServer={setServer}
+        darkmode={darkmode}
+        setDarkmode={setDarkmode}
+        messages={messages}
+        setMessages={setMessages}
+        state={state}
+        setState={setState}
+      />
       <div className="App">
-        <Avatar
-          src={crow}
-          sx={{
-            width: 64,
-            height: 64,
-            position: "absolute",
-            left: 32,
-            top: 32,
-            filter: `invert(${darkmode ? 1 : 0})`,
-          }}
-          onClick={onThemeClick}
-        />
-        <h1>Chat-RWKV</h1>
-
-        <Button variant="outlined" onClick={exportData}>
-          Save
-        </Button>
-        <input type="file" id="convload" hidden onChange={loadData} />
-        <Button
-          variant="outlined"
-          onClick={() => {
-            document.getElementById("convload")?.click();
-          }}
-        >
-          Load
-        </Button>
+        <br></br>
 
         <div className="message-box">
+          <TextField
+            id="outlined-basic"
+            multiline
+            label="Message"
+            variant="outlined"
+            className="message-input"
+            fullWidth
+            value={currentMessage}
+            onChange={onInputChange}
+            color="primary"
+            InputProps={{
+              endAdornment: (
+                <Button variant="contained" onClick={onSend}>
+                  Send
+                </Button>
+              ),
+            }}
+          />
           {messages
             .map((message, index) => (
               <Message
@@ -226,53 +164,6 @@ function App() {
             ))
             .reverse()}
         </div>
-        <FormControl
-          sx={{
-            position: "absolute",
-            right: 32,
-            top: 32,
-          }}
-        >
-          <TextField
-            id="serverSet"
-            label="Server"
-            variant="outlined"
-            value={server}
-            onChange={onServerChange}
-            color="primary"
-            sx={{
-              marginBottom: 2,
-            }}
-          />
-          <Select
-            value={character as any}
-            label="Character"
-            onChange={onCharacterChange}
-            variant="outlined"
-          >
-            {personalities.map((personality) => (
-              <MenuItem value={personality}>{personality}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <TextField
-          id="outlined-basic"
-          multiline
-          label="Message"
-          variant="outlined"
-          fullWidth
-          value={currentMessage}
-          onChange={onInputChange}
-          color="primary"
-          InputProps={{
-            endAdornment: (
-              <Button variant="contained" onClick={onSend}>
-                Send
-              </Button>
-            ),
-          }}
-        />
       </div>
     </ThemeProvider>
   );
