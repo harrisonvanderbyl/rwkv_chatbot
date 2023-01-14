@@ -319,7 +319,7 @@ class RWKVJaxIreeOps(RWKVJaxOps):
         # self.postProcessModule()
 
 
-def torchsample(ozut: torch.LongTensor, temp=1.0, top_p_usual=0.9) -> int:
+def torchsample(ozut: torch.LongTensor, temp=1.0, top_p_usual=0.8) -> int:
     # do it in pytorch
 
     probs = torch.softmax(ozut, dim=-1)

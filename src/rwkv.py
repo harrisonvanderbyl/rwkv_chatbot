@@ -50,13 +50,13 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
 
             if '.time_decay' in x:
                 w[x] = torch.exp(-torch.exp(w[x].double())
-                                 ).to(dtype=torch.bfloat16)
+                                 )
 
             if 'receptance.weight' in x:
                 w[x] = -w[x]
 
             w[x].requires_grad = False
-            w[x] = w[x].to(dtype=torch.bfloat16)
+            w[x] = w[x]
             try:
                 if (int(x.split('.')[1])+1 > n_layer):
                     n_layer = int(x.split('.')[1])+1
