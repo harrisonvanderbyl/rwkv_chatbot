@@ -884,8 +884,9 @@ class RWKVSplitCudaOps(RWKVPTOps):
 
         target = target if target is not None else float(
             input("Designate the max amount of mem to assign to gpu 0 (in GB):"))
-        self.initTensor = lambda x: x.to(dtype=self.dtype) if len(
+        self.initTensor = lambda x: x.to(dtype=storageDtype) if len(
             x.shape) == 1 else x.to(torch.float16)
+        self.initCpuTensor = self.initTensor
 
         # for everything in self, if its a tensor, send to cuda
         self.matvec = lambda x, y: x.mv(y.to(torch.float16)).to(processDtype)
