@@ -351,7 +351,7 @@ class RWKVPTOps(RWKVOPS):
         self.sample = torchsample
 
         self.initTensor = lambda x: x.to(dtype=self.dtype) if len(
-            x.shape) == 1 else x.to(dtype=self.dtype)
+            x.shape) == 1 else x
         self.initCpuTensor = lambda x: self.initTensor(x).cpu()
         self.klimit = torch.tensor(
             [KLIMIT] * embed).to(dtype=self.dtype)
@@ -360,7 +360,7 @@ class RWKVPTOps(RWKVOPS):
         self.mean = torch.mean
         self.relu = torch.relu
         self.stack = lambda x: x
-        self.matvec = torch.mv
+        self.matvec = lambda x, y: x.to(self.dtype).mv(y)
         # safe log
         self.log = lambda x: torch.complex(x, torch.zeros_like(x)).log()
 
