@@ -1,3 +1,4 @@
+import time
 import torch
 
 mat = torch.randn(100, 100).float()
@@ -16,33 +17,33 @@ for i in range(100):
 
 
 # time the bfloat16 matmul
-start = torch.Event(enable_timing=True)
-end = torch.Event(enable_timing=True)
-start.record()
+
+
+start = time.time()
 for i in range(rounds):
     x = torch.mv(matbfloat, vecbfloat)
 
-end.record()
-torch.synchronize()
-print(f"bfloat16 matmul: {start.elapsed_time(end)} ms")
+end = time.time()
+
+print(f"bfloat16 matmul: {end-start} ms")
 
 
 # time the float matmul
 
-start.record()
+start = time.time()
 for i in range(rounds):
     x = torch.mv(mat, vec)
 
-end.record()
-torch.synchronize()
-print(f"float matmul: {start.elapsed_time(end)} ms")
+end = time.time()
+
+print(f"bfloat16 matmul: {end-start} ms")
 
 # time the double matmul
 
-start.record()
+start = time.time()
 for i in range(rounds):
     x = torch.mv(matdouble, vecdouble)
 
-end.record()
-torch.synchronize()
-print(f"double matmul: {start.elapsed_time(end)} ms")
+end = time.time()
+
+print(f"bfloat16 matmul: {end-start} ms")
