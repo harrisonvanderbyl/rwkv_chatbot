@@ -153,6 +153,12 @@ function App() {
                 </Button>
               ),
             }}
+            // on enter press
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.shiftKey === false) {
+                onSend();
+              }
+            }}
           />
           {messages
             .map((message, index) => (
