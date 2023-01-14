@@ -879,15 +879,16 @@ class RWKVStreamBigOps(RWKVPTOps):
 
 
 class RWKVSplitCudaOps(RWKVPTOps):
-    def __init__(self, layers, embed, processDtype=torch.bfloat16, storageDtype=torch.bfloat16, target=None):
+    def __init__(self, layers, embed, processDtype=torch.float32, storageDtype=torch.float16, target=None):
         super().__init__(layers, embed, dtype=storageDtype)
 
         target = target if target is not None else float(
             input("Designate the max amount of mem to assign to gpu 0 (in GB):"))
-        self.initTensor = lambda x: x
+        self.initTensor = lambda x: x.to(dtype=self.dtype) if len(
+            x.shape) == 1 else x.to(torch.float16)
 
         # for everything in self, if its a tensor, send to cuda
-        self.matvec = torch.mv
+        self.matvec = lambda x, y: x.mv(y.to(torch.float16)).to(processDtype)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
