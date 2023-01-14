@@ -899,7 +899,7 @@ class RWKVSplitCudaOps(RWKVPTOps):
             # create a new modifiable empty object
             hasbeendone = False
             try:
-                r = stokenself.sendToNext
+                r = self.sendToNext
                 hasbeendone = True
             except:
                 self.sendToNext = torch.cuda.max_memory_reserved(
