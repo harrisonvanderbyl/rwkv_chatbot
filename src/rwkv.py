@@ -128,8 +128,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
             k = ops.exp(ops.minimum(kk, ops.klimit))
 
             wrd = ((stateb + kt*v)/(statec + kt))
-            outb = (stateb + k*v) * self.time_decay
-            outc = (statec + k) * self.time_decay
+            outb = stateb * self.time_decay + k*v
+            outc = statec * self.time_decay + k
 
             mvv = x + ops.matvec(self.outputvv, r*wrd)
 
