@@ -36,6 +36,6 @@ Stevo: I'm a plumber mate, I fix pipes, and I'm a farking good one too.
 '''
 
 Personaities = {
-    "RWKV": DefaultPersonality,
+    "Bot": DefaultPersonality,
     "Stevo": StevoPersonality
 }

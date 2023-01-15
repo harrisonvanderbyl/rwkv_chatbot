@@ -224,6 +224,11 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         def updateProgress(x):
             progress[progresskey] = model.tokenizer.decode(x)
+            # send current chunk
+            # the eyes emoji
+            emoj = "👀"
+            self.wfile.write(
+                json.dumps({"response": emoj, "done": False, "progress": len(model.tokenizer.decode(x))}).encode('utf-8'))
 
         model.loadContext(
             ctx="\n", newctx=tokens, statex=body["state"], progressCallBack=updateProgress)
@@ -231,9 +236,14 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         ln = len(currentData[0])
 
+        response = ""
+
         for i in range(400):
             progress[progresskey] = currentData[0]
             x = model.forward(state=currentData[1])["output"]
+            response += x
+            self.wfile.write(
+                json.dumps({"done": False, "response": response.replace("\nUser", ""), "progress": -1}).encode('utf-8'))
 
             currentData = (currentData[0]+x, model.getState())
             if (currentData[0]).strip().endswith(("\nUser")):
@@ -246,7 +256,9 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         out = {}
 
-        out["message"] = tokens + ":"
+        out["response"] = tokens + ":"
+        out["done"] = True
+        out["progress"] = -1
 
         # recursively convert state to number from tensor
         state = currentData[1]
@@ -261,12 +273,7 @@ class S(http.server.SimpleHTTPRequestHandler):
 
         # set content length
         out = json.dumps(out).encode("utf8")
-        self.send_header('Content-Length', len(out))
-        self.send_header('Content-Type', 'text/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
 
-        self.send_response(HTTPStatus.OK)
-        self.end_headers()
         self.wfile.write(out)
 
 
