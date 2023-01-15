@@ -350,7 +350,7 @@ class RWKVPTOps(RWKVOPS):
             a = inquirer.prompt(q)
             dtype = a['type']
         self.dtype = dtype
-        self.sample = torchsample
+        # self.sample = torchsample
 
         self.initTensor = lambda x: x.to(dtype=opt) if len(
             x.shape) == 1 else x.to(dtype=self.dtype)
@@ -361,7 +361,7 @@ class RWKVPTOps(RWKVOPS):
         self.sqrt = torch.sqrt
         self.mean = torch.mean
         self.relu = torch.relu
-        self.stack = lambda x: x
+        self.stack = torch.stack
         self.matvec = lambda x, y: x.to(y.dtype).mv(y)
         # safe log
         self.log = lambda x: torch.complex(x, torch.zeros_like(x)).log()
@@ -385,6 +385,21 @@ class RWKVPTOps(RWKVOPS):
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=opt)+0.0
+
+        def tracefunc(x):
+
+            class interop:
+                def __init__(self, x):
+                    self.x = x
+
+                def forward(self, x, y):
+                    a, b = self.x.forward(torch.LongTensor(x), y)
+                    return a, b
+
+            return interop(torch.jit.trace(
+                x, example_inputs=(torch.LongTensor([0]), self.emptyState)))
+
+        self.postProcessModule = tracefunc
 
 
 class RWKVPoptorchOps(RWKVPTOps):
