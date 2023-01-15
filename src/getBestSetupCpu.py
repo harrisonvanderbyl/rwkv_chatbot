@@ -12,7 +12,7 @@ vecdouble = vec.double()
 rounds = 100000
 
 # warmup
-for i in range(100):
+for i in range(1000):
     x = torch.mv(mat, vec)
 
 

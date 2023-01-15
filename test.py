@@ -1,11 +1,11 @@
 import time
 import torch
 
-mymat = torch.randint(0, 255, (5000, 5000), dtype=torch.uint8)
-mymat = mymat.cuda()
+mymat = torch.rand(0, 2, 1000, dtype=torch.float16)
+mymatb = mymat.bfloat16()
 
 # warmup
-for i in range(1000):
+for i in range(10000):
     mymat.to(dtype=torch.float32)
 
 
@@ -16,7 +16,7 @@ def myfunc(mat, dtype=torch.float32):
 # time
 
 timenow = time.time()
-for i in range(1000):
+for i in range(100000):
     myfunc(mymat, dtype=torch.float32)
 
 print(time.time() - timenow)
@@ -24,24 +24,7 @@ print(time.time() - timenow)
 # time
 
 timenow = time.time()
-for i in range(1000):
-    myfunc(mymat, dtype=torch.float16)
-
-print(time.time() - timenow)
-
-# time
-
-timenow = time.time()
-for i in range(1000):
-    myfunc(mymat, dtype=torch.bfloat16)
-
-print(time.time() - timenow)
-
-# time
-
-timenow = time.time()
-
-for i in range(1000):
-    myfunc(mymat, dtype=torch.float64)
+for i in range(100000):
+    myfunc(mymatb, dtype=torch.float32)
 
 print(time.time() - timenow)

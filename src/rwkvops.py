@@ -344,13 +344,15 @@ class RWKVPTOps(RWKVOPS):
             message="Load model with which dtype?",
             choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])]
 
+        opt = torch.float32
+
         if dtype is None:
             a = inquirer.prompt(q)
             dtype = a['type']
         self.dtype = dtype
         self.sample = torchsample
 
-        self.initTensor = lambda x: x.to(dtype=self.dtype) if len(
+        self.initTensor = lambda x: x.to(dtype=opt) if len(
             x.shape) == 1 else x.to(dtype=self.dtype)
         self.initCpuTensor = lambda x: self.initTensor(x).cpu()
         self.klimit = torch.tensor(
@@ -360,11 +362,11 @@ class RWKVPTOps(RWKVOPS):
         self.mean = torch.mean
         self.relu = torch.relu
         self.stack = lambda x: x
-        self.matvec = torch.mv
+        self.matvec = lambda x, y: x.to(y.dtype).mv(y)
         # safe log
         self.log = lambda x: torch.complex(x, torch.zeros_like(x)).log()
 
-        self.exp = lambda x: torch.exp(x).to(dtype=self.dtype)
+        self.exp = lambda x: torch.exp(x).to(dtype=opt)
         self.lerp = torch.lerp
 
         # module def
@@ -382,7 +384,7 @@ class RWKVPTOps(RWKVOPS):
             return torch.layer_norm(x, w.shape, w, b)
         self.layernorm = layernorm
         self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype)+0.0
+            4*layers, embed, dtype=opt)+0.0
 
 
 class RWKVPoptorchOps(RWKVPTOps):
