@@ -198,6 +198,9 @@ class S(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
 
         # Get body
         content_length = int(self.headers['Content-Length'])
@@ -275,7 +278,6 @@ class S(http.server.SimpleHTTPRequestHandler):
         out = json.dumps(out).encode("utf8")
 
         self.wfile.write(out)
-        self.end_headers()
         # end connection
         self.close_connection = True
 
