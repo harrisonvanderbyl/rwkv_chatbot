@@ -275,6 +275,9 @@ class S(http.server.SimpleHTTPRequestHandler):
         out = json.dumps(out).encode("utf8")
 
         self.wfile.write(out)
+        self.end_headers()
+        # end connection
+        self.close_connection = True
 
 
 httpd = socketserver.ThreadingTCPServer(('', int(input("Port:"))), S)
