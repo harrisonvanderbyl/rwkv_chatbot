@@ -373,7 +373,7 @@ class RWKVPTOps(RWKVOPS):
         self.initfunc = lambda x: x
         self.layerdef = lambda x: x
         self.mainfunc = lambda x: x
-        self.postfunc = lambda x: x
+        self.postfunc = lambda x: lambda *args: x(*args).float()
         self.prefunc = lambda x: x
 
         def layernorm(x, w, b) -> torch.Tensor:
