@@ -53,7 +53,10 @@ class RWKVOPS():
             try:
                 ozut = ozut.numpy()
             except:
-                ozut = np.array(ozut)
+                try:
+                    ozut = ozut.cpu().numpy()
+                except:
+                    ozut = np.array(ozut)
             # out[self.UNKNOWN_CHAR] = -float('Inf')
             # out[self.UNKNOWN_CHAR] = -float('Inf')
             # turn to float if is half and cpu

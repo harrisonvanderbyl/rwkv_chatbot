@@ -61,6 +61,7 @@ function App() {
 
     if (streamReader) {
       var intext = "";
+      var buff = "";
       console.log(intext);
       while (true) {
         const { done, value } = await streamReader.read();
@@ -68,13 +69,20 @@ function App() {
           break;
         }
         if (value) {
-          intext = new TextDecoder("utf-8").decode(value);
-          var {
-            progress,
-            response,
-            state: mystate,
-            done: ddone,
-          } = JSON.parse(intext);
+          try {
+            intext = buff + new TextDecoder("utf-8").decode(value);
+            console.log(intext);
+            var {
+              progress,
+              response,
+              state: mystate,
+              done: ddone,
+            } = JSON.parse("{" + intext.split("{").pop());
+          } catch (e) {
+            console.log(e);
+            continue;
+          }
+          buff = "";
 
           if (mystate) {
             setState(mystate);

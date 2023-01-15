@@ -212,8 +212,10 @@ class S(http.server.SimpleHTTPRequestHandler):
         body = json.loads(body)
         print(body["message"])
 
-        body["state"] = body.get("state", None)
         character = body.get("character", list(people.keys())[0])
+
+        body["state"] = progress.get(
+            body.get("state", body["key"]), None)
 
         if body["state"] is None:
             body["state"] = people[character]
@@ -226,7 +228,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             ":"+body["message"]+f"\n\n{character}:")
 
         def updateProgress(x):
-            progress[progresskey] = model.tokenizer.decode(x)
+
             # send current chunk
             # the eyes emoji
             emoj = "👀"
@@ -242,7 +244,6 @@ class S(http.server.SimpleHTTPRequestHandler):
         response = ""
 
         for i in range(400):
-            progress[progresskey] = currentData[0]
             x = model.forward(state=currentData[1])["output"]
             response += x
             self.wfile.write(
@@ -262,6 +263,7 @@ class S(http.server.SimpleHTTPRequestHandler):
         out["response"] = tokens + ":"
         out["done"] = True
         out["progress"] = -1
+        out["state"] = progresskey
 
         # recursively convert state to number from tensor
         state = currentData[1]
@@ -272,7 +274,7 @@ class S(http.server.SimpleHTTPRequestHandler):
             except:
                 ns += [np.array(state[i]).tolist()]
 
-        out["state"] = ns
+        progress[progresskey] = ns
 
         # set content length
         out = json.dumps(out).encode("utf8")
