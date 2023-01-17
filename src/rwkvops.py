@@ -92,7 +92,9 @@ class RWKVTFOps(RWKVOPS):
                 import tensorflow as tf
         if (not inquirer.confirm("Do you want to use GPU?")):
             tf.config.experimental.set_visible_devices([], "GPU")
-            tf.config.optimizer.set_jit(True)
+        tf.config.optimizer.set_jit(True)
+        tf.config.optimizer.set_experimental_options(
+            {"auto_mixed_precision": True})
 
         super(RWKVTFOps, self).__init__(layers, embed)
         self.initTensor = lambda x: tf.convert_to_tensor(
@@ -115,13 +117,13 @@ class RWKVTFOps(RWKVOPS):
        # tensorflow function defs
         self.initfunc = lambda x: x
         self.layerdef = tf.function(
-            input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)])
+            input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)], jit_compile=True)
         self.mainfunc = tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(
             shape=[4*layers, embed], dtype=tf.float32)])
         self.prefunc = tf.function(
-            input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)])
+            input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)], jit_compile=True)
         self.postfunc = tf.function(
-            input_signature=[tf.TensorSpec(shape=[embed], dtype=tf.float32)])
+            input_signature=[tf.TensorSpec(shape=[embed], dtype=tf.float32)], jit_compile=True)
         self.emptyState = tf.zeros([4*layers, embed], dtype=tf.float32)+0.01
 
         def ln(x, w, b):
