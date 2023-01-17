@@ -38,17 +38,21 @@ class RWKVMaster():
         self.initTensor = initTensor
         self.sampler = sampler
 
-    def forward(self, state=None, temp: float = 1.0, top_p_usual: float = 0.8):
+    def forward(self, state=None, temp: float = 1.0, top_p_usual: float = 0.8, number=1):
         state = self.myState if state is None else state
-        logits, state = self.model.forward([self.lastToken], state)
-        self.myState = state
-        sampled = self.sample(
-            logits, temp, top_p_usual) if self.sampler is not None else logits
-        self.lastToken = sampled
-        try:
-            sampled = self.tokenizer.decode([sampled])
-        except:
-            sampled = self.tokenizer.decode([sampled.item()])
+        tolens = []
+        for i in range(number):
+            logits, state = self.model.forward([self.lastToken], state)
+            self.myState = state
+            sampled = self.sample(
+                logits, temp, top_p_usual) if self.sampler is not None else logits
+            try:
+                self.lastToken = sampled
+            except:
+                self.lastToken = sampled.item()
+
+            tolens += [sampled]
+        sampled = self.tokenizer.decode(tolens)
         return {"logits": logits, "state": state, "output": sampled}
 
     def loadContext(self, ctx: str = "\n\n", newctx: str = "", statex=None, progressCallBack=lambda x: x):

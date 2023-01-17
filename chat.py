@@ -239,13 +239,8 @@ async def runDiscordBot(model):
                 words, context = model.loadContext(
                     "\n", "Please translate this to Chinese:\n\nTo Translate: "+cons+"\n\nChinese Translation: ", context)
                 res = "Result:"
-                for i in range(100):
-                    o = model.forward(context)
-                    if '\ufffd' not in o["output"]:
-                        res += o["output"]
-                    context = o["state"]
-                    if o["output"] == "\n\n":
-                        break
+
+                res += model.forward(context, number=30)["output"]
 
                 await message.reply(res)
 
@@ -257,13 +252,8 @@ async def runDiscordBot(model):
                 words, context = model.loadContext(
                     "\n", "Please translate this to English:\n\nTo Translate: "+cons+"\n\nEnglish Translation: ", context)
                 res = "Result:"
-                for i in range(100):
-                    o = model.forward(context)
-                    if '\ufffd' not in o["output"]:
-                        res += o["output"]
-                    context = o["state"]
-                    if o["output"] == "\n\n":
-                        break
+
+                res += model.forward(context, number=30)["output"]
 
                 await message.reply(res)
 
@@ -275,14 +265,8 @@ async def runDiscordBot(model):
                 words, context = model.loadContext(
                     "\n", "Please translate this to Australian:\n\nTo Translate: "+cons+"\n\nAustralian Translation: ", context)
                 res = "Result:"
-                for i in range(100):
-                    o = model.forward(context)
 
-                    if '\ufffd' not in o["output"]:
-                        res += o["output"]
-                    context = o["state"]
-                    if o["output"] == "\n\n":
-                        break
+                res += model.forward(context, number=30)["output"]
 
                 await message.reply(res)
 
