@@ -241,7 +241,8 @@ async def runDiscordBot(model):
                 res = "Result:"
                 for i in range(100):
                     o = model.forward(context)
-                    res += o["output"]
+                    if '\ufffd' not in o["output"]:
+                        res += o["output"]
                     context = o["state"]
                     if o["output"] == "\n\n":
                         break
@@ -258,7 +259,8 @@ async def runDiscordBot(model):
                 res = "Result:"
                 for i in range(100):
                     o = model.forward(context)
-                    res += o["output"]
+                    if '\ufffd' not in o["output"]:
+                        res += o["output"]
                     context = o["state"]
                     if o["output"] == "\n\n":
                         break
@@ -275,7 +277,9 @@ async def runDiscordBot(model):
                 res = "Result:"
                 for i in range(100):
                     o = model.forward(context)
-                    res += o["output"]
+
+                    if '\ufffd' not in o["output"]:
+                        res += o["output"]
                     context = o["state"]
                     if o["output"] == "\n\n":
                         break
