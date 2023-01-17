@@ -10,6 +10,9 @@ from tqdm import tqdm
 import inquirer
 import os
 
+# set torch threads to 8
+torch.set_num_threads(8)
+
 
 def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
 
