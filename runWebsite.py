@@ -183,7 +183,7 @@ async def runWebsite(model):
                 return
             if ("/progress" in self.path):
                 self.wfile.write(
-                    progress.get(self.path.split("/")[-1]).encode('utf-8'))
+                    json.dumps(progress.get(self.path.split("/")[-1])).encode('utf-8'))
                 return
             # self._set_response()
             self.wfile.write(
@@ -193,6 +193,14 @@ async def runWebsite(model):
             self.send_response(200)
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-type', 'text/html')
+            if (self.path == "/progress"):
+                state = json.loads(self.rfile.read(
+                    int(self.headers['Content-Length'])).decode('utf-8'))
+
+                progress[state["key"]] = state["state"]
+                self.wfile.write("ok".encode('utf-8'))
+                return
+
             self.end_headers()
 
             # Get body
