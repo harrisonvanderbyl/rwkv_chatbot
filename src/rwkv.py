@@ -153,7 +153,7 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
             @ ops.prefunc
             def forward(self, x):
                 # invert x to be reversed,
-                return ops.layer_norm(
+                return ops.layernorm(
                     w["emb.weight"][x[-1]], w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"])
 
         matvec = ops.matvec
