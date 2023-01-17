@@ -1,17 +1,29 @@
+import asyncio
 import inquirer
+from chat import runDiscordBot
 from runWebsite import runWebsite
 from src.rwkv import RWKV
 
-services = inquirer.prompt([inquirer.checkbox('service',
-                                              message="What services do you want to use?",
-                                              choices=[
-                                                  "Web Interface",
-                                                  "discord bot",
-                                              ]
-                                              )])["service"]
+services = inquirer.checkbox(
+    message="What services do you want to use?",
+    choices=[
+        "Web Interface",
+        "discord bot",
+    ]
+)
 model = RWKV()
+
+# run async simultaneously
+
+funcs = []
 if "Web Interface" in services:
-    runWebsite(model)
+    funcs.append(runWebsite(model))
 
 if "discord bot" in services:
-    runDiscordBot()
+    funcs.append(runDiscordBot(model))
+
+
+async def runAll():
+    await asyncio.gather(*funcs)
+
+asyncio.run(runAll())

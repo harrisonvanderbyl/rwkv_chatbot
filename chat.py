@@ -11,7 +11,7 @@ from sty import Style, RgbFg, fg
 fg.orange = Style(RgbFg(255, 150, 50))
 
 
-async def runDiscordBot(model=RWKV()):
+async def runDiscordBot(model):
 
     ###### A good prompt for chatbot ######
     bot = "RWKV"
@@ -224,64 +224,62 @@ async def runDiscordBot(model=RWKV()):
             storys[int(real_msg)] = model.getState()
             model.setState(oldstate)
 
-    # discord on menucontext menu
-    @discord.app_commands.context_menu()
-    async def react(interaction: discord.Interaction, message: discord.Message):
+    # translate
+        if msg[:11] == "+translate ":
+            # get reaction emoji
+            emoji = msg.split(" ")[1]
+            print(emoji)
+            # see if message actualy a reply
+            cons = msg.split(" ")[2] if message.reference is None else await client.get_channel(message.reference.channel_id).fetch_message(message.reference.message_id).content
+            # if emoji equals chinese flag
+            if emoji == "🇨🇳":
 
-        # get reaction emoji
-        emoji = interaction.data["values"][0]
-        # if emoji equals chinese flag
-        if emoji == "🇨🇳":
-            await interaction.response.defer(ephemeral=True)
-            # send message
-            context = model.emptyState.clone()
-            words, context = model.loadContext(
-                "\n", "Please translate this to Chinese:\n\nTo Translate: "+message.content+"\n\nChinese Translation: ", context)
-            res = "Result:"
-            for i in range(100):
-                o = model.forward(context)
-                res += o["output"]
-                context = o["state"]
-                if o["output"] == "\n\n":
-                    break
+                # send message
+                context = model.emptyState.clone()
+                words, context = model.loadContext(
+                    "\n", "Please translate this to Chinese:\n\nTo Translate: "+cons+"\n\nChinese Translation: ", context)
+                res = "Result:"
+                for i in range(100):
+                    o = model.forward(context)
+                    res += o["output"]
+                    context = o["state"]
+                    if o["output"] == "\n\n":
+                        break
 
-            await interaction.response.send_message(words, ephemeral=True)
+                await message.reply(res)
 
-        # if emoji equals english flag
-        if emoji == "🇬🇧":
-            await interaction.response.defer(ephemeral=True)
-            # send message
-            context = model.emptyState.clone()
-            words, context = model.loadContext(
-                "\n", "Please translate this to English:\n\nTo Translate: "+message.content+"\n\nEnglish Translation: ", context)
-            res = "Result:"
-            for i in range(100):
-                o = model.forward(context)
-                res += o["output"]
-                context = o["state"]
-                if o["output"] == "\n\n":
-                    break
+            # if emoji equals english flag
+            if emoji == "🇬🇧":
 
-            await interaction.response.send_message(words, ephemeral=True)
+                # send message
+                context = model.emptyState.clone()
+                words, context = model.loadContext(
+                    "\n", "Please translate this to English:\n\nTo Translate: "+cons+"\n\nEnglish Translation: ", context)
+                res = "Result:"
+                for i in range(100):
+                    o = model.forward(context)
+                    res += o["output"]
+                    context = o["state"]
+                    if o["output"] == "\n\n":
+                        break
 
-        # australian
-        if emoji == "🇦🇺":
-            # send message
-            await interaction.response.defer(ephemeral=True)
-            context = model.emptyState.clone()
-            words, context = model.loadContext(
-                "\n", "Please translate this to Australian:\n\nTo Translate: "+message.content+"\n\nAustralian Translation: ", context)
-            res = "Result:"
-            for i in range(100):
-                o = model.forward(context)
-                res += o["output"]
-                context = o["state"]
-                if o["output"] == "\n\n":
-                    break
+                await message.reply(res)
 
-            await interaction.response.send_message(words, ephemeral=True)
+            # australian
+            if emoji == "🇦🇺":
+                # send message
 
-    client.run(os.environ.get("TOKEN", input("Discord Token:")))
+                context = model.emptyState.clone()
+                words, context = model.loadContext(
+                    "\n", "Please translate this to Australian:\n\nTo Translate: "+cons+"\n\nAustralian Translation: ", context)
+                res = "Result:"
+                for i in range(100):
+                    o = model.forward(context)
+                    res += o["output"]
+                    context = o["state"]
+                    if o["output"] == "\n\n":
+                        break
 
-if __name__ == "__main__":
-    runDiscordBot()
+                await message.reply(res)
+
+    await client.start(os.environ.get("TOKEN", input("Discord Token:")))

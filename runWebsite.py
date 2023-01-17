@@ -77,10 +77,6 @@ if os.system("yarn --version"):
         exit()
 # build website using yarn
 # yarn build
-os.chdir("web-interface")
-os.system("yarn")
-os.system("yarn build")
-os.chdir("..")
 
 
 # context = 'A'
@@ -90,7 +86,11 @@ os.chdir("..")
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-async def runWebsite(model=RWKV()):
+async def runWebsite(model):
+    os.chdir("web-interface")
+    os.system("yarn")
+    os.system("yarn build")
+    os.chdir("..")
 
     files = os.listdir()
     # filter by ending in .pth
@@ -282,6 +282,3 @@ async def runWebsite(model=RWKV()):
         webbrowser.open("http://localhost:"+str(httpd.server_address[1]))
 
     httpd.serve_forever()
-
-if __name__ == "__main__":
-    runWebsite()
