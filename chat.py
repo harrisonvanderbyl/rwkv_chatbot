@@ -230,7 +230,7 @@ async def runDiscordBot(model):
             emoji = msg.split(" ")[1]
             print(emoji)
             # see if message actualy a reply
-            cons = msg.split(emoji)[1] if message.reference is None else await client.get_channel(message.reference.channel_id).fetch_message(message.reference.message_id).content
+            cons = msg.split(emoji)[1] if message.reference is None else await (await client.get_channel(message.reference.channel_id).fetch_message(message.reference.message_id)).content
             # if emoji equals chinese flag
             if emoji == "🇨🇳":
 
