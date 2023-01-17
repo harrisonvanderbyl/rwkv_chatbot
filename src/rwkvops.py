@@ -1,4 +1,5 @@
 
+import gc
 from urllib import request
 import inquirer
 import numpy as np
@@ -353,7 +354,12 @@ class RWKVPTOps(RWKVOPS):
         self.dtype = dtype
         # self.sample = torchsample
 
-        self.initTensor = lambda x: x.to(dtype=self.dtype)
+        def initTensor(x):
+            result = x.to(dtype=self.dtype)
+
+            return result
+
+        self.initTensor = initTensor
         self.initCpuTensor = lambda x: self.initTensor(x).cpu()
         self.klimit = torch.tensor(
             [KLIMIT] * embed).to(dtype=self.dtype)
@@ -378,6 +384,8 @@ class RWKVPTOps(RWKVOPS):
         self.mainfunc = lambda x: x
         self.postfunc = lambda x: lambda *args: x(*args).float()
         self.prefunc = lambda x: x
+
+        # self.postProcessModule = ppm
 
         def layernorm(x, w, b) -> torch.Tensor:
 

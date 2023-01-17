@@ -71,6 +71,7 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
         for x in tqdm(range(len(w["emb.weight"]))):
             preprocess = preprocess + [torch.layer_norm(w["emb.weight"][x], (w["blocks.0.ln0.weight"].shape[0],),
                                                         weight=w["blocks.0.ln0.weight"], bias=w["blocks.0.ln0.bias"])]
+        del w["emb.weight"]
 
     gc.collect()
     torch.cuda.empty_cache()
