@@ -31,6 +31,10 @@ class RWKVOPS():
         self.mean: notimplemented
         self.relu: notimplemented
         self.exp: notimplemented
+        self.add = lambda x, y: x+y
+        self.divide = lambda x, y: x/y
+        self.multiply = lambda x, y: x*y
+        self.subtract = lambda x, y: x-y
         self.stack: notimplemented
         self.matvec: notimplemented
         self.layernorm: notimplemented

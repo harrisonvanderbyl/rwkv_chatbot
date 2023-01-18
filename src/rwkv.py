@@ -127,14 +127,17 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
                     self.receptance, ops.lerp(statea, xy, self.rrtr)))
 
                 kt = ops.exp(ops.minimum(
-                    kk + self.time_first, ops.klimit))
+                    ops.add(kk, self.time_first), ops.klimit))
                 k = ops.exp(ops.minimum(kk, ops.klimit))
 
-                wrd = ((stateb + kt*v)/(statec + kt))
-                outb = stateb * self.time_decay + k*v
-                outc = statec * self.time_decay + k
+                wrd = ops.divide(
+                    ops.add(stateb, ops.multiply(kt, v)), ops.add(statec, kt))
+                outb = ops.add(ops.multiply(
+                    stateb, self.time_decay), ops.multiply(k*v))
+                outc = ops.add(ops.multiply(statec, self.time_decay), k)
 
-                mvv = x + ops.matvec(self.outputvv, r*wrd)
+                mvv = ops.add(x, ops.matvec(
+                    self.outputvv, ops.multiply(r, wrd)))
 
                 ddd = ops.layernorm(mvv, self.ln2w, self.ln2b)
 
@@ -144,7 +147,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
                 rt = ops.logistical(ops.matvec(self.receptance_ffn, ops.lerp(
                     stated, ddd, self.time_mix_r_ffn)))
 
-                x = mvv + ops.matvec(self.value_ffn, km*km)*rt
+                x = ops.add(mvv, ops.multiply(
+                    ops.matvec(self.value_ffn, km*km), rt))
 
                 return x, xy, outb, outc, ddd
 
