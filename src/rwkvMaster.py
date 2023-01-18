@@ -18,7 +18,7 @@ if TOKEN_MODE == "pile":
 def loadContext(model, ctx: list[int], newctx: list[int], statex, progressCallBack=lambda x: x):
 
     with torch.jit.optimized_execution(True):
-        for i in tqdm.tqdm(range(len(newctx))):
+        for i in (range(len(newctx))):
 
             x = ctx+newctx[:i+1]
 

@@ -424,8 +424,8 @@ class RWKVPTCompatOps(RWKVPTOps):
 
 
 class RWKVCudaOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args, useGPU=None, runtimedtype=None):
-        super().__init__(layers, embed, *args)
+    def __init__(self, layers, embed, *args, useGPU=None, runtimedtype=None, **kwargs):
+        super().__init__(layers, embed, *args, **kwargs)
 
         useGPU = inquirer.confirm(
             "Use GPU?", default=True) if useGPU is None else useGPU
