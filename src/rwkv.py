@@ -133,7 +133,7 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
                 wrd = ops.divide(
                     ops.add(stateb, ops.multiply(kt, v)), ops.add(statec, kt))
                 outb = ops.add(ops.multiply(
-                    stateb, self.time_decay), ops.multiply(k*v))
+                    stateb, self.time_decay), ops.multiply(k, v))
                 outc = ops.add(ops.multiply(statec, self.time_decay), k)
 
                 mvv = ops.add(x, ops.matvec(
