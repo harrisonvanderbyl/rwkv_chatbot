@@ -122,7 +122,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         for i in range(100):
 
             char = model.forward()["output"]
-            print(char, end='')
+            print(char, end='', flush=True)
 
             text += char
 
