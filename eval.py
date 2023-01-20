@@ -32,7 +32,7 @@ RUN_MODEL_NAME = '/mnt/ssd-1/BlinkDL_dont_delete/B/TRAIN_100M/out/all-'
 
 # eval_tasks = ['lambda']
 # eval_tasks = ['hellaswag']
-eval_tasks = ['piqa']
+eval_tasks = ['lambda']
 
 TEST_MODEL = 'rwkv'  # 'rwkv' 'neo'
 USE_CUDA = True  # True False
