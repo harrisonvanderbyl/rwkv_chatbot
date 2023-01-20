@@ -76,7 +76,11 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
             n_layer, len(w[f"blocks.0.ffn.time_mix_k"]), *args, **kwargs)
 
         for x in tqdm(list(w.keys())):
-            w[x] = ops.initTensor(w[x])
+            if "emb.weight" in x:
+                w[x] = list(map(lambda rrx: ops.initTensor(
+                    rrx.squeeze()), w[x].split(1, 0)))
+            else:
+                w[x] = ops.initTensor(w[x])
 
         gc.collect()
         torch.cuda.empty_cache()
