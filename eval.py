@@ -32,7 +32,7 @@ RUN_MODEL_NAME = '/mnt/ssd-1/BlinkDL_dont_delete/B/TRAIN_100M/out/all-'
 
 # eval_tasks = ['lambda']
 # eval_tasks = ['hellaswag']
-eval_tasks = ['lambda']
+eval_tasks = ['lambada_openai']
 
 TEST_MODEL = 'rwkv'  # 'rwkv' 'neo'
 USE_CUDA = True  # True False
@@ -100,16 +100,16 @@ class EvalHarnessAdapter(GPT2LM):
 
                 with torch.no_grad():
                     if RWKV_SLOW_MODE:
-                        state = None
+                        rwkv_rnn.setState(rwkv_rnn.emptyState)
                         fg.orange = Style(RgbFg(255, 255, 255))
                         print(fg.orange+"\n", end='')
 
                         for i in (range(1, len(src))):
                             x = src[:i]
 
-                            print(self.tokenizer.decode([x[-1]]), end='')
                             fg.orange = Style(RgbFg(255, 255, 255))
-                            out, state = rwkv_rnn.forward(x, state)
+                            rwkv_rnn.lastToken = x[-1]
+                            out = rwkv_rnn.forward()["logits"]
                             if i >= q_len:
                                 oo = torch.tensor(out)
                                 sorted_probs, s_index = torch.sort(
@@ -124,6 +124,8 @@ class EvalHarnessAdapter(GPT2LM):
                                 # print(x, '=>', src[i], 'pred', pred)
                                 logit += math.log(F.softmax(oo,
                                                   dim=-1)[src[i]])
+                            print(self.tokenizer.decode(
+                                [x[-1]]), end='', flush=True)
 
                 logitBuf[sss] = logit
                 correctBuf[sss] = correct
@@ -180,7 +182,7 @@ for RUN_NUM in RUN_TABLE:
         # from src.model_run import RWKV_RNN
         # rwkv_rnn = RWKV_RNN(RWKV_FILENAME)
         from src.rwkv import RWKV
-        rwkv_rnn, emptystate = RWKV(RWKV_FILENAME, q["method"])
+        rwkv_rnn = RWKV(RWKV_FILENAME, q["method"])
 
     import tokenizers
 
