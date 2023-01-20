@@ -528,9 +528,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
             x = x.to(
                 dtype=torch.uint8, non_blocking=True, device=dev)
 
-            counts = torch.bincount(
-                x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
-            plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
+            # counts = torch.bincount(
+            #     x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
+            # plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
+            # plt.show()
 
             return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
@@ -546,7 +547,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
             # unquantize
             rx, spread, zpoint = x
             yy = y*spread
-            rx = rx.to_dense().to(dtype=runtimedtype) + 128
+            rx = rx.to_dense().to(dtype=runtimedtype)
+
+            # plt.plot(yy)
+            # plt.show()
 
             return rx.mv(yy) + zpoint.dot(y)
 
@@ -670,149 +674,6 @@ class RWKVExportOnnxOps(RWKVOPS):
         self.mainfunc = lambda x: export
 
 
-class RWKVP2POps(RWKVCudaOps):
-    def __init__(self, layers, embed):
-        super().__init__(layers, embed)
-
-        server = "http://localhost:1922"
-
-        def intFunc(self):
-            self.start = int(input(f"StartLayer(0-{len(self.mylayers)}):"))
-            self.end = min(
-                int(input(f"EndLayer({self.start}-{len(self.mylayers)}):")), len(self.mylayers))
-            self.mylayers = self.mylayers[self.start:self.end]
-            return self
-
-        def forward(rs, x, state):
-            while 1:
-
-                data = request.urlopen(
-                    f"{server}/reqs/{rs.start}/{rs.end}").read()
-                data = json.loads(data)
-                # print(data)
-                x = self.initTensor(torch.tensor(data[0]))
-
-                for i, j in enumerate(self.myLayers):
-                    state1: torch.Tensor = self.initTensor(
-                        torch.tensor(data[1][rs.start+i]))
-                    state2 = self.initTensor(torch.tensor(data[2][rs.start+i]))
-                    state3 = self.initTensor(torch.tensor(data[3][rs.start+i]))
-                    state4 = self.initTensor(torch.tensor(data[4][rs.start+i]))
-                    x, state1, state2, state3, state4 = j.forward(
-                        x, state1, state2, state3, state4)
-                    data[1][rs.start+i] = state1.cpu().tolist()
-                    data[2][rs.start+i] = state2.cpu().tolist()
-                    data[3][rs.start+i] = state3.cpu().tolist()
-                    data[4][rs.start+i] = state4.cpu().tolist()
-
-                request.urlopen(
-                    f"{server}/resps/{rs.start}/{rs.end}", json.dumps(data).encode("utf-8"))
-                print(x.shape, state1.shape, state2.shape,
-                      state3.shape, state4.shape)
-                # wait 2 seconds
-
-        self.postProcessModule = intFunc
-
-        self.mainfunc = lambda rx: lambda self, x, state: forward(
-            self, x, state)
-
-
-class RWKVP2PServerOps(RWKVCudaOps):
-    def __init__(self, layers, embed):
-        super().__init__(layers, embed, torch.float32)
-
-        class S(http.server.SimpleHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                # self._set_response()
-                print(self.path)
-                if self.path.startswith("/reqs/"):
-                    print(self.path)
-                    tokens = self.path.split("/")
-                    start = int(tokens[2])
-                    end = int(tokens[3])
-                    print(start, end)
-                    self.wfile.write(json.dumps(
-                        [torch.randn(embed).tolist() for x in range(5)]).encode('utf-8'))
-                else:
-                    self.wfile.write("RWKV SERVER".encode('utf-8'))
-
-            # def do_POST(self):
-            #     self.send_response(200)
-            #     # Get body
-            #     content_length = int(self.headers['Content-Length'])
-            #     body = self.rfile.read(content_length)
-            #     body = body.decode('utf-8')
-            #     body = body.strip()
-
-            #     print(body)
-
-            #     tokens = tokenizer.encode(body)
-
-            #     tokens = [preProcess.run(None, createInput(
-            #         preProcess.get_inputs(), [[x], emptyState]))[0].tolist() for x in tokens]
-
-            #     # flatten
-            #     print(tokens)
-
-            #     # convert to json
-            #     tokens = json.dumps(tokens).encode("utf8")
-
-            #     # set content length
-            #     out = tokens
-            #     self.send_header('Content-Length', len(out))
-            #     self.send_header('Content-Type', 'text/json')
-
-            #     self.send_response(HTTPStatus.OK)
-            #     self.end_headers()
-            #     self.wfile.write(out)
-
-            # def do_PUT(self):
-            #     self.send_response(200)
-            #     # Get body
-            #     content_length = int(self.headers['Content-Length'])
-            #     body = self.rfile.read(content_length)
-            #     body = body.decode('utf-8')
-            #     body = json.loads(body)
-
-            #     # array is a list of integers like "1,2,3,4" turn into array
-            #     print(body)
-
-            #     tokens = tokenizer.decode(body)
-
-            #     self.send_response(HTTPStatus.OK)
-
-            #     out = tokens.encode('utf-8')
-
-            #     # set content length
-            #     self.send_header('Content-Length', len(out))
-            #     self.send_header('Content-Type', 'text/json')
-
-            #     self.end_headers()
-
-            #     print(out)
-            #     self.wfile.write(out)
-
-        httpd = socketserver.TCPServer(('', 1922), S)
-
-        def intFunc(self):
-            pass
-
-        def forward(self, x, state):
-
-            httpd.serve_forever()
-            print("forward test")
-            return x
-
-        self.initfunc = lambda x: lambda self: intFunc(
-            self)
-
-        self.mainfunc = lambda rx: lambda self, x, state: forward(
-            self, x, state)
-
-
 class RWKVStreamOps(RWKVPTOps):
     def __init__(self, layers, embed, *args):
         super().__init__(layers, embed, *args)
@@ -896,56 +757,35 @@ class RWKVStreamBigOps(RWKVPTOps):
 
 
 class RWKVSplitCudaOps(RWKVPTOps):
-    def __init__(self, layers, embed, processDtype=torch.float32, storageDtype=torch.float16, target=None):
+    def __init__(self, layers, embed, processDtype=torch.float32, storageDtype=torch.bfloat16, target=None):
         super().__init__(layers, embed, dtype=storageDtype)
 
-        target = target if target is not None else float(
-            input("Designate the max amount of mem to assign to gpu 0 (in GB):"))
-        self.initTensor = lambda x: x.to(dtype=storageDtype) if len(
-            x.shape) == 1 else x.to(torch.float16)
+        devices = inquirer.checkbox(
+            'Which devices would you like to use?', choices=['cpu', 'cuda:0', 'cuda:1'])
+
+        self.initTensor = lambda x: x.to(dtype=processDtype).cuda() if len(
+            x.shape) == 1 else list(map(lambda zx: zx[1].to(device=devices[zx[0]], dtype=torch.float32 if "cpu" in devices[zx[0]] else torch.bfloat16), enumerate(list(x.chunk(len(devices), dim=1)))))
         self.initCpuTensor = self.initTensor
 
         # for everything in self, if its a tensor, send to cuda
-        self.matvec = lambda x, y: x.mv(y.to(torch.float16)).to(processDtype)
+        # self.matvec = lambda x, y: x.mv(y.to(torch.float16)).to(processDtype)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
         self.minimum = lambda x, y: torch.min(x, torch.ones_like(x)*KLIMIT)
 
-        def sendToCuda(self, args, x):
-            # create a new modifiable empty object
-            hasbeendone = False
-            try:
-                r = self.sendToNext
-                hasbeendone = True
-            except:
-                self.sendToNext = torch.cuda.max_memory_reserved(
-                    0)/1024/1024/1024 > target
-                r = self.sendToNext
+        def matvec(matx, y):
+            chunks = list(map(lambda xx: xx[1].to(
+                device=devices[xx[0]], dtype=matx[xx[0]].dtype, non_blocking=True), enumerate(y.chunk(len(devices), dim=0))))
+            res = matx[0].mv(chunks[0]).to(
+                dtype=processDtype, device=y.device, non_blocking=True)
+            for i in range(1, len(chunks)):
+                res = res + matx[i].mv(chunks[i]).to(
+                    dtype=processDtype, device=y.device, non_blocking=True)
 
-            if not hasbeendone:
+            return res
 
-                for k, v in self.__dict__.items():
-                    if isinstance(v, torch.Tensor):
-                        if r:
-                            self.__dict__[k] = v.to(device="cuda:1")
-                        else:
-                            self.__dict__[k] = v.to(device="cuda:0")
-            # args = [mm.to(device="cuda:1" if r else "cuda:0") if isinstance(
-            #     mm, torch.Tensor) else mm for mm in args]
-            args = [mm.to(device="cuda:1" if r else "cuda:0") if isinstance(
-                mm, torch.Tensor) else mm for mm in args]
-
-            ret = x(self, *args)
-
-            return ret
-
-        self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
-        self.postfunc = lambda x: lambda self, * \
-            args: sendToCuda(self, args, x).float().cpu()
-
-        self.prefunc = lambda x: lambda self, *args: sendToCuda(self, args, x)
-
+        self.matvec = matvec
         self.layernorm = lambda x, w, b: torch.layer_norm(
             x.to(device=w.device), w.shape, w, b)
 
@@ -1022,5 +862,6 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     # "RWKVJaxIreeOps": RWKVJaxIreeOps,
 
     "poptorch(idk)": RWKVPoptorchOps,
+
 
 }
