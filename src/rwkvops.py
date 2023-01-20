@@ -528,9 +528,10 @@ class RWKVCudaQuantOps(RWKVPTOps):
             x = x.to(
                 dtype=torch.uint8, non_blocking=True, device=dev)
 
-            counts = torch.bincount(
-                x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
-            plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
+            # counts = torch.bincount(
+            #     x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
+            # plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
+            # plt.show()
 
             return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
 
