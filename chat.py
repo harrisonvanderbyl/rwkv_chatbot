@@ -8,10 +8,12 @@ import torch
 from src.rwkv import RWKV
 from sty import Style, RgbFg, fg
 
+from src.rwkvMaster import RWKVMaster
+
 fg.orange = Style(RgbFg(255, 150, 50))
 
 
-async def runDiscordBot(model):
+async def runDiscordBot(model: RWKVMaster):
 
     ###### A good prompt for chatbot ######
     bot = "RWKV"
@@ -162,20 +164,11 @@ async def runDiscordBot(model):
             print(f'### add ###\n[{new}]')
 
             currstate = model.loadContext("\n", tknew)
-            begin = len(currstate[0])
             state = currstate
 
-            with torch.no_grad():
-                out = ""
-                for i in range(100):
-                    o = model.forward()["output"]
+            out = model.forward(number=100)["output"]
 
-                    out += o
-
-                    if (o == "\n"):
-                        break
-
-            send_msg = out[len(tknew):]
+            send_msg = out
             currstate = state
             if (len(send_msg) == 0):
                 send_msg = "Error: No response generated."
