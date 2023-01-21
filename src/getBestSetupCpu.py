@@ -1,8 +1,8 @@
 import time
 import torch
 
-mat = torch.randn(8192, 8192).float()
-vec = torch.randn(8192).float()
+mat = torch.randn(1000, 1000).float()
+vec = torch.randn(1000).float()
 matbfloat = mat.bfloat16()
 vecbfloat = vec.bfloat16()
 
@@ -17,6 +17,22 @@ for i in range(1000):
 
 
 # time the bfloat16 matmul
+
+
+start = time.time()
+for i in range(rounds):
+    x = torch.mv(matbfloat, vecbfloat)
+
+end = time.time()
+
+
+# time the float matmul
+
+start = time.time()
+for i in range(rounds):
+    x = torch.mv(mat, vec)
+
+end = time.time()
 
 
 start = time.time()
