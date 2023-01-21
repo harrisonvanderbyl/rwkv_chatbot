@@ -551,10 +551,7 @@ class RWKVCudaQuantOps(RWKVPTOps):
             # unquantize
             rx, spread, zpoint = x
             yy = y*spread
-            rx = rx.to_dense().to(dtype=runtimedtype)
-
-            # plt.plot(yy)
-            # plt.show()
+            rx = rx.to(dtype=runtimedtype)
 
             return rx.mv(yy) + zpoint.dot(y)
 

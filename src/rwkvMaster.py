@@ -20,7 +20,7 @@ def loadContext(model, ctx: list[int], newctx: list[int], statex, progressCallBa
     with torch.jit.optimized_execution(True):
         for i in tqdm.tqdm(range(len(newctx))):
 
-            x = ctx+newctx[:i+1]
+            x = ctx+newctx[:i]
 
             o = model.forward([x[-1]], statex)
             statex = o[1]
