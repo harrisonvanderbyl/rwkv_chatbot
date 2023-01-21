@@ -676,9 +676,17 @@ class RWKVStreamBigOps(RWKVPTOps):
     def __init__(self, layers, embed, processDtype=torch.float32, storageDtype=torch.bfloat16, target=None):
         super().__init__(layers, embed, dtype=storageDtype)
 
+        pinMem = inquirer.prompt([inquirer.Confirm(
+            'type',
+            message=f"Pin memory to cpu?",
+            default=True)])['type']
+
+        def pinmem(x):
+            return x.pin_memory("cuda") if pinMem else x
+
         target = target if target is not None else float(
             input("Designate the amount of memory to allocate (in GB):"))
-        self.initTensor = lambda x: x.to(device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype).pin_memory("cuda") if (
+        self.initTensor = lambda x: pinmem(x.to(device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype)) if (
             torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else x.to(dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
 
         # for everything in self, if its a tensor, send to cuda
