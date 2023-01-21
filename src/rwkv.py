@@ -230,6 +230,10 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
                 # exit()
                 return x, ops.stack(ot)
 
+            def call(self, *args, **kwds):
+                del kwds["training"]
+                return self.forward(*args, **kwds)
+
         model = ops.postProcessModule(myRWKV())
         emptyState = ops.emptyState
         initTensor = ops.initTensor

@@ -22,6 +22,31 @@ def notimplemented(*args):
     raise "not implemented"
 
 
+def npsample(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
+    try:
+        ozut = ozut.numpy()
+    except:
+        try:
+            ozut = ozut.cpu().numpy()
+        except:
+            ozut = np.array(ozut)
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # out[self.UNKNOWN_CHAR] = -float('Inf')
+    # turn to float if is half and cpu
+    probs = softmax(ozut, axis=-1)
+
+    sorted_probs = np.sort(probs)[::-1]
+    cumulative_probs = np.cumsum(sorted_probs)
+    cutoff = float(sorted_probs[np.argmax(
+        cumulative_probs > top_p_usual)])
+    probs[probs < cutoff] = 0
+    if temp != 1.0:
+        probs = pow(probs, 1.0 / temp)
+    probs = probs / np.sum(probs, axis=0)
+    mout = np.random.choice(a=len(probs), p=probs)
+    return mout
+
+
 class RWKVOPS():
     def __init__(self, layers, embed):
         print("init RWKVOPS, from super")
@@ -54,31 +79,7 @@ class RWKVOPS():
         self.logistical = lambda x: 1 / (self.exp(x) + 1)
         self.postProcessModule = lambda x: x
 
-        def sample(ozut, temp: float = 1.0, top_p_usual: float = 0.8) -> int:
-            try:
-                ozut = ozut.numpy()
-            except:
-                try:
-                    ozut = ozut.cpu().numpy()
-                except:
-                    ozut = np.array(ozut)
-            # out[self.UNKNOWN_CHAR] = -float('Inf')
-            # out[self.UNKNOWN_CHAR] = -float('Inf')
-            # turn to float if is half and cpu
-            probs = softmax(ozut, axis=-1)
-
-            sorted_probs = np.sort(probs)[::-1]
-            cumulative_probs = np.cumsum(sorted_probs)
-            cutoff = float(sorted_probs[np.argmax(
-                cumulative_probs > top_p_usual)])
-            probs[probs < cutoff] = 0
-            if temp != 1.0:
-                probs = pow(probs, 1.0 / temp)
-            probs = probs / np.sum(probs, axis=0)
-            mout = np.random.choice(a=len(probs), p=probs)
-            return mout
-
-        self.sample = sample
+        self.sample = npsample
 
         # typing, set as any
         self.tensorDef = None
@@ -144,9 +145,11 @@ class RWKVTFExport(RWKVTFOps):
     def __init__(self, layers, embed, splitmodel=None, exports=None):
         super(RWKVTFExport, self).__init__(layers, embed)
         import tensorflow as tf
+        self.module = tf.keras.Model
         path = f"tfdist/rwkv-{layers}-{embed}/"
 
         def save(x):
+            x([0], self.emptyState)
             try:
                 try:
                     os.mkdir("tfdist")
@@ -173,7 +176,7 @@ class RWKVTFExport(RWKVTFOps):
                         tf.saved_model.save(l, path+f"sm/layer{i}")
                 else:
 
-                    tf.saved_model.save(x, path+"sm/whole")
+                    tf.keras.models.save_model(x, path+"sm/whole")
 
             if "tflite32" in q:
                 try:
