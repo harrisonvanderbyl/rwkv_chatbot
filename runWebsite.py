@@ -11,6 +11,7 @@ import time
 from typing import Dict as dict
 from typing import List
 import gc
+from src.rwkvMaster import RWKVMaster
 
 
 from src.utils import TOKENIZER
@@ -86,7 +87,7 @@ if os.system("yarn --version"):
 # context = "\n東京は" # test Japanese
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese
-async def runWebsite(model):
+async def runWebsite(model: RWKVMaster):
     os.chdir("web-interface")
     os.system("yarn")
     os.system("yarn build")
@@ -237,7 +238,7 @@ async def runWebsite(model):
                     json.dumps({"response": emoj, "done": False, "progress": len(model.tokenizer.decode(x))}).encode('utf-8'))
 
             model.loadContext(
-                ctx="\n", newctx=tokens, statex=body["state"], progressCallBack=updateProgress)
+                ctx="\nUser", newctx=tokens, statex=body["state"], progressCallBack=updateProgress)
             currentData = (tokens, model.getState())
 
             ln = len(currentData[0])
