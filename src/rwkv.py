@@ -230,6 +230,7 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
                 # exit()
                 return x, ops.stack(ot)
 
+            # for keras stuff, ignore this if you are not using keras
             def call(self, *args, **kwds):
                 del kwds["training"]
                 return self.forward(*args, **kwds)
