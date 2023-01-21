@@ -1,15 +1,13 @@
 import torch
 
-mat = torch.randn(100, 100).float().cuda()
-vec = torch.randn(100).float().cuda()
+mat = torch.randn(8192, 8192).float().cuda()
+vec = torch.randn(8192).float().cuda()
 matbfloat = mat.bfloat16().cuda()
 vecbfloat = vec.bfloat16().cuda()
 mathalf = mat.half().cuda()
 vechalf = vec.half().cuda()
-matdouble = mat.double().cuda()
-vecdouble = vec.double().cuda()
 
-rounds = 100000
+rounds = 1000
 
 # warmup
 for i in range(100):
@@ -45,13 +43,3 @@ for i in range(rounds):
 end.record()
 torch.cuda.synchronize()
 print(f"float matmul: {start.elapsed_time(end)} ms")
-
-# time the double matmul
-
-start.record()
-for i in range(rounds):
-    x = torch.mv(matdouble, vecdouble)
-
-end.record()
-torch.cuda.synchronize()
-print(f"double matmul: {start.elapsed_time(end)} ms")

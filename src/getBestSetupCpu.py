@@ -1,15 +1,15 @@
 import time
 import torch
 
-mat = torch.randn(100, 100).float()
-vec = torch.randn(100).float()
+mat = torch.randn(8192, 8192).float()
+vec = torch.randn(8192).float()
 matbfloat = mat.bfloat16()
 vecbfloat = vec.bfloat16()
 
 matdouble = mat.double()
 vecdouble = vec.double()
 
-rounds = 100000
+rounds = 1000
 
 # warmup
 for i in range(1000):
@@ -36,14 +36,4 @@ for i in range(rounds):
 
 end = time.time()
 
-print(f"bfloat16 matmul: {end-start} ms")
-
-# time the double matmul
-
-start = time.time()
-for i in range(rounds):
-    x = torch.mv(matdouble, vecdouble)
-
-end = time.time()
-
-print(f"bfloat16 matmul: {end-start} ms")
+print(f"float matmul: {end-start} ms")
