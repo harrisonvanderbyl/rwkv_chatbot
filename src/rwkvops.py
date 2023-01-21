@@ -172,6 +172,7 @@ class RWKVTFExport(RWKVTFOps):
                     for i, l in enumerate(x.mylayers):
                         tf.saved_model.save(l, path+f"sm/layer{i}")
                 else:
+
                     tf.saved_model.save(x, path+"sm/whole")
 
             if "tflite32" in q:

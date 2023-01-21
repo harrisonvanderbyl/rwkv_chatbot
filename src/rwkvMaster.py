@@ -47,11 +47,11 @@ class RWKVMaster():
             sampled = self.sample(
                 logits, temp, top_p_usual) if self.sampler is not None else logits
             try:
-                self.lastToken = sampled
-            except:
                 self.lastToken = sampled.item()
+            except:
+                self.lastToken = sampled
 
-            tolens += [sampled]
+            tolens += [self.lastToken]
         sampled = self.tokenizer.decode(tolens)
         return {"logits": logits, "state": state, "output": sampled}
 

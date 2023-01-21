@@ -23,7 +23,9 @@ def initTorchScriptFile(Path):
 
     def initTensor(x): return torch.tensor(x, dtype=dtype, device=device)
 
-    return RWKVMaster(model, emptyState, initTensor, torchsample if "sampler" not in Path else None)
+    useSampler = "sampler" not in Path
+
+    return RWKVMaster(model, emptyState, initTensor, torchsample if useSampler else None)
 
 
 def initTFLiteFile(Path):

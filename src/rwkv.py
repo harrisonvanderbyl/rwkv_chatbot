@@ -70,8 +70,6 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
 
         keys = list(w.keys())
 
-        preprocess = []
-
         ops = Backends[mode](
             n_layer, len(w[f"blocks.0.ffn.time_mix_k"]), *args, **kwargs)
 
@@ -159,7 +157,6 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
         class RWKVTFPre(ops.module):
             def __init__(self):
                 super(RWKVTFPre, self).__init__()
-                self.preprocess = ops.stack(preprocess)
 
             @ ops.prefunc
             def forward(self, x):
