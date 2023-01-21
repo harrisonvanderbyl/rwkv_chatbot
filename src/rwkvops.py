@@ -824,7 +824,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-torchscript": RWKVPTTSExportOps,
     "export-tensorflow": RWKVTFExport,
     # "export-pytorch-mobile": RWKVMobileOps,
-    "export-onnx": RWKVExportOnnxOps,
+    # "export-onnx": RWKVExportOnnxOps,
     "pytorch-compatibility(cpu/debug)": RWKVPTCompatOps,
     # "RWKVJaxIreeOps": RWKVJaxIreeOps,
 
