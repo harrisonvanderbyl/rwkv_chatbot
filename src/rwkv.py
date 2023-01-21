@@ -77,8 +77,8 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
 
         for x in tqdm(list(w.keys())):
             if "emb.weight" in x:
-                w[x] = list(map(lambda rrx: ops.initTensor(
-                    rrx.squeeze()), w[x].split(1, 0)))
+                w[x] = ops.stack(list(map(lambda rrx: ops.initTensor(
+                    rrx.squeeze()), w[x].split(1, 0))))
             else:
                 w[x] = ops.initTensor(w[x])
 

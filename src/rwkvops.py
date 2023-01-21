@@ -629,49 +629,10 @@ class RWKVCudaQuantOffOps(RWKVPTOps):
             4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
-class RWKVExportOnnxOps(RWKVOPS):
+class RWKVExportOnnxOps(RWKVCudaOps):
     def __init__(self, layers, embed, *args):
-        base = inquirer.prompt([inquirer.List(
-            'type',
-            message="Base class for export:",
-            choices=["Pytorch", "Cuda", "Compat"])])['type']
-
-        if base == "Pytorch":
-            base = RWKVPTOps
-        elif base == "Cuda":
-            base = RWKVCudaOps
-        elif base == "Compat":
-            base = RWKVPTCompatOps
-        base.__init__(self, layers, embed, *args)
-        path = f"onnx/rwkv-{layers}-{embed}-{torch.float32}/"
-        # super().__init__(layers, embed)
-        self.stack = torch.stack
-
-        onnxOpversion = inquirer.prompt([inquirer.List(
-            'type',
-            message="ONNX Opset version:",
-            choices=[12, 13, 14, 15, 16, 17])])['type']
-
-        def export(self, x, state):
-            print("exporting")
-            try:
-                try:
-                    os.mkdir("onnx")
-                except:
-                    pass
-                os.mkdir(path)
-            except:
-                pass
-            torch.onnx.export(
-                self.preprocess, (torch.zeros(1, dtype=torch.int32),), f"{path}pre.onnx", opset_version=onnxOpversion)
-            torch.onnx.export(
-                self.postprocess, (torch.zeros(embed, dtype=torch.float32),), f"{path}post.onnx", opset_version=onnxOpversion)
-            for i, layer in enumerate(self.mylayers):
-                torch.onnx.export(
-                    layer, do_constant_folding=True, input_names=["X", "S1", "S2", "S3", "S4"], output_names=["Out", "O1", "O2", "O3", "O4"],  args=(torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01, torch.zeros(embed, dtype=torch.float32)+0.01), f=f"{path}{i}.onnx", opset_version=onnxOpversion)
-
-            exit()
-        self.mainfunc = lambda x: export
+        os.system(
+            "python -m tf2onnx.convert --saved-model tensorflow-model-path --output model.onnx")
 
 
 class RWKVStreamOps(RWKVPTOps):
@@ -785,6 +746,8 @@ class RWKVSplitCudaOps(RWKVPTOps):
 
             return res
 
+        self.stack = lambda x: x
+
         self.matvec = matvec
         self.layernorm = lambda x, w, b: torch.layer_norm(
             x.to(device=w.device), w.shape, w, b)
@@ -857,7 +820,7 @@ RwkvOpList: dict[str, type[RWKVOPS]] = {
     "export-torchscript": RWKVPTTSExportOps,
     "export-tensorflow": RWKVTFExport,
     # "export-pytorch-mobile": RWKVMobileOps,
-    # "export-onnx": RWKVExportOnnxOps,
+    "export-onnx": RWKVExportOnnxOps,
     "pytorch-compatibility(cpu/debug)": RWKVPTCompatOps,
     # "RWKVJaxIreeOps": RWKVJaxIreeOps,
 
