@@ -1,5 +1,3 @@
-from scipy.special import softmax
-import numpy as np
 import torch
 import tqdm
 from src.utils import TOKENIZER
@@ -15,7 +13,7 @@ if TOKEN_MODE == "pile":
     assert tokenizer.tokenizer.decode([187]) == '\n'
 
 
-def loadContext(model, ctx: list[int], newctx: list[int], statex, progressCallBack=lambda x: x):
+def loadContext(model, ctx, newctx, statex, progressCallBack=lambda x: x):
 
     with torch.jit.optimized_execution(True):
         for i in tqdm.tqdm(range(len(newctx))):

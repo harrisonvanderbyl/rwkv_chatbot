@@ -86,7 +86,7 @@ class RWKVOPS():
 
 
 class RWKVTFOps(RWKVOPS):
-    def __init__(self, layers, embed):
+    def __init__(self, layers, embed, useGPU: bool = None):
         try:
             import tensorflow as tf
         except:
@@ -95,7 +95,7 @@ class RWKVTFOps(RWKVOPS):
             if inst:
                 os.system("pip3 install tensorflow")
                 import tensorflow as tf
-        if (not inquirer.confirm("Do you want to use GPU?")):
+        if (not (inquirer.confirm("Do you want to use GPU?") if useGPU is None else useGPU)):
             tf.config.experimental.set_visible_devices([], "GPU")
         tf.config.optimizer.set_jit(True)
         tf.config.optimizer.set_experimental_options(
