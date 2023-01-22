@@ -222,7 +222,7 @@ async def runWebsite(model: RWKVMaster):
             if body["state"] is None:
                 body["state"] = people[character]
             else:
-                body["state"] = model.stack(
+                body["state"] = (
                     list(map(lambda xx: model.initTensor(torch.tensor(xx)), body["state"])))
 
             progresskey = body["key"]
