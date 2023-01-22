@@ -813,7 +813,7 @@ class RWKVMobileOps(RWKVPTOps):
             args: x(self, torch.tensor(r).to(torch.int32), *args)
 
 
-RwkvOpList: dict[str, type[RWKVOPS]] = {
+RwkvOpList = {
     "tensorflow(cpu/gpu)": RWKVTFOps,
     "pytorch(cpu/gpu)": RWKVCudaOps,
     "numpy(cpu)": RWKVNumpyOps,
