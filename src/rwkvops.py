@@ -552,10 +552,11 @@ def QuantizedMatVec(x, y, runtimedtype, uint4=False):
 
 
 class RWKVCudaQuantOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args, runtimedtype=None, uint4=False, chunksize=None):
+    def __init__(self, layers, embed, *args, runtimedtype=None, uint4=False, useGPU=None, chunksize=None):
         super().__init__(layers, embed, torch.bfloat16)
         import matplotlib.pyplot as plt
-        dev = "cuda"
+        dev = 'cuda' if (inquirer.confirm(
+            "Use GPU?", default=True) if useGPU is None else useGPU) else 'cpu'
 
         runtimedtype = inquirer.prompt([inquirer.List(
             'type',
