@@ -64,6 +64,7 @@ class RWKVOPS():
         self.matvec: notimplemented
         self.layernorm: notimplemented
         self.lerp: notimplemented
+        self.postProcessTensor = lambda x: x
        # module def
         self.module: notimplemented
         self.log: notimplemented
@@ -73,8 +74,6 @@ class RWKVOPS():
         self.initfunc: notimplemented
         self.layerdef: notimplemented
         self.mainfunc: notimplemented
-        self.prefunc: notimplemented
-        self.postfunc: notimplemented
         self.emptyState: notimplemented
         self.logistical = lambda x: 1 / (self.exp(x) + 1)
         self.postProcessModule = lambda x: x
@@ -122,13 +121,9 @@ class RWKVTFOps(RWKVOPS):
        # tensorflow function defs
         self.initfunc = lambda x: x
         self.layerdef = tf.function(
-            input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)], jit_compile=True)
+            input_signature=5*[tf.TensorSpec(shape=[None], dtype=tf.float32)]+[tf.TensorSpec(dtype=tf.int64, shape=None)])
         self.mainfunc = tf.function(input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32), tf.TensorSpec(
             shape=[4*layers, embed], dtype=tf.float32)])
-        self.prefunc = tf.function(
-            input_signature=[tf.TensorSpec(shape=[1], dtype=tf.int32)], jit_compile=True)
-        self.postfunc = tf.function(
-            input_signature=[tf.TensorSpec(shape=[embed], dtype=tf.float32)], jit_compile=True)
         self.emptyState = tf.zeros([4*layers, embed], dtype=tf.float32)+0.01
 
         def ln(x, w, b):
@@ -142,7 +137,7 @@ class RWKVTFOps(RWKVOPS):
 
 
 class RWKVTFExport(RWKVTFOps):
-    def __init__(self, layers, embed, splitmodel=None, exports=None):
+    def __init__(self, layers, embed,  exports=None):
         super(RWKVTFExport, self).__init__(layers, embed)
         import tensorflow as tf
         self.module = tf.keras.Model
@@ -158,8 +153,6 @@ class RWKVTFExport(RWKVTFOps):
                 os.mkdir(path)
             except:
                 pass
-            split = splitmodel if splitmodel is not None else inquirer.prompt([inquirer.Confirm(
-                'splitmodel', message="Split model?", default=False)])["splitmodel"]
 
             q = exports if exports is not None else inquirer.checkbox(message="What to export?", choices=[
                 "savedmodel32", "tflite32", "tflite16"])
@@ -169,76 +162,34 @@ class RWKVTFExport(RWKVTFOps):
                     os.mkdir(path+"sm")
                 except:
                     pass
-                if split:
-                    tf.saved_model.save(x.preprocess, path+"sm/pre")
-                    tf.saved_model.save(x.postprocess, path+"sm/post")
-                    for i, l in enumerate(x.mylayers):
-                        tf.saved_model.save(l, path+f"sm/layer{i}")
-                else:
 
-                    tf.keras.models.save_model(x, path+"sm/whole")
+                tf.keras.models.save_model(x, path+"sm/whole")
 
             if "tflite32" in q:
                 try:
                     os.mkdir(path+"tflite32")
                 except:
                     pass
-                if split:
-                    for i, l in enumerate(x.mylayers):
-                        converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                            [l.forward.get_concrete_function()])
-                        tflite_model = converter.convert()
-                        open(path+f"tflite32/layer{i}.tflite",
-                             "wb").write(tflite_model)
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.preprocess.forward.get_concrete_function()])
-                    tflite_model = converter.convert()
-                    open(path+f"tflite32/pre.tflite", "wb").write(tflite_model)
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.postprocess.forward.get_concrete_function()])
-                    tflite_model = converter.convert()
-                    open(path+f"tflite32/post.tflite", "wb").write(tflite_model)
-                else:
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.forward.get_concrete_function()])
-                    tflite_model = converter.convert()
-                    open(f"model-{layers}-{embed}-32.tflite",
-                         "wb").write(tflite_model)
+
+                converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                    [x.forward.get_concrete_function()])
+                tflite_model = converter.convert()
+                open(f"model-{layers}-{embed}-32.tflite",
+                     "wb").write(tflite_model)
 
             if "tflite16" in q:
                 try:
                     os.mkdir(path+"tflite16")
                 except:
                     pass
-                if split:
-                    for i, l in enumerate(x.mylayers):
-                        converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                            [l.forward.get_concrete_function()])
-                        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-                        converter.target_spec.supported_types = [tf.float16]
-                        tflite_model = converter.convert()
-                        open(path+f"tflite16/layer{i}.tflite",
-                             "wb").write(tflite_model)
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.preprocess.forward.get_concrete_function()])
-                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-                    converter.target_spec.supported_types = [tf.float16]
-                    tflite_model = converter.convert()
-                    open(path+f"tflite16/pre.tflite", "wb").write(tflite_model)
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.postprocess.forward.get_concrete_function()])
-                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-                    converter.target_spec.supported_types = [tf.float16]
-                    tflite_model = converter.convert()
-                    open(path+f"tflite16/post.tflite", "wb").write(tflite_model)
-                else:
-                    converter = tf.lite.TFLiteConverter.from_concrete_functions(
-                        [x.forward.get_concrete_function()])
-                    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-                    converter.target_spec.supported_types = [tf.float16]
-                    tflite_model = converter.convert()
-                    open(f"model-{layers}-{embed}-16.tflite",
-                         "wb").write(tflite_model)
+
+                converter = tf.lite.TFLiteConverter.from_concrete_functions(
+                    [x.forward.get_concrete_function()])
+                converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                converter.target_spec.supported_types = [tf.float16]
+                tflite_model = converter.convert()
+                open(f"model-{layers}-{embed}-16.tflite",
+                     "wb").write(tflite_model)
             exit()
         self.postProcessModule = save
 
@@ -264,8 +215,6 @@ class RWKVNumpyOps(RWKVOPS):
         self.initfunc = lambda x: x
         self.layerdef = lambda x: x
         self.mainfunc = lambda x: x
-        self.postfunc = lambda x: x
-        self.prefunc = lambda x: x
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
@@ -300,8 +249,6 @@ class RWKVJaxOps(RWKVOPS):
         self.layerdef = lambda x: x
         self.mainfunc = lambda x: x
         # in postfunc, convert to numpy
-        self.postfunc = lambda x: lambda self, y: np.array(x(self, y))
-        self.prefunc = lambda x: x
 
         def ln(x, w, b):
             xee2 = x - self.mean(x)
@@ -321,8 +268,6 @@ class RWKVJaxIreeOps(RWKVJaxOps):
         from jax import numpy as npjax
 
         self.module = Program
-        self.prefunc = Program.kernel
-        self.postfunc = Program.kernel
         self.layerdef = Program.kernel
         # annotate the function
 
@@ -392,8 +337,6 @@ class RWKVPTOps(RWKVOPS):
         self.initfunc = lambda x: x
         self.layerdef = lambda x: x
         self.mainfunc = lambda x: x
-        self.postfunc = lambda x: lambda *args: x(*args).float()
-        self.prefunc = lambda x: x
 
         # self.postProcessModule = ppm
 
@@ -459,8 +402,6 @@ class RWKVCudaOps(RWKVPTOps):
         self.matvec = lambda x, y: x.mv(
             y.to(self.dtype)).to(runtimedtype)
 
-        self.postfunc = lambda x: lambda *args: x(*args).float()
-
         def ln(x, w, b):
             xee2 = x - self.mean(x)
 
@@ -483,8 +424,9 @@ class RWKVPTTSExportOps(RWKVCudaOps):
             "Include sampler?", default=True) if includeSampler is None else includeSampler
 
         if includeSampler:
-            self.postfunc = lambda x: lambda *args: self.sample(
-                x(*args).float().cpu(), torch.tensor(1), torch.tensor(0.9))
+            self.sample = torchsample
+            self.postProcessTensor = lambda x: self.sample(
+                x.float().cpu(), torch.tensor(1), torch.tensor(0.9))
 
         def exportTorchScript(x):
             torch.jit.save(torch.jit.trace(
@@ -585,8 +527,6 @@ class RWKVCudaQuantOps(RWKVPTOps):
 
         self.initTensor = initTensor
         self.initCpuTensor = self.initTensor
-        self.postfunc = lambda x: lambda self, y: x(
-            self, y).cpu().float()
 
         self.postProcessModule = lambda x: x
 
@@ -604,44 +544,29 @@ class RWKVCudaQuantOps(RWKVPTOps):
 
 class RWKVExportOnnxOps(RWKVCudaOps):
     def __init__(self, layers, embed, *args):
-        os.system(
-            "python -m tf2onnx.convert --saved-model tensorflow-model-path --output model.onnx")
+        base = inquirer.prompt([inquirer.List(
+            'type',
+            message="Base class for export:",
+            choices=["Normal", "Compat"])])['type']
 
+        if base == "Normal":
+            base = RWKVCudaOps
+        elif base == "Compat":
+            base = RWKVPTCompatOps
+        base.__init__(self, layers, embed, *args)
+        path = f"rwkv-{layers}-{embed}-{torch.float32}.onnx"
+        # super().__init__(layers, embed)
+        self.stack = torch.stack
 
-class RWKVStreamOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args):
-        super().__init__(layers, embed, *args)
-        self.initTensor = lambda x: x.to(self.dtype).pin_memory("cuda")
+        onnxOpversion = inquirer.prompt([inquirer.List(
+            'type',
+            message="ONNX Opset version:",
+            choices=[12, 13, 14, 15, 16, 17])])['type']
 
-        # for everything in self, if its a tensor, send to cuda
-        def sendToCuda(self, args, x):
-            # create a new modifiable empty object
-            class Empty:
-                def __init__(self):
-                    pass
-
-            newself = Empty()
-            for k, v in self.__dict__.items():
-                if isinstance(v, torch.Tensor):
-                    newself.__dict__[k] = v.cuda(non_blocking=True)
-
-            ret = x(newself, *args)
-
-            del newself
-            return ret
-
-        self.klimit = self.klimit.cuda(non_blocking=True)
-
-        self.postfunc = lambda x: lambda self, * \
-            args: sendToCuda(self, args, x).cpu()
-        self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
-
-        self.initCpuTensor = lambda x: x.to(self.dtype).cpu()
-
-        self.prefunc = lambda x: lambda self, * \
-            args: x(self, *args).cuda(non_blocking=True)
-        self.emptyState = torch.zeros(
-            4*layers, embed, dtype=self.dtype, device="cuda")+0.01
+        def export(x):
+            torch.onnx.export(x, ([0], self.emptyState),
+                              path, opset_version=onnxOpversion)
+        self.postProcessModule = export
 
 
 class RWKVStreamBigOps(RWKVPTOps):
@@ -654,37 +579,19 @@ class RWKVStreamBigOps(RWKVPTOps):
             default=True)])['type']
 
         def pinmem(x):
-            return x.pin_memory("cuda") if pinMem else x
+            return x.pin_memory() if pinMem and x.device == "cpu" else x
 
         target = target if target is not None else float(
             input("Designate the amount of memory to allocate (in GB):"))
-        self.initTensor = lambda x: pinmem(x.to(device='cpu', dtype=storageDtype if len(x.shape) == 2 else processDtype)) if (
+        self.initTensor = lambda x: pinmem(x.to(device='cpu' if len(x.shape) == 2 else "cuda", dtype=storageDtype if len(x.shape) == 2 else processDtype)) if (
             torch.cuda.max_memory_reserved(0)/1024/1024/1024) > target else x.to(dtype=storageDtype if len(x.shape) == 2 else processDtype).cuda()
 
         # for everything in self, if its a tensor, send to cuda
-        def sendToCuda(self, args, x):
-            # create a new modifiable empty object
-            class Empty:
-                def __init__(self):
-                    pass
 
-            newself = Empty()
-            for k, v in self.__dict__.items():
-                if isinstance(v, torch.Tensor):
-                    newself.__dict__[k] = v.cuda(non_blocking=True)
-
-            ret = x(newself, *args)
-
-            del newself
-            return ret
-        self.initCpuTensor = lambda x: x.to(
-            dtype=storageDtype if len(x.shape) == 2 else processDtype).cpu()
-        self.prefunc = lambda x: lambda *args: x(*args).cuda(non_blocking=True)
+        self.initCpuTensor = self.initTensor
         self.klimit = self.klimit.cuda(non_blocking=True)
-        self.postfunc = lambda x: lambda self, * \
-            args: sendToCuda(self, args, x).float().cpu()
-        self.layerdef = lambda x: lambda self, *args: sendToCuda(self, args, x)
-        self.matvec = lambda z, y: z.mv(y.to(storageDtype)).to(processDtype)
+        self.matvec = lambda z, y: z.cuda(non_blocking=True).mv(
+            y.to(storageDtype)).to(processDtype)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=processDtype, device="cuda")+0.01
 
@@ -792,18 +699,12 @@ RwkvOpList = {
     "jax(cpu/gpu/tpu)": RWKVJaxOps,
     "pytorch-deepspeed(gpu)": RWKVCudaDeepspeedOps,
     "pytorch-quant(gpu-8bit)": RWKVCudaQuantOps,
-    # "pytorch-cuda-matrix-quant(broken)": RWKVCudaQuantOffOps,
-    # "pytorch-stream(gpu, )": RWKVStreamOps,
     "pytorch-stream(gpu-config-vram)": RWKVStreamBigOps,
-    # "pytorch-p2p": RWKVP2POps,
-    # "pytorch-p2p-target": RWKVP2PServerOps,
     "pytorch-split(2xgpu)": RWKVSplitCudaOps,
     "export-torchscript": RWKVPTTSExportOps,
     "export-tensorflow": RWKVTFExport,
-    # "export-pytorch-mobile": RWKVMobileOps,
-    # "export-onnx": RWKVExportOnnxOps,
+    "export-onnx": RWKVExportOnnxOps,
     "pytorch-compatibility(cpu/debug)": RWKVPTCompatOps,
-    # "RWKVJaxIreeOps": RWKVJaxIreeOps,
 
     "poptorch(idk)": RWKVPoptorchOps,
 

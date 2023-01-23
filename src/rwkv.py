@@ -83,128 +83,104 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
         gc.collect()
         torch.cuda.empty_cache()
 
-        class RWKVTFLayer(ops.module):
-            def __init__(self, x):
-                super(RWKVTFLayer, self).__init__()
+        class myRWKV(ops.module):
+            postprocess0 = (w["ln_out.weight"])
+            postprocess1 = (w["ln_out.bias"])
+            postprocess2 = (w["head.weight"])
+            emb = w["emb.weight"]
+            emb1 = w["blocks.0.ln0.weight"]
+            emb2 = w["blocks.0.ln0.bias"]
+            ln1w = ops.stack(
+                [w[f"blocks.{x}.ln1.weight"] for x in range(n_layer)])
+            ln1b = ops.stack(
+                [w[f"blocks.{x}.ln1.bias"] for x in range(n_layer)])
+            ln2w = ops.stack(
+                [w[f"blocks.{x}.ln2.weight"] for x in range(n_layer)])
+            ln2b = ops.stack(
+                [w[f"blocks.{x}.ln2.bias"] for x in range(n_layer)])
+            time_decay = ops.stack([
+                w[f"blocks.{x}.att.time_decay"] for x in range(n_layer)])
+            time_first = ops.stack([
+                w[f"blocks.{x}.att.time_first"] for x in range(n_layer)])
+            kktk = ops.stack(
+                [w[f"blocks.{x}.att.time_mix_k"] for x in range(n_layer)])
+            vvtv = ops.stack(
+                [w[f"blocks.{x}.att.time_mix_v"] for x in range(n_layer)])
+            rrtr = ops.stack(
+                [w[f"blocks.{x}.att.time_mix_r"] for x in range(n_layer)])
+            key = ops.stack(
+                [w[f"blocks.{x}.att.key.weight"] for x in range(n_layer)])
+            value = ops.stack(
+                [w[f"blocks.{x}.att.value.weight"] for x in range(n_layer)])
+            receptance = ops.stack([
+                w[f"blocks.{x}.att.receptance.weight"] for x in range(n_layer)])
+            outputvv = ops.stack([
+                w[f"blocks.{x}.att.output.weight"] for x in range(n_layer)])
+            time_mix_k_ffn = ops.stack([
+                w[f"blocks.{x}.ffn.time_mix_k"] for x in range(n_layer)])
+            time_mix_r_ffn = ops.stack([
+                w[f"blocks.{x}.ffn.time_mix_r"] for x in range(n_layer)])
+            key_ffn = ops.stack(
+                [w[f"blocks.{x}.ffn.key.weight"] for x in range(n_layer)])
+            receptance_ffn = ops.stack([
+                w[f"blocks.{x}.ffn.receptance.weight"] for x in range(n_layer)])
+            value_ffn = ops.stack([
+                w[f"blocks.{x}.ffn.value.weight"] for x in range(n_layer)])
 
-                self.i = x
+            @ ops.initfunc
+            def __init__(self):
+                super(myRWKV, self).__init__()
 
-                self.ln1w = (w[f"blocks.{x}.ln1.weight"])
-                self.ln1b = (w[f"blocks.{x}.ln1.bias"])
-                self.ln2w = (w[f"blocks.{x}.ln2.weight"])
-                self.ln2b = (w[f"blocks.{x}.ln2.bias"])
-                self.time_decay = (
-                    w[f"blocks.{x}.att.time_decay"])
-                self.time_first = (
-                    w[f"blocks.{x}.att.time_first"])
-                self.kktk = (w[f"blocks.{x}.att.time_mix_k"])
-                self.vvtv = (w[f"blocks.{x}.att.time_mix_v"])
-                self.rrtr = (w[f"blocks.{x}.att.time_mix_r"])
-                self.key = (w[f"blocks.{x}.att.key.weight"])
-                self.value = (w[f"blocks.{x}.att.value.weight"])
-                self.receptance = (
-                    w[f"blocks.{x}.att.receptance.weight"])
-                self.outputvv = (
-                    w[f"blocks.{x}.att.output.weight"])
-                self.time_mix_k_ffn = (
-                    w[f"blocks.{x}.ffn.time_mix_k"])
-                self.time_mix_r_ffn = (
-                    w[f"blocks.{x}.ffn.time_mix_r"])
-                self.key_ffn = (w[f"blocks.{x}.ffn.key.weight"])
-                self.receptance_ffn = (
-                    w[f"blocks.{x}.ffn.receptance.weight"])
-                self.value_ffn = (
-                    w[f"blocks.{x}.ffn.value.weight"])
+                self.ops = ops
 
-            @ ops.layerdef
-            def forward(self, x, statea, stateb, statec, stated):
-                xy = ops.layernorm(x, self.ln1w, self.ln1b)
+                # self.postprocess = RWKVTFPost()
+            @ops.layerdef
+            def doLayer(self, x, statea, stateb, statec, stated, xx):
+                xy = ops.layernorm(x, self.ln1w[xx], self.ln1b[xx])
 
                 kk = ops.matvec(
-                    self.key, ops.lerp(statea, xy, self.kktk))
+                    self.key[xx], ops.lerp(statea, xy, self.kktk[xx]))
 
-                v = ops.matvec(self.value, ops.lerp(statea, xy, self.vvtv))
+                v = ops.matvec(self.value[xx], ops.lerp(
+                    statea, xy, self.vvtv[xx]))
 
                 r = ops.logistical(ops.matvec(
-                    self.receptance, ops.lerp(statea, xy, self.rrtr)))
+                    self.receptance[xx], ops.lerp(statea, xy, self.rrtr[xx])))
 
                 kt = ops.exp(ops.minimum(
-                    ops.add(kk, self.time_first), ops.klimit))
+                    ops.add(kk, self.time_first[xx]), ops.klimit))
                 k = ops.exp(ops.minimum(kk, ops.klimit))
 
                 wrd = ops.divide(
                     ops.add(stateb, ops.multiply(kt, v)), ops.add(statec, kt))
                 outb = ops.add(ops.multiply(
-                    stateb, self.time_decay), ops.multiply(k, v))
-                outc = ops.add(ops.multiply(statec, self.time_decay), k)
+                    stateb, self.time_decay[xx]), ops.multiply(k, v))
+                outc = ops.add(ops.multiply(statec, self.time_decay[xx]), k)
 
                 mvv = ops.add(x, ops.matvec(
-                    self.outputvv, ops.multiply(r, wrd)))
+                    self.outputvv[xx], ops.multiply(r, wrd)))
 
-                ddd = ops.layernorm(mvv, self.ln2w, self.ln2b)
+                ddd = ops.layernorm(mvv, self.ln2w[xx], self.ln2b[xx])
 
-                km = ops.relu(ops.matvec(self.key_ffn, ops.lerp(
-                    stated, ddd, self.time_mix_k_ffn)))
+                km = ops.relu(ops.matvec(self.key_ffn[xx], ops.lerp(
+                    stated, ddd, self.time_mix_k_ffn[xx])))
 
-                rt = ops.logistical(ops.matvec(self.receptance_ffn, ops.lerp(
-                    stated, ddd, self.time_mix_r_ffn)))
+                rt = ops.logistical(ops.matvec(self.receptance_ffn[xx], ops.lerp(
+                    stated, ddd, self.time_mix_r_ffn[xx])))
 
                 x = ops.add(mvv, ops.multiply(
-                    ops.matvec(self.value_ffn, km*km), rt))
+                    ops.matvec(self.value_ffn[xx], km*km), rt))
 
                 return x, xy, outb, outc, ddd
-
-        class RWKVTFPre(ops.module):
-            def __init__(self):
-                super(RWKVTFPre, self).__init__()
-
-            @ ops.prefunc
-            def forward(self, x):
-                # invert x to be reversed,
-                return ops.layernorm(
-                    w["emb.weight"][x[-1]], w["blocks.0.ln0.weight"], w["blocks.0.ln0.bias"])
-
-        matvec = ops.matvec
-        layernorm = ops.layernorm
-
-        class RWKVTFPost(ops.module):
-            def __init__(self):
-                super(RWKVTFPost, self).__init__()
-
-                self.postprocess0 = (w["ln_out.weight"])
-                self.postprocess1 = (w["ln_out.bias"])
-                self.postprocess2 = (w["head.weight"])
-
-            @ ops.postfunc
-            def forward(self, x):
-
-                return matvec(self.postprocess2, layernorm(x, self.postprocess0,
-                                                           self.postprocess1))
-
-        class myRWKV(ops.module):
-            @ ops.initfunc
-            def __init__(self):
-                super(myRWKV, self).__init__()
-                self.preprocess = RWKVTFPre()
-                self.ops = ops
-
-                for i in range(n_layer):
-                    self.__dict__[f"layer{i}"] = RWKVTFLayer(i)
-
-                self.postprocess = RWKVTFPost()
 
             @ ops.mainfunc
             def forward(self, x, state=None):
 
-                # profile usage
-                # print("start", len(self.mylayers))
-
-                # with torch.profiler.profile(record_shapes=True, use_cuda=True) as prof:
-
                 if (state is None):
                     state = ops.emptyState
 
-                x = self.preprocess.forward(x)
+                x = ops.layernorm(
+                    self.emb[x[-1]], self.emb1, self.emb2)
 
                 statea = state[0::4]
                 stateb = state[1::4]
@@ -213,22 +189,15 @@ def RWKV(Path=None, mode=None, *args, **kwargs) -> RWKVMaster:
 
                 ot = []
 
-                # print("start", len(self.mylayers))
-
                 for i in range(n_layer):
-                    x, aaa, bbb, ccc, ddd = self.__dict__[f"layer{i}"].forward(
-                        x, statea[i], stateb[i], statec[i], stated[i])
+                    x, aaa, bbb, ccc, ddd = self.doLayer(
+                        x, statea[i], stateb[i], statec[i], stated[i], i)
                     ot = ot + [aaa, bbb, ccc, ddd]
 
-                x = self.postprocess.forward(x)
-                # print(len(ot))
+                x = ops.matvec(self.postprocess2, ops.layernorm(x, self.postprocess0,
+                                                                self.postprocess1))
 
-                # display usage
-
-                # print(prof.key_averages().table(
-                #     sort_by="cuda_time_total", row_limit=10, top_level_events_only=True))
-                # exit()
-                return x, ops.stack(ot)
+                return ops.postProcessTensor(x), ops.stack(ot)
 
             # for keras stuff, ignore this if you are not using keras
             def call(self, *args, **kwds):
