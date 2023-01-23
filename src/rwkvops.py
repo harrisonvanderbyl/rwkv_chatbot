@@ -506,8 +506,53 @@ class RWKVCudaDeepspeedOps(RWKVCudaOps):
             x, replace_method='auto', replace_with_kernel_inject=True).module
 
 
+def ConvertUin8MatToUint4Mat(x):
+    x = x.reshape(x.shape[0], x.shape[1]//2, 2)
+    x = x[:, :, 0]*16+x[:, :, 1]
+    return x
+
+
+def DeconvertUint4MatToUint8Mat(x):
+    mx = torch.zeros(x.shape[0], x.shape[1]*2,
+                     dtype=torch.uint8, device=x.device)
+    mx[:, ::2] = x//16
+    mx[:, 1::2] = x % 16
+    return mx
+
+
+def QuantizeMatrix(x, runtimeDtype, device, uint4=False):
+    rang = 255 if not uint4 else 15
+    ran, mini = (x.max(0)[0]-x.min(0)[0])/rang,  x.min(0)[0]
+    x = x.double()
+    x = ((x-mini)/ran)
+
+    x = x.to(
+        dtype=torch.uint8, non_blocking=True, device=device)
+
+    # if uint4:
+    #     x = ConvertUin8MatToUint4Mat(x)
+
+    return x, ran.to(runtimeDtype).to(device=device), mini.to(runtimeDtype).to(device=device)
+
+
+def QuantizedMatVec(x, y, runtimedtype, uint4=False):
+    rx, spread, zpoint = x
+    yy = y*spread
+
+    # if uint4:
+    #     rx = DeconvertUint4MatToUint8Mat(rx)
+
+    rx = rx.to(dtype=runtimedtype)
+
+    xmain = rx.matmul(yy.reshape(yy.shape[0], -1, 1)).sum(0).squeeze()
+
+    # print(xmain.shape)
+
+    return xmain + torch.tensordot(zpoint, y)
+
+
 class RWKVCudaQuantOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args, runtimedtype=None):
+    def __init__(self, layers, embed, *args, runtimedtype=None, uint4=False, chunksize=None):
         super().__init__(layers, embed, torch.bfloat16)
         import matplotlib.pyplot as plt
         dev = "cuda"
@@ -517,117 +562,43 @@ class RWKVCudaQuantOps(RWKVPTOps):
             message="Dtype for operations:",
             choices=[torch.bfloat16, torch.float16, torch.float32, torch.float64])])['type'] if runtimedtype is None else runtimedtype
 
-        offload = False
+        uint4 = inquirer.confirm(
+            "Use uint4?", default=False) if uint4 is None else uint4
+
+        chunksize = inquirer.prompt([inquirer.List(
+            'chunksize',
+            message="Chunksize(Trade speed for accuracy):",
+            choices=[1, 2, 4, 8, 16, 32, 64, 128, 256])])['chunksize'] if chunksize is None else chunksize
 
         def initTensor(x):
             if (len(x.shape) != 2):
                 return x.to(dtype=runtimedtype, device=dev)
 
-            ran, mini = (x.max(0)[0]-x.min(0)[0])/255,  x.min(0)[0]
-
-            # quantize to int8
-            x = x.double()
-            x = ((x-mini)/ran)
-
-            x = x.to(
-                dtype=torch.uint8, non_blocking=True, device=dev)
-
-            # counts = torch.bincount(
-            #     x.reshape((x.shape[0]*x.shape[1]))).cpu().numpy()
-            # plt.plot(np.array(list(range(len(counts)))), counts/counts.max())
-            # plt.show()
-
-            return x, ran.to(runtimedtype).to(device=dev), mini.to(runtimedtype).to(device=dev)
+            splitmatrices = torch.chunk(x, chunksize, 1)
+            xx = [QuantizeMatrix(x, runtimedtype, dev, uint4)
+                  for x in splitmatrices]
+            xxo = torch.stack([x[0] for x in xx])
+            xx1 = torch.stack([x[1] for x in xx])
+            xx2 = torch.stack([x[2] for x in xx])
+            return xxo, xx1, xx2
 
         self.initTensor = initTensor
-        self.initCpuTensor = (lambda x: x.to(dtype=runtimedtype).cpu() if len(
-            x.shape) == 1 else (x.to(dtype=runtimedtype).cpu(), 1, torch.zeros(embed, dtype=runtimedtype))) if offload else self.initTensor
+        self.initCpuTensor = self.initTensor
         self.postfunc = lambda x: lambda self, y: x(
-            self, y.to("cpu" if offload else "cuda")).cpu().float()
+            self, y).cpu().float()
 
         self.postProcessModule = lambda x: x
 
         def matvec(x, y):
-            # unquantize
-            rx, spread, zpoint = x
-            yy = y*spread
-            rx = rx.to(dtype=runtimedtype)
-
-            return rx.mv(yy) + zpoint.dot(y)
+            splitVectors = y.reshape(chunksize, -1)
+            return QuantizedMatVec(x, splitVectors, runtimedtype, uint4)
 
         self.matvec = matvec
 
-        def ln(x, w, b):
-            xee2 = x - self.mean(x)
-
-            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
-
-            return w*(xee2/x2) + b
-
-        self.layernorm = ln
         self.klimit = self.klimit.to(dtype=runtimedtype, device=dev)
-        self.prefunc = lambda x: lambda *args: x(*args).to(device=dev)
 
-        self.log = lambda x: torch.log(x)
-        self.exp = lambda x: torch.exp(x)
         self.emptyState = torch.zeros(
             4*layers, embed, dtype=runtimedtype, device=dev)+0.01
-
-
-class RWKVCudaQuantOffOps(RWKVPTOps):
-    def __init__(self, layers, embed, *args):
-        super().__init__(layers, embed, torch.bfloat16)
-
-        runtimedtype = torch.float32
-
-        offload = inquirer.prompt([inquirer.Confirm(
-            'type',
-            message=f"Offload preprocess/postprocess to cpu?",
-            default=True)])['type']
-
-        self.postfunc = lambda x: lambda self, y: x(self, y).cpu().float()
-
-        self.initCpuTensor = lambda x: x.to(dtype=self.dtype).cpu(
-        ) if offload else self.initTensor(x)
-        self.prefunc = lambda x: lambda *args: x(*args).cuda()
-
-        def initTensor(x: torch.Tensor):
-            if (len(x.shape) != 2):
-                return x.to(dtype=runtimedtype, device='cuda')
-            # calculate zpoint instead of min
-            ran = 255/(x.max(0)[0]-x.min(0)[0])
-
-            zeroPoint = -(ran*x).min(0)[0]
-            # quantize to int8
-            x = torch.quantize_per_channel(
-                x.to(runtimedtype), ran, zeroPoint, 1, torch.quint8)
-
-            return x.cuda()
-
-        self.initTensor = initTensor
-
-        def matvec(x, y):
-            # unquantize
-            rx = x
-
-            return (rx.dequantize()).mv(y)
-
-        self.matvec = matvec
-
-        def ln(x, w, b):
-            xee2 = x - self.mean(x)
-
-            x2 = self.sqrt(self.mean(xee2*xee2) + 0.000009999999747378752)
-
-            return w*(xee2/x2) + b
-
-        self.layernorm = ln
-        self.klimit = self.klimit.to(dtype=runtimedtype, device='cuda')
-
-        self.log = lambda x: torch.log(x)
-        self.exp = lambda x: torch.exp(x)
-        self.emptyState = torch.zeros(
-            4*layers, embed, dtype=runtimedtype, device="cuda")+0.01
 
 
 class RWKVExportOnnxOps(RWKVCudaOps):
