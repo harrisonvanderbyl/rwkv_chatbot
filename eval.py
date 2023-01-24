@@ -17,7 +17,6 @@ import datetime
 import torch
 from torch.nn import functional as F
 
-from src.rwkvops import RwkvOpList
 from src.utils import TOKENIZER
 from sty import Style, RgbFg, fg
 
@@ -161,30 +160,12 @@ for RUN_NUM in RUN_TABLE:
     correctBuf = {}
     files = os.listdir()
     # filter by ending in .pth
-    files = [f for f in files if f.endswith(".pth")]
-
-    questions = [
-        inquirer.List('file',
-                      message="What model do you want to use?",
-                      choices=files,
-                      ),
-        inquirer.List(
-            'method',
-            message="What inference method?",
-            choices=RwkvOpList.keys()
-        )
-
-    ]
-    q = inquirer.prompt(questions)
-    RWKV_FILENAME = q["file"]
 
     if RWKV_SLOW_MODE:
         # from src.model_run import RWKV_RNN
         # rwkv_rnn = RWKV_RNN(RWKV_FILENAME)
         from src.rwkv import RWKV
-        rwkv_rnn = RWKV(RWKV_FILENAME, q["method"])
-
-    import tokenizers
+        rwkv_rnn = RWKV()
 
     print("Running evaluation harness...")
     adapter = EvalHarnessAdapter()
