@@ -7,11 +7,9 @@ run
 `python3 runOptimised.py`
 for having a look at running
 or
-`TOKEN='discordtoken' python3 chat.py`
-to run a discord bot using RWKV
-or
-`python3 rwkv-chat.py`
-for a chat-gpt like react-based frontend, and a simplistic chatbot backend server
+`python3 ./multi.py`
+
+to run a discord bot or for a chat-gpt like react-based frontend, and a simplistic chatbot backend server
 
 To load a model, just download it and have it in the root folder of this project.
 
