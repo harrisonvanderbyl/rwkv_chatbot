@@ -8,6 +8,8 @@ dataset = argv[-1]
 # open jsonl
 jsonl = open(dataset).readlines()
 jsonl = [json.loads(line)["question"] for line in jsonl]
+# check file exists
+os.system("ls output.jsonl")
 
 
 otputs = []
