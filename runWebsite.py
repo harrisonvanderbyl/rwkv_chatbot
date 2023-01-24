@@ -7,10 +7,6 @@ import numpy as np
 import os
 from typing import Dict as dict
 import gc
-from src.rwkvMaster import RWKVMaster
-
-
-from src.utils import TOKENIZER
 
 try:
     import inquirer
@@ -55,8 +51,6 @@ except:
     else:
         print("Exiting...")
         exit()
-from src.rwkv import RWKV, Backends
-
 
 # check if yarn installed
 if os.system("yarn --version"):
@@ -72,17 +66,10 @@ if os.system("yarn --version"):
     else:
         print("Exiting...")
         exit()
-# build website using yarn
-# yarn build
+
+from rwkvstic.rwkvMaster import RWKVMaster
 
 
-# context = 'A'
-# context = "\nIn the"
-# context = '\nSugar:'
-# context = "\n深圳是" # test Chinese
-# context = "\n東京は" # test Japanese
-# context = "\n深圳是" # test Chinese
-# context = "\n東京は" # test Japanese
 async def runWebsite(model: RWKVMaster):
     os.chdir("web-interface")
     os.system("yarn")
@@ -92,27 +79,10 @@ async def runWebsite(model: RWKVMaster):
     files = os.listdir()
     # filter by ending in .pth
     files = [f for f in files if f.endswith(".pth")]
-    DownloadPrompt = "Download more models..."
-    questions = [
-        inquirer.List('file',
-                      message="What model do you want to use?",
-                      choices=files+[DownloadPrompt],
-                      ),
-
-
-    ]
 
     ###### A good prompt for chatbot ######
 
     # context = "hello world! I am your supreme overlord!"
-    NUM_TRIALS = 999
-    LENGTH_PER_TRIAL = 200
-
-    TEMPERATURE = 1.0
-    top_p = 0.8
-    top_p_newline = 0.9  # only used in TOKEN_MODE = char
-
-    DEBUG_DEBUG = False  # True False --> show softmax output
 
     ########################################################################################################
 
@@ -126,10 +96,6 @@ async def runWebsite(model: RWKVMaster):
     print(
         "Note: currently the first run takes a while if your prompt is long, as we are using RNN to preprocess the prompt. Use GPT to build the hidden state for better speed.\n"
     )
-
-    init_out = []
-
-    out = []
 
     print("torch.cuda.memory_allocated: %fGB" %
           (torch.cuda.memory_allocated(0)/1024/1024/1024))
