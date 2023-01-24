@@ -1,5 +1,5 @@
 
-import src.module.backends.base as RWKVOp
+import src.agnostic.backends.base as RWKVOp
 
 
 class RWKVPTOps(RWKVOp.module):
@@ -133,7 +133,7 @@ class RWKVPTTSExportOps(RWKVCudaOps):
             "Include sampler?", default=True) if includeSampler is None else includeSampler
 
         if includeSampler:
-            from src.module.samplers.torch import torchsample
+            from src.agnostic.samplers.torch import torchsample
             self.sample = torchsample
             self.postProcessTensor = lambda x: self.sample(
                 x.float().cpu(), torch.tensor(1), torch.tensor(0.9))

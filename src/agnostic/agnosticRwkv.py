@@ -1,4 +1,4 @@
-from src.module.backends.base import module
+from src.agnostic.backends.base import module
 from typing import Dict
 
 

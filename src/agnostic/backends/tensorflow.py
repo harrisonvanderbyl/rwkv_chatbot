@@ -1,6 +1,6 @@
 import inquirer
 import os
-import src.module.backends.base as RWKVOp
+import src.agnostic.backends.base as RWKVOp
 
 
 class RWKVTFOps(RWKVOp.module):

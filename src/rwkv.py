@@ -1,8 +1,8 @@
 
 import torch
 from src.helpers.loadWeights import loadWeights
-from src.module.agnosticRwkv import AgnostigRWKV
-from src.module.backends import Backends
+from src.agnostic.agnosticRwkv import AgnostigRWKV
+from src.agnostic.backends import Backends
 from src.interOpLoaders import tflite, torchscript
 from src.rwkvMaster import RWKVMaster
 import torch

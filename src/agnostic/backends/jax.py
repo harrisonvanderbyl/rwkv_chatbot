@@ -1,6 +1,6 @@
 import numpy as np
 
-import src.module.backends.base as RWKVOp
+import src.agnostic.backends.base as RWKVOp
 
 
 class RWKVNumpyOps(RWKVOp.module):

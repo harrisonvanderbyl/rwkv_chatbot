@@ -1,9 +1,9 @@
-from typing import List, Dict, Union, Final
+from typing import List, Dict, Union
 
 
 class module:
     def __init__(self, layers, embed):
-        from src.module.samplers.numpy import npsample
+        from src.agnostic.samplers.numpy import npsample
         self.VectorType = List[float]
         self.MatrixType = List[List[float]]
         self.TensorType = Union[self.VectorType, self.MatrixType]
@@ -43,7 +43,10 @@ class module:
         self.layerdef = raiseNotImplemented
         self.mainfunc = raiseNotImplemented
         self.emptyState: self.MatrixType = []
-        self.logistical = lambda x: 1 / (self.exp(x) + 1)
+
+        def logistical(x: self.VectorType) -> self.VectorType:
+            return 1 / (self.exp(x) + 1)
+        self.logistical = logistical
         self.postProcessModule = lambda x: x
 
         self.sample = npsample
