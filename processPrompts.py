@@ -1,6 +1,6 @@
 import tqdm
 from sys import argv
-from src.rwkv import RWKV
+from rwkvstic.load import RWKV
 import json
 import os
 model = RWKV()
