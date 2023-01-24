@@ -13,6 +13,9 @@ if TOKEN_MODE == "pile":
     assert tokenizer.tokenizer.decode([187]) == '\n'
 
 
+# this is for like, being useful
+
+
 def loadContext(model, ctx, newctx, statex, progressCallBack=lambda x: x):
 
     with torch.jit.optimized_execution(True):
