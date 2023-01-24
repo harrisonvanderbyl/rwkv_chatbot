@@ -1,7 +1,7 @@
 
 import torch
-from src.module.backends import Backends
-from src.module.backends.base import module
+from src.agnostic.backends import Backends
+from src.agnostic.backends.base import module
 import torch
 from typing import Dict
 from tqdm import tqdm

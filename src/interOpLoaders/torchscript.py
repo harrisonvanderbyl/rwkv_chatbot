@@ -1,5 +1,5 @@
 from src.rwkvMaster import RWKVMaster
-from src.module.samplers.numpy import npsample
+from src.agnostic.samplers.numpy import npsample
 
 
 def initTorchScriptFile(Path):
