@@ -2,6 +2,7 @@ import tqdm
 from sys import argv
 from src.rwkv import RWKV
 import json
+import os
 model = RWKV()
 dataset = argv[-1]
 
