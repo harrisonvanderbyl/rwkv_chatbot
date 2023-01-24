@@ -13,3 +13,4 @@ torch
 tqdm==4.64.1
 transformers
 typer==0.7.0
+rwkvstic
