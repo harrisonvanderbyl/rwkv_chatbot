@@ -1,7 +1,7 @@
+from runWebsite import runWebsite
 import asyncio
 import inquirer
 from chat import runDiscordBot
-from runWebsite import runWebsite
 from src.rwkv import RWKV
 
 services = inquirer.checkbox(
