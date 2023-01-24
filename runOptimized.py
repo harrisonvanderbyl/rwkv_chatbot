@@ -5,7 +5,7 @@ import time
 import gc
 import torch
 from scipy.special import softmax
-from src.rwkv import RWKV
+from rwkvstic.load import RWKV
 from sty import Style, RgbFg, fg
 
 fg.orange = Style(RgbFg(255, 150, 50))

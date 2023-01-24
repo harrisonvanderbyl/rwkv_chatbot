@@ -2,7 +2,7 @@ from runWebsite import runWebsite
 import asyncio
 import inquirer
 from chat import runDiscordBot
-from src.rwkv import RWKV
+from rwkvstic.load import RWKV
 
 services = inquirer.checkbox(
     message="What services do you want to use?",
