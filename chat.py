@@ -5,10 +5,10 @@ import time
 import gc
 import torch
 
-from src.rwkv import RWKV
+from rwkvstic.load import RWKV
 from sty import Style, RgbFg, fg
 
-from src.rwkvMaster import RWKVMaster
+from rwkvstic.rwkvMaster import RWKVMaster
 
 fg.orange = Style(RgbFg(255, 150, 50))
 

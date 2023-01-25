@@ -59,12 +59,9 @@ function Message({
       ) : (
         ""
       )}
-      {text
-        .replace("\nEnd", "")
-        .split("\n")
-        .map((line, i) => (
-          <div key={i}>{line.replace("User:", "").replace("END", "")}</div>
-        ))}
+      {text.split("\n").map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
       {timeSent ? (
         <Box
           className="time-sent"

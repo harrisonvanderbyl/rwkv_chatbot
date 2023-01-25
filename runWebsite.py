@@ -190,7 +190,7 @@ async def runWebsite(model: RWKVMaster):
             progresskey = body["key"]
 
             tokens = (
-                ":"+body["message"]+f"\n\n{character}:")
+                body["message"]+f"\n\nLong Expert Full Response:")
 
             def updateProgress(x):
 
