@@ -30,6 +30,6 @@ async def runDiscordBot(model: RWKVMaster):
                     "output"]
                 if tex.endswith(("\n\n", "<|endoftext|>")):
                     break
-                mess.edit(content=tex)
+                await mess.edit(content=tex)
 
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
