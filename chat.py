@@ -26,10 +26,10 @@ async def runDiscordBot(model: RWKVMaster):
                 newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: ")
             tex = ""
             for i in range(100):
-                tex = tex + model.forward(stopStrings=["<|endoftext|>"], number=1)[
+                tex = tex + model.forward()[
                     "output"]
                 if tex.endswith(("\n\n", "<|endoftext|>")):
                     break
-                await mess.edit(content=tex)
+                mess.edit(content=tex)
 
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
