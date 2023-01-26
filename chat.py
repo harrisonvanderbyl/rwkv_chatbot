@@ -23,7 +23,7 @@ async def runDiscordBot(model: RWKVMaster):
             mess = await message.reply("Generating...")
             model.resetState()
             model.loadContext(
-                newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: ")
+                newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: \n\n")
             tex = ""
             for i in range(100):
                 tex = tex + model.forward()[
