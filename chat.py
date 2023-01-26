@@ -20,11 +20,16 @@ async def runDiscordBot(model: RWKVMaster):
 
         # check if message is a command
         if message.content.startswith("!rwkv "):
+            mess = await message.reply("Generating...")
             model.resetState()
             model.loadContext(
                 newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: ")
-            text = model.forward(stopStrings=["<|endoftext|>"], number=100)[
-                "output"]
-            await message.reply(text)
+            tex = ""
+            for i in range(100):
+                tex = tex + model.forward(stopStrings=["<|endoftext|>"], number=1)[
+                    "output"]
+                if tex.endswith(("\n\n", "<|endoftext|>")):
+                    break
+                await mess.edit(content=tex)
 
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
