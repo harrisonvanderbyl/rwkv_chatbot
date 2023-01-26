@@ -8,7 +8,7 @@ states = {}
 async def runDiscordBot(model: RWKVMaster):
     import discord
     import os
-    client = discord.Client()
+    client = discord.Client(intents=discord.Intents.all())
 
     @client.event
     async def on_ready():
