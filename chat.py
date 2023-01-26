@@ -5,12 +5,8 @@ import time
 import gc
 import torch
 
-from rwkvstic.load import RWKV
-from sty import Style, RgbFg, fg
 
 from rwkvstic.rwkvMaster import RWKVMaster
-
-fg.orange = Style(RgbFg(255, 150, 50))
 
 
 async def runDiscordBot(model: RWKVMaster):

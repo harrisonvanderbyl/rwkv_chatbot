@@ -1,14 +1,9 @@
 
-from typing import List
-import numpy as np
 import time
 import gc
 import torch
-from scipy.special import softmax
 from rwkvstic.load import RWKV
-from sty import Style, RgbFg, fg
 
-fg.orange = Style(RgbFg(255, 150, 50))
 
 # context = 'A'
 # context = "\nIn the"
