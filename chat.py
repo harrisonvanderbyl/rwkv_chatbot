@@ -20,7 +20,7 @@ async def runDiscordBot(model: RWKVMaster):
 
         # check if message is a command
         if message.content.startswith("!rwkv "):
-            mess = await message.reply("Generating...")
+            mess = await message.channel.send("Loading...")
             model.resetState()
             model.loadContext(
                 newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: ")
