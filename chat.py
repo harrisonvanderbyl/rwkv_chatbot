@@ -1,5 +1,6 @@
 
 
+import asyncio
 from rwkvstic.rwkvMaster import RWKVMaster
 
 
@@ -13,7 +14,7 @@ async def runDiscordBot(model: RWKVMaster):
         print(f"Logged in as {client.user}")
 
     @client.event
-    async def on_message(message):
+    async def on_message(message: discord.Message):
         # check if author is bot
         if message.author.bot:
             return
@@ -30,6 +31,7 @@ async def runDiscordBot(model: RWKVMaster):
                     "output"]
                 tex = tex + curr
                 print(curr)
-                await mess.edit(content=tex)
+                await asyncio.sleep(1)
+                mess = await mess.edit(content=tex)
 
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
