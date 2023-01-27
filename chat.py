@@ -37,4 +37,7 @@ async def runDiscordBot(model: RWKVMaster):
                     break
                 mess = await mess.edit(content=tex)
 
+            await asyncio.sleep(1)
+            await mess.edit(content=tex)
+
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
