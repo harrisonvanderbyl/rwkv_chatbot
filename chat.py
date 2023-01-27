@@ -26,8 +26,10 @@ async def runDiscordBot(model: RWKVMaster):
                 newctx=f"\n\nQuestion: {message.content[6:]}\n\nExpert Long Detailed Response: ")
             tex = ""
             for i in range(100):
-                tex = tex + model.forward()[
+                curr = model.forward()[
                     "output"]
+                tex = tex + curr
+                print(curr)
                 await mess.edit(content=tex)
 
     await client.start(os.environ.get("TOKEN", input("Discord Token:")))
