@@ -142,6 +142,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 *.pt
+*.pth 
+*.pqth
 *.onnx
 *.tflite
 /tf
