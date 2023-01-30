@@ -51,7 +51,7 @@ async def runDiscordBot(model: RWKVMaster):
             model.loadContext(
                 newctx=f"Q: Please write a {language} program that {comment}\n\nA:")
             model.loadContext(
-                newctx=f"```Sure, here is a {language} program that {comment}:<code>//{comment}\n")
+                newctx=f"```Sure, here is a {language} program that {comment}:\n\n//{comment}\n")
             tex = ""
             for i in range(20):
                 print(i)
@@ -59,8 +59,7 @@ async def runDiscordBot(model: RWKVMaster):
                     "output"]
                 tex = tex + curr
                 print(curr)
-
-                if ("<|endoftext|>" in curr or "</code>" in curr):
+                if ("<|endoftext|>" in curr):
                     break
                 mess = await mess.edit(content=tex)
 
