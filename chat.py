@@ -45,7 +45,7 @@ async def runDiscordBot(model: RWKVMaster):
             language = text.split(" ")[0]
             comment = text.split(" ")[1:]
 
-            await message.channel.send("Loading...")
+            mess = await message.channel.send("Loading...")
 
             model.resetState()
             model.loadContext(
@@ -55,7 +55,7 @@ async def runDiscordBot(model: RWKVMaster):
             tex = ""
             for i in range(20):
                 print(i)
-                curr = model.forward(number=10, stopStrings=["</code>"])[
+                curr = model.forward(number=10)[
                     "output"]
                 tex = tex + curr
                 print(curr)
