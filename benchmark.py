@@ -2,6 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+from tqdm import tqdm
 from rwkvstic.load import RWKV
 from torch.nn import functional as F
 import torch
@@ -29,28 +30,18 @@ PAD_SEQ = "\n"
 
 ########################################################################################################
 
-print(f'\nLoading ChatRWKV - {args.RUN_DEVICE} - {args.FLOAT_MODE}')
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
 
 
-args.vocab_size = 50277
-args.head_qk = 0
-args.pre_ffn = 0
-args.grad_cp = 0
-args.my_pos_emb = 0
-os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
-
-MODEL_NAME = args.MODEL_NAME
-print(f'Loading model - {MODEL_NAME}')
 model = RWKV()
 
 print('Running...')
 xsum = 0
 xcnt = 0
 xacc = 0
-for d in todo:
+for d in tqdm(todo):
     model.resetState()
     src = PAD_SEQ + d[0]
     dst = model.tokenizer.encode(d[1])
@@ -59,10 +50,10 @@ for d in todo:
     correct = True
     for i in range(len(dst)):
         if i == 0:
-            out = model.loadContext(src, None)
+            model.loadContext(newctx=src)
         else:
             model.lastToken = dst[i-1]
-            out = model.forward()["logits"]
+        out = model.forward()["logits"]
         probs = F.softmax(out.float(), dim=-1)
         logits += math.log(probs[dst[i]])
         _, s_index = torch.sort(probs, descending=True)
@@ -74,5 +65,6 @@ for d in todo:
     xsum += logits
     xacc += 1 if correct else 0
     if xcnt % 100 == 0 or xcnt == len(todo):
+        print("\n\n")
         print(xcnt, 'ppl', round(math.exp(-xsum / xcnt), 2), 'acc',
               round(xacc/xcnt*100, 2))  # , 'pred', pred, 'dst', dst)
